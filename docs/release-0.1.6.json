@@ -202,5 +202,51 @@
       "path": "src-tauri/target/release/bundle/msi/PulseWin_0.1.6_x64_en-US.msi",
       "bytes": 4587520
     }
-  ]
+  ],
+  "githubSmoke": {
+    "passed": true,
+    "testedAt": "2026-10-03T08:32:26.14Z",
+    "repository": "wapearoudy/PulseWin",
+    "release": "https://github.com/wapearoudy/PulseWin/releases/tag/v0.1.6",
+    "version": "0.1.6",
+    "anonymousAssets": [
+      {
+        "name": "latest.json",
+        "bytes": 2291,
+        "sha256": "a085b74435058fdbebcbcb8039a335ed72b526bcfdfa4e86f4b8839446871559"
+      },
+      {
+        "name": "PulseWin_0.1.6_x64-setup.exe",
+        "bytes": 2878175,
+        "sha256": "79b3bf4eed64c38a7125fa2c0bd0eefd51c464ad73a66eb4d3bc1e4c65ae8c89"
+      },
+      {
+        "name": "PulseWin_0.1.6_x64-setup.exe.sig",
+        "bytes": 436,
+        "sha256": "62975dda7d905fb2245f1cb68da1a38da1e90cebdbd97612017226d6874645ba"
+      },
+      {
+        "name": "PulseWin_0.1.6_x64_en-US.msi",
+        "bytes": 4587520,
+        "sha256": "4f207873da4accad9aecfb2b543798c5efb7661ddf070897313707493eac0501"
+      },
+      {
+        "name": "PulseWin_0.1.6_x64_en-US.msi.sig",
+        "bytes": 436,
+        "sha256": "c679f1038db42d1f81f3a588ce3d1218f01168c61e4a9214a5b53b25c933c472"
+      }
+    ],
+    "nativeCheck": {
+      "phase": "current",
+      "source": "https://github.com/wapearoudy/PulseWin/releases/latest/download/latest.json",
+      "currentVersion": "0.1.6"
+    },
+    "installationExecuted": false,
+    "signedUpgradeDownload": {
+      "from": "0.1.4",
+      "to": "0.1.6",
+      "passed": true,
+      "actualPublishedPackage": true
+    }
+  }
 }
