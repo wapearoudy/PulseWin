@@ -196,5 +196,51 @@
       "mixed-DPI displays",
       "visual sharpness of OS-scaled tray icon"
     ]
+  },
+  "publicGithubVerification": {
+    "passed": true,
+    "testedAt": "2026-10-03T12:00:39.489Z",
+    "repository": "wapearoudy/PulseWin",
+    "release": "https://github.com/wapearoudy/PulseWin/releases/tag/v0.1.12",
+    "version": "0.1.12",
+    "anonymousAssets": [
+      {
+        "name": "latest.json",
+        "bytes": 2686,
+        "sha256": "06e6336e507b67e8cd024b7c1ff301332aa712b3ec4308fc5c339661a98efcce"
+      },
+      {
+        "name": "PulseWin_0.1.12_x64-setup.exe",
+        "bytes": 3000289,
+        "sha256": "a0e43282b38b697f01f16db8117e9a09bd88a3d6a0f865acb9fffc37799bdec6"
+      },
+      {
+        "name": "PulseWin_0.1.12_x64-setup.exe.sig",
+        "bytes": 440,
+        "sha256": "2fa1b6d3dd66a5f0defc5ec53408863b1d8ab6ccbab6e6ef41b7f695d583d96e"
+      },
+      {
+        "name": "PulseWin_0.1.12_x64_en-US.msi",
+        "bytes": 4820992,
+        "sha256": "f78fb5ecf7c1a9a7d8c154954c52acd821de7e3430b217b623ef041ea654070c"
+      },
+      {
+        "name": "PulseWin_0.1.12_x64_en-US.msi.sig",
+        "bytes": 440,
+        "sha256": "8e908eb11a3310f32dd56f54d5e9ad7f1772b18cdca70f92382f648824f22a6d"
+      }
+    ],
+    "nativeCheck": {
+      "phase": "current",
+      "source": "https://github.com/wapearoudy/PulseWin/releases/latest/download/latest.json",
+      "currentVersion": "0.1.12"
+    },
+    "installationExecuted": false,
+    "signedUpgradeDownload": {
+      "from": "0.1.4",
+      "to": "0.1.12",
+      "passed": true,
+      "actualPublishedPackage": true
+    }
   }
 }

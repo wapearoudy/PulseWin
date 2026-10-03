@@ -181,3 +181,8 @@ Verification: 861 Rust tests plus one ignored, 181 frontend tests, 58 browser fl
 ### 0.1.11 — malformed system proxy compatibility
 
 System proxy configuration is external to validated application preferences. Restored the previous tolerance for malformed WinINET URL values so users can still launch Settings and choose a valid manual endpoint. Added client-initialization and real system bypass-list regressions; 863 Rust tests pass plus one ignored. The unchanged frontend retains the 0.1.10 browser and unit evidence. Final binary and public release checks are recorded in [release-0.1.11.json](release-0.1.11.json).
+
+Public 0.1.12 acceptance: all five anonymously downloaded release assets match
+local SHA-256; the current app checks the default GitHub feed, and a real 0.1.4
+client downloads and verifies the actual published signed 0.1.12 package. No
+installer was executed. Detailed evidence is in `release-0.1.12.json`.
