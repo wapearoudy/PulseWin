@@ -39,12 +39,7 @@ fn update(app:&AppHandle,action:&str,value:Option<&str>) {
     let open=action=="openSettings";
     let result=app.global_shortcut().on_shortcut(next,move |app,_,event| {
         if event.state!=ShortcutState::Pressed{return;}
-        if open {crate::open_settings(app)} else if let Some(window)=app.get_webview_window("main") {
-            if window.is_visible().unwrap_or(false) {
-                app.state::<crate::AppState>().fullscreen_hidden.store(false,std::sync::atomic::Ordering::SeqCst);
-                let _=window.hide();
-            } else {crate::show_panel(app);}
-        }
+        if open {crate::open_settings(app)} else {crate::toggle_panel(app);}
     });
     match result {
         Ok(())=>{registrations.registered.insert(action.into(),next);}

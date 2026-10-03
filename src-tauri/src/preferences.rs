@@ -4,6 +4,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Preferences {
+    pub panel_visible: bool,
+    pub tray_shows_usage: bool,
+    pub tray_style: String,
+    pub tray_account: Option<String>,
     pub accounts: Vec<crate::accounts::Account>,
     pub account_labels: std::collections::HashMap<String, String>,
     pub open_settings_shortcut: Option<String>,
@@ -39,7 +43,7 @@ pub struct Preferences {
 
 impl Default for Preferences {
     fn default() -> Self {
-        Self { accounts: vec![], account_labels: Default::default(), open_settings_shortcut: None, toggle_panel_shortcut: None, alerts: Default::default(), token_spend_enabled: false, token_spend_span: "week".into(), reset_celebration: true, enabled_providers: vec![], provider_order: vec![], panel_size: 1.0,
+        Self { panel_visible:true, tray_shows_usage:false, tray_style:"figure".into(), tray_account:None, accounts: vec![], account_labels: Default::default(), open_settings_shortcut: None, toggle_panel_shortcut: None, alerts: Default::default(), token_spend_enabled: false, token_spend_span: "week".into(), reset_celebration: true, enabled_providers: vec![], provider_order: vec![], panel_size: 1.0,
             rail_spacing: 1.0, round_ends: false, shows_remaining: false,
             show_percentages: true, label_above: false, auto_collapse: true,
             warning_threshold: 0.75, refresh_seconds: 120, refresh_automatic: true, show_reset_clock: false,
@@ -65,6 +69,8 @@ impl Preferences {
         for value in self.account_appearance.values_mut() { value.normalize(); }
         self.pinned_windows.retain(|id, label| known.contains(id) && !label.is_empty());
         self.enabled_providers.retain(|id| known.contains(id));
+        if !["figure","ring","split"].contains(&self.tray_style.as_str()){self.tray_style="figure".into();}
+        if self.tray_account.as_ref().is_some_and(|id|!self.enabled_providers.contains(id)){self.tray_account=None;}
         self.provider_order.retain(|id| known.contains(id));
         let mut seen = std::collections::HashSet::new();
         self.enabled_providers.retain(|id| seen.insert(id.clone()));
@@ -96,6 +102,13 @@ pub fn save(value: &Preferences) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test] fn tray_only_keeps_collection_and_legacy_defaults() {
+        let mut p:Preferences=serde_json::from_str(r#"{"enabledProviders":["codex"],"panelVisible":false,"trayShowsUsage":true,"trayStyle":"ring","trayAccount":"codex"}"#).unwrap();
+        p.normalize(&["codex".into()]);assert!(!p.panel_visible);assert_eq!(p.enabled_providers,vec!["codex"]);assert_eq!(p.tray_account.as_deref(),Some("codex"));
+        let restored:Preferences=serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();assert_eq!(p,restored);
+        let legacy:Preferences=serde_json::from_str("{}").unwrap();assert!(legacy.panel_visible);assert!(!legacy.tray_shows_usage);
+        p.enabled_providers.clear();p.tray_style="broken".into();p.normalize(&["codex".into()]);assert!(p.tray_account.is_none());assert_eq!(p.tray_style,"figure");
+    }
     #[test] fn first_launch_never_enables_discovered_services() {
         let mut p = Preferences::default(); p.normalize(&["codex".into()]);
         assert!(p.enabled_providers.is_empty());

@@ -22,6 +22,8 @@ pub mod usage_cache;
 pub mod usage_report;
 pub mod token_spend;
 pub mod application;
+pub mod tray_usage;
+pub mod tray_dashboard;
 pub mod updates;
 
 use std::sync::Arc;
@@ -113,6 +115,9 @@ pub struct AppState {
     pub resets: std::sync::Mutex<std::collections::HashMap<String,i64>>,
     pub fullscreen_hidden: std::sync::atomic::AtomicBool,
     pub activity: std::sync::Mutex<activity::Activity>,
+    pub usage_creation: std::sync::Mutex<()>,
+    pub settings_creation: std::sync::Mutex<()>,
+    pub usage_anchor: std::sync::Mutex<Option<(i32,i32)>>,
     pub menu_open: std::sync::atomic::AtomicBool,
     pub generation: std::sync::atomic::AtomicU64,
     pub preferences: std::sync::Mutex<preferences::Preferences>,
@@ -149,6 +154,9 @@ impl AppState {
             resets: Default::default(),
             fullscreen_hidden: std::sync::atomic::AtomicBool::new(false),
             activity: std::sync::Mutex::new(activity::Activity::default()),
+            usage_creation: Default::default(),
+            settings_creation: Default::default(),
+            usage_anchor: Default::default(),
             menu_open: std::sync::atomic::AtomicBool::new(false),
             generation: std::sync::atomic::AtomicU64::new(0),
             preferences: std::sync::Mutex::new({
@@ -317,28 +325,13 @@ fn update_tray(app: &AppHandle, snapshot: &Snapshot) {
         return;
     };
 
-    let configured: Vec<&model::ProviderUsage> = snapshot.providers.iter().collect();
-
-    let tooltip = if configured.is_empty() {
-        "PulseWin — choose services in Settings".to_string()
-    } else {
-        let worst = configured
-            .iter()
-            .filter_map(|p| p.peak_percent_used().map(|pct| (p.name.as_str(), pct)))
-            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-
-        match worst {
-            Some((name, used)) => format!(
-                "PulseWin — {name} at {:.0}% used\n({} tool{} tracked)",
-                used,
-                configured.len(),
-                if configured.len() == 1 { "" } else { "s" }
-            ),
-            None => format!("PulseWin — {} tools tracked", configured.len()),
-        }
-    };
-
-    let _ = tray.set_tooltip(Some(&tooltip));
+    let prefs=app.state::<AppState>().preferences.lock().unwrap().clone();
+    let _=tray.set_tooltip(Some(tray_usage::tooltip(snapshot,&prefs)));
+    if prefs.tray_shows_usage {
+        if let Some(p)=tray_usage::selected(snapshot,&prefs) {
+            let _=tray.set_icon(Some(tauri::image::Image::new_owned(tray_usage::icon(p,&prefs),32,32)));
+        }else{let _=tray.set_icon(app.default_window_icon().cloned());}
+    }else{let _=tray.set_icon(app.default_window_icon().cloned());}
 }
 
 fn post_alerts(app:&AppHandle,memory:&mut alerts::AlertMemory,raw:&model::ProviderUsage,display:&model::ProviderUsage,prefs:&alerts::AlertPreferences,now:i64) {
@@ -438,10 +431,10 @@ async fn apply_preferences(app: AppHandle, state: &AppState, mut value: preferen
         let _=memory.save();
     }
     if value.open_settings_shortcut!=previous.open_settings_shortcut || value.toggle_panel_shortcut!=previous.toggle_panel_shortcut {application::apply(&app);}
-    if value.enabled_providers.is_empty() {
+    if value.enabled_providers.is_empty() || !value.panel_visible {
         state.fullscreen_hidden.store(false,std::sync::atomic::Ordering::SeqCst);
         if let Some(window) = app.get_webview_window("main") { let _ = window.hide(); }
-    } else if previous.enabled_providers.is_empty() { show_panel(&app); }
+    } else if previous.enabled_providers.is_empty() || !previous.panel_visible { show_panel(&app); }
     if value.enabled_providers != previous.enabled_providers || value.provider_order != previous.provider_order || value.account_labels != previous.account_labels {
         let mut snapshot = state.snapshot.lock().await;
         snapshot.providers.retain(|p| value.enabled_providers.contains(&p.id));
@@ -454,6 +447,7 @@ async fn apply_preferences(app: AppHandle, state: &AppState, mut value: preferen
         let _ = app.emit(EVENT_USAGE_UPDATED, &*snapshot);
         update_tray(&app, &snapshot);
     }
+    update_tray(&app,&*state.snapshot.lock().await);
     if value.enabled_providers != previous.enabled_providers && !value.enabled_providers.is_empty() {
         tauri::async_runtime::spawn(async move {
             let state = app.state::<AppState>();
@@ -656,7 +650,7 @@ async fn save_provider_credential(
 /// somewhere to go next, and the panel is the only thing the reader is looking
 /// at when they find out.
 #[tauri::command]
-fn show_settings(app: AppHandle, provider: Option<String>) {
+async fn show_settings(app: AppHandle, provider: Option<String>) {
     let prefs=app.state::<AppState>().preferences.lock().unwrap().clone();
     let provider=provider.filter(|id|providers::registry().iter().any(|p|p.id()==id)||prefs.accounts.iter().any(|a|&a.id==id));
     open_account_settings(&app,provider.as_deref());
@@ -669,10 +663,12 @@ fn show_settings(app: AppHandle, provider: Option<String>) {
 /// open — a settings list inside it would be the one thing on screen able to
 /// fight that rule.
 fn open_settings(app: &AppHandle) {
-    open_account_settings(app,None);
+    let app=app.clone();tauri::async_runtime::spawn_blocking(move||open_account_settings(&app,None));
 }
 
 fn open_account_settings(app: &AppHandle, provider: Option<&str>) {
+    let state=app.state::<AppState>();
+    let _creation=state.settings_creation.lock().unwrap();
     if let Some(window) = app.get_webview_window("settings") {
         if let Some(provider)=provider { let _=window.emit("settings-account",provider); }
         let _ = window.show();
@@ -896,6 +892,7 @@ fn place_panel(app: &AppHandle) {
 /// Show the panel, placing it before and after it is ordered in.
 fn show_panel(app: &AppHandle) {
     app.state::<AppState>().fullscreen_hidden.store(false,std::sync::atomic::Ordering::SeqCst);
+    if !app.state::<AppState>().preferences.lock().unwrap().panel_visible {return;}
     let no_selection = app.state::<AppState>().preferences.lock().unwrap().enabled_providers.is_empty();
     if no_selection { open_settings(app); return; }
     let Some(window) = app.get_webview_window("main") else {
@@ -919,17 +916,18 @@ fn show_panel(app: &AppHandle) {
     });
 }
 
-fn toggle_panel(app: &AppHandle) {
-    app.state::<AppState>().fullscreen_hidden.store(false,std::sync::atomic::Ordering::SeqCst);
-    let Some(window) = app.get_webview_window("main") else {
-        return;
-    };
-    match window.is_visible() {
-        Ok(true) => {
-            let _ = window.hide();
-        }
-        _ => show_panel(app),
-    }
+#[tauri::command]
+async fn set_panel_visible(app:AppHandle,state:State<'_,AppState>,visible:bool)->Result<(),String>{
+    let _guard=state.account_mutations.lock().await;
+    let mut prefs=state.preferences.lock().unwrap().clone();prefs.panel_visible=visible;
+    apply_preferences(app,&state,prefs).await
+}
+fn toggle_panel(app:&AppHandle){
+    let app=app.clone();tauri::async_runtime::spawn(async move{
+        let state=app.state::<AppState>();
+        let visible=!state.preferences.lock().unwrap().panel_visible;
+        if let Err(error)=set_panel_visible(app.clone(),state,visible).await{eprintln!("PulseWin: {error}");}
+    });
 }
 
 /// Whether the primary mouse button is currently held.
@@ -1077,7 +1075,7 @@ fn watch_desktop(app:AppHandle) {
             let rail=(origin.x+(rx*scale) as i32,origin.y+(ry*scale) as i32);
             let current=geometry.iter().find(|display|display.contains((rail.0 as f64+rw*scale/2.,rail.1 as f64+rh*scale/2.)));
             let prefs=state.preferences.lock().unwrap().clone();
-            if prefs.enabled_providers.is_empty(){state.fullscreen_hidden.store(false,std::sync::atomic::Ordering::SeqCst);continue}
+            if prefs.enabled_providers.is_empty()||!prefs.panel_visible{state.fullscreen_hidden.store(false,std::sync::atomic::Ordering::SeqCst);continue}
             // Follow only while visible. A fullscreen-hidden rail should not
             // unexpectedly move or reveal itself on another display.
             if visible&&prefs.follow_active_display&&monitors.len()>1 {
@@ -1295,25 +1293,27 @@ mod pointer_hit_tests {
 
 fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     // Names are suffixed to avoid shadowing the `refresh` function below.
-    let show_item = MenuItem::with_id(app, "show", "Show PulseWin", true, None::<&str>)?;
-    let settings_item = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
-    let refresh_item = MenuItem::with_id(app, "refresh", "Refresh now", true, None::<&str>)?;
+    let usage_item=MenuItem::with_id(app,"usage","用量概览",true,None::<&str>)?;
+    let show_item = MenuItem::with_id(app, "show", "显示或隐藏桌面助手", true, None::<&str>)?;
+    let settings_item = MenuItem::with_id(app, "settings", "设置…", true, None::<&str>)?;
+    let refresh_item = MenuItem::with_id(app, "refresh", "刷新用量", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
-    let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
     let update_item = MenuItem::with_id(app, "update", "检查更新…", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
-        &[&show_item, &settings_item, &refresh_item, &update_item, &separator, &quit_item],
+        &[&usage_item, &show_item, &settings_item, &refresh_item, &update_item, &separator, &quit_item],
     )?;
 
     let mut builder = TrayIconBuilder::with_id("pulse-tray")
         .tooltip("PulseWin")
         .menu(&menu)
-        // Left click opens the panel; the menu stays on right click, which is
+        // Left click opens the usage dashboard; the menu stays on right click, which is
         // the behaviour Windows users expect from a tray utility.
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
-            "show" => show_panel(app),
+            "usage" => tray_dashboard::request_open(app,None),
+            "show" => toggle_panel(app),
             "settings" => open_settings(app),
             "update" => updates::open(app),
             "quit" => app.exit(0),
@@ -1330,10 +1330,13 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,
+                position,
                 ..
             } = event
             {
-                toggle_panel(tray.app_handle());
+                let app=tray.app_handle();
+                if app.get_webview_window("usage").is_some_and(|w|w.is_visible().unwrap_or(false)){tray_dashboard::hide(app);}
+                else {tray_dashboard::request_open(app,Some((position.x as i32,position.y as i32)));}
             }
         });
 
@@ -1387,6 +1390,13 @@ pub fn run() {
         .manage(updates::UpdateState::default())
         .invoke_handler(tauri::generate_handler![
             get_snapshot,
+            set_panel_visible,
+            tray_dashboard::get_usage_pages,
+            tray_dashboard::resize_usage_dashboard,
+            tray_dashboard::open_usage_page,
+            tray_dashboard::show_usage_dashboard,
+            tray_dashboard::hide_usage_dashboard,
+            tray_dashboard::quit_application,
             get_activity,
             get_resets,
             get_preferences,
@@ -1436,10 +1446,9 @@ pub fn run() {
 
             // The panel starts hidden; reveal it once so the app is discoverable.
             let no_selection = app.state::<AppState>().preferences.lock().unwrap().enabled_providers.is_empty();
-            if no_selection {
-                if let Some(window) = app.get_webview_window("main") { let _ = window.hide(); }
-                open_settings(app.handle());
-            } else { show_panel(app.handle()); }
+            if no_selection {open_settings(app.handle());} else {show_panel(app.handle());}
+            let initial=app.state::<AppState>().snapshot.try_lock().map(|s|s.clone()).ok();
+            if let Some(snapshot)=initial{update_tray(app.handle(),&snapshot);}
 
             // `--settings` opens the settings window straight away, which is
             // how it is reachable without hunting for the tray icon — and how
@@ -1457,11 +1466,14 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if window.label()=="usage" && matches!(event,tauri::WindowEvent::Focused(false)){let _=window.hide();}
             // Closing the panel hides it; the tray keeps the app alive.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 if window.label()=="settings" {token_spend::spend_clear_snapshot();}
-                if window.label()=="main" {window.state::<AppState>().fullscreen_hidden.store(false,std::sync::atomic::Ordering::SeqCst);}
+                if window.label()=="main" {
+                    let app=window.app_handle().clone();tauri::async_runtime::spawn(async move{let state=app.state::<AppState>();let _=set_panel_visible(app.clone(),state,false).await;});
+                }
                 let _ = window.hide();
             }
         })

@@ -143,3 +143,13 @@ Validation: 832 offline Rust regressions (one online test ignored), 181 frontend
 Online acceptance caught update configuration using the Windows Known Folder independently of the application's APPDATA profile. Updates now share the existing settings directory. Native regressions assert fresh default source, persisted isolated configuration and byte-for-byte unchanged personal update settings. The 0.1.4 signature checks remain valid, but configuration isolation was not established by those earlier tests. The current release evidence is release-0.1.5.json.
 
 Public release acceptance passed: five anonymous asset downloads match local SHA-256; the current native client checks its default GitHub feed, and a real 0.1.4 client detects, downloads and verifies the actual published 0.1.5 package without executing installation. Exit, overwrite and restart acceptance remains open.
+
+### 0.1.9 — tray usage dashboard and persistent tray-only mode
+
+The tray's left click opens a separate compact overview with per-account tabs; right click retains the application menu. Account detail reads the published quota snapshot, never requests quota on opening, supports explicit scoped refresh, and reports every real limit, reset, balance, stale state and error. Known official page links are copied from the upstream UsagePages table; unknown pages have no guessed link. Primary local history reuses the existing opt-in readers and five-minute card cache; additional accounts cannot use the primary ledger.
+
+General settings select the tightest pinned quota automatically or a named enabled account, with figure/ring/split styles. Windows uses a 32px RGBA notification-area icon and a UTF-16-limited tooltip because it cannot place text beside a tray icon. Split requires two distinct provider-evidenced account-wide durations, excluding model scopes. Missing percentages never become zero. Warning severity uses consumed quota even in remaining mode.
+
+Panel visibility is persisted independently from enabled accounts and restored on process startup. Hiding the assistant does not disable collection. Native dashboard geometry uses the clicked monitor's physical work area and DPI, stays inside it, and adapts its own content height without changing the assistant frame. Escape and lost focus hide the dashboard.
+
+Verification: 849 Rust, 181 frontend, 49 full-suite browser tests, followed by 13 targeted dashboard tests after the native window-thread and pending-close corrections. Native IPC, restart and release evidence: `docs/release-0.1.9.json`, `docs/tray-dashboard.md`. Physical taskbar clicks and mixed-DPI transitions remain unverified; this milestone is not a declaration of complete parity.

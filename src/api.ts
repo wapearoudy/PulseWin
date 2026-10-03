@@ -67,8 +67,7 @@ export function onUsageUpdated(handler: (snapshot: Snapshot) => void): Promise<U
 
 /** Hide the panel (the tray keeps the app running). */
 export async function hidePanel(): Promise<void> {
-  const { getCurrentWindow } = await import('@tauri-apps/api/window')
-  await getCurrentWindow().hide()
+  await invoke('set_panel_visible', { visible:false })
 }
 
 /**

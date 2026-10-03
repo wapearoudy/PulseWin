@@ -12,6 +12,10 @@ export interface AccountAppearance {
 }
 export const defaultAccountAppearance: AccountAppearance = { detailedCard: false, animatedMark: false, persona: 'automatic', body: 'blob', markColour: null, ringColour: null }
 export interface Preferences {
+  panelVisible: boolean
+  trayShowsUsage: boolean
+  trayStyle: 'figure' | 'ring' | 'split'
+  trayAccount: string | null
   accounts: {id:string;provider:string}[]
   accountLabels: Record<string,string>
   openSettingsShortcut: string | null
@@ -45,6 +49,7 @@ export interface Preferences {
   pinnedWindows: Record<string, string>
 }
 export const defaultPreferences: Preferences = {
+  panelVisible:true, trayShowsUsage:false, trayStyle:'figure', trayAccount:null,
   accounts: [], accountLabels: {},
   openSettingsShortcut: null, togglePanelShortcut: null,
   alerts: { threshold: null, onReset: false, onFailure: false, lowBalance: {} }, tokenSpendEnabled: false, tokenSpendSpan: 'week', resetCelebration: true,

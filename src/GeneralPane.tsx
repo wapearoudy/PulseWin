@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { captureShortcut, heldModifiers, shortcutLabel } from './shortcut'
+import { TrayPreferencesPane } from './TrayPreferencesPane'
 import { UpdatePane } from './UpdatePane'
 type Action='openSettings'|'togglePanel'
 interface ApplicationSettings {
@@ -68,6 +69,7 @@ export function GeneralPane({onError}:GeneralPaneProps={}) {
         </div>
       </Row>
     })}</Group>
+    <TrayPreferencesPane/>
     <UpdatePane/>
   </>
 }

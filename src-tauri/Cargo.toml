@@ -1,6 +1,6 @@
 [package]
 name = "pulsewin"
-version = "0.1.8"
+version = "0.1.9"
 description = "Windows tray monitor for AI coding tool quota"
 authors = ["PulseWin contributors"]
 edition = "2021"

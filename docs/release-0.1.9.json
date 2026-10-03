@@ -1,0 +1,149 @@
+{
+  "version": "0.1.9",
+  "verifiedAt": "2026-10-03T10:10:54.216775+00:00",
+  "repository": "wapearoudy/PulseWin",
+  "tests": {
+    "rust": 849,
+    "rustIgnored": 1,
+    "frontend": 181,
+    "browser": 49,
+    "postChangeTargetedBrowser": 13,
+    "finalStyleBrowser": 2
+  },
+  "scope": "Tray usage dashboard, separate account tabs, scoped refresh, known official pages, opt-in existing spend history, dynamic tray figure/ring/split and persistent tray-only visibility",
+  "nativeSmoke": {
+    "passed": true,
+    "checks": [
+      "native startup",
+      "no automatic collection",
+      "settings IPC permission",
+      "preferences persistence",
+      "shared panel preferences",
+      "floating rail restoration",
+      "native capsule geometry",
+      "floating stays expanded",
+      "disabled additional accounts never collect",
+      "per-account encrypted credentials",
+      "stale window preserves account metadata",
+      "account rename persists",
+      "removal preserves primary credentials"
+    ],
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\native-profile-WvYb4L",
+    "testedAt": "2026-10-03T10:00:10.021Z"
+  },
+  "cliSmoke": {
+    "passed": true,
+    "testedAt": "2026-10-03T10:03:26.255Z",
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\cli-profile-fFcywi",
+    "checks": [
+      "release dispatch before GUI",
+      "enabled accounts only",
+      "actual window id pin",
+      "panel display rounding",
+      "dated observations",
+      "read-only files",
+      "no credential migration",
+      "same-service account identity and labels",
+      "separate account percentages and statusline"
+    ]
+  },
+  "updateSmoke": {
+    "passed": true,
+    "testedAt": "2026-10-03T10:03:28.157Z",
+    "version": "0.1.9",
+    "checks": [
+      "isolated update configuration and default release source",
+      "signed local download with real Tauri plugin",
+      "tampered bytes rejected",
+      "forged version rejected",
+      "same version skipped",
+      "native test install blocked",
+      "account preferences unchanged",
+      "personal update settings unchanged"
+    ]
+  },
+  "installationExecuted": false,
+  "limitations": [
+    "Not a declaration of complete parity",
+    "Physical taskbar mouse click is unverified",
+    "Mixed-DPI monitor transfer is unverified",
+    "Dynamic icon taskbar scaling/sharpness is unverified",
+    "Windows tray cannot show arbitrary text beside its icon",
+    "Actual installer update/restart was not executed",
+    "Token reader coverage is unchanged; browser authentication and renewal remain incomplete"
+  ],
+  "traySmoke": {
+    "passed": true,
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\native-profile-tray-IsHyeZ",
+    "testedAt": "2026-10-03T10:10:30.197Z",
+    "geometry": {
+      "position": {
+        "x": 3360,
+        "y": 1477
+      },
+      "size": {
+        "width": 480,
+        "height": 603
+      },
+      "monitor": {
+        "name": "\\\\.\\DISPLAY2",
+        "size": {
+          "width": 3840,
+          "height": 2160
+        },
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "workArea": {
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "size": {
+            "width": 3840,
+            "height": 2088
+          }
+        },
+        "scaleFactor": 1.5
+      },
+      "scale": 1.5,
+      "viewport": [
+        320,
+        402
+      ]
+    },
+    "checks": [
+      "native popup IPC and permissions",
+      "320 logical pixel width",
+      "content height adapts without resizing assistant",
+      "clamped to monitor work area",
+      "independent additional-account tabs",
+      "real settings style persistence",
+      "tray-only monitoring remains enabled",
+      "assistant visibility persists after process restart",
+      "Escape hides popup"
+    ],
+    "notTested": [
+      "physical taskbar mouse click",
+      "mixed-DPI displays",
+      "visual sharpness of OS-scaled tray icon"
+    ]
+  },
+  "artifacts": [
+    {
+      "file": "PulseWin_0.1.9_x64-setup.exe",
+      "bytes": 2922599,
+      "sha256": "a145c061790dd5fffea93d3b8f44865154e373ce2015a6730780e2661c833052",
+      "signature": true,
+      "mediumIntegrityRepaired": true
+    },
+    {
+      "file": "PulseWin_0.1.9_x64_en-US.msi",
+      "bytes": 4648960,
+      "sha256": "9e7be89c0cbcb456d95719fafbd1ec24579e85e69dc954333fd7c94acd86b193",
+      "signature": true,
+      "mediumIntegrityRepaired": true
+    }
+  ]
+}

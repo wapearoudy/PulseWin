@@ -59,8 +59,11 @@ A rail capsule fused to one screen edge — **left, right or top**. Every explic
   watcher in `lib.rs` samples the cursor every 60 ms and flips the window between click-through and
   interactive as the pointer crosses the regions the frontend claims. Without it, the invisible
   margin would swallow every click meant for the window underneath.
-- **The tray icon**: left click shows or hides the panel, right click offers Show PulseWin /
-  Settings… / Refresh now / Quit, and the tooltip names the tightest quota on the rail.
+- **The tray icon**: left click opens the compact usage overview and per-account tabs; right click
+  offers the overview, assistant visibility, Settings, Refresh, Updates and Quit. General settings
+  can show the tightest pinned quota or a chosen account as a figure, mini ring or two time-window
+  figures. Windows puts numbers inside the icon; full labels appear in its tooltip and dashboard.
+  Assistant visibility persists across restarts; hiding it keeps enabled accounts monitored.
 - Automatic refresh uses a per-provider 2/5/15/30-minute schedule based on activity, inspection,
   quota changes and panel visibility; a fixed interval can also be selected. A fetch that fails still draws its ring —
   a ring that has gone quiet is the one being looked for — and its card says what went wrong and
