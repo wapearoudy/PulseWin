@@ -14,6 +14,20 @@ import { NotificationsPane, LowBalanceAlert } from './NotificationsPane'
 import { GeneralPane } from './GeneralPane'
 import { TokenSpendPane, releaseSpendSession } from './token-spend/TokenSpendPane'
 
+function SidebarSymbol({children}:{children:ReactNode}) {
+  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" focusable="false">{children}</svg>
+}
+
+const settingsPanes:[string,string,ReactNode,string][]=[
+  ['appearance','外观',<SidebarSymbol><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.5-3.3 1.4 1.4 0 0 1 1-2.4H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3Z"/><circle cx="7.5" cy="10" r=".7" fill="currentColor"/><circle cx="10" cy="6.7" r=".7" fill="currentColor"/><circle cx="14" cy="6.7" r=".7" fill="currentColor"/><circle cx="17" cy="10" r=".7" fill="currentColor"/></SidebarSymbol>,'大小 间距 圆角 动画'],
+  ['rings','圆环与数字',<SidebarSymbol><circle cx="12" cy="12" r="8" strokeDasharray="2.5 2.5"/></SidebarSymbol>,'百分比 剩余 预测 时间 第二圆环'],
+  ['behavior','位置与行为',<SidebarSymbol><rect x="3" y="4" width="18" height="16" rx="2"/><rect x="14" y="7" width="4" height="10" rx=".5" fill="currentColor" stroke="none"/></SidebarSymbol>,'收起 刷新 停靠 悬浮'],
+  ['accounts','管理账号',<SidebarSymbol><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M12 4v16M4 12h16"/></SidebarSymbol>,'服务商 排序 添加'],
+  ['notifications','通知',<SidebarSymbol><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M10 21h4"/></SidebarSymbol>,'额度 提醒 阈值 重置 失败 余额'],
+  ['token-spend','Token 消耗',<SidebarSymbol><path d="M4 20h16"/><rect x="5" y="11" width="3" height="9" rx=".5"/><rect x="10.5" y="4" width="3" height="16" rx=".5"/><rect x="16" y="8" width="3" height="12" rx=".5"/></SidebarSymbol>,'统计 历史 费用 用量'],
+  ['general','通用',<SidebarSymbol><path d="M3 6h4m4 0h10M3 12h10m4 0h4M3 18h3m4 0h11"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/></SidebarSymbol>,'启动 快捷键 软件 更新'],
+]
+
 export default function Settings() {
   const { preferences: prefs, loaded, error: loadError } = usePreferences()
   const [providers, setProviders] = useState<ProviderSetting[]>([])
@@ -69,10 +83,9 @@ export default function Settings() {
       <div className="settings-brand"><span className="brand-mark">◉</span><strong>Pulse</strong><span>Windows</span></div>
       <input type="search" aria-label="搜索设置与账号" placeholder="搜索设置与账号" value={query} onChange={e => setQuery(e.target.value)} />
       <nav><p className="nav-section">面板</p>
-        {[['appearance','外观','◐','大小 间距 圆角 动画'],['rings','圆环与数字','◉','百分比 剩余 预测 时间 第二圆环'],['behavior','位置与行为','↔','收起 刷新 停靠 悬浮'],['accounts','管理账号','⊞','服务商 排序 添加']].filter(x => x.join(' ').toLowerCase().includes(query.toLowerCase())).map(([id,title,icon]) => <button key={id} className={pane === id ? 'selected' : ''} onClick={() => { setPane(id); setChoose(false); setDismissed(true) }}><span aria-hidden="true">{icon}</span>{title}</button>)}
-        {[['notifications','通知'],['token-spend','Token 消耗'],['general','通用']].filter(x=>x.join(' ').toLowerCase().includes(query.toLowerCase())).map(([id,title])=><button key={id} className={pane===id?'selected':''} onClick={()=>{setPane(id);setChoose(false);setDismissed(true)}}>{title}</button>)}
+        {settingsPanes.filter(([id,title,,terms]) => `${id} ${title} ${terms}`.toLowerCase().includes(query.toLowerCase())).map(([id,title,icon]) => <button key={id} className={pane === id ? 'selected' : ''} onClick={() => { setPane(id); setChoose(false); setDismissed(true) }}><span className="settings-nav-icon" aria-hidden="true">{icon}</span><span className="settings-nav-label">{title}</span></button>)}
         <p className="nav-section">账号</p>
-        {shown.map(p => <button key={p.id} className={pane === p.id ? 'selected' : ''} onClick={() => { setPane(p.id); setChoose(false); setDismissed(true) }}><span style={{width:18,height:18,flexShrink:0}}><ProviderIcon provider={p.id}/></span><span className="account-name">{p.name}</span></button>)}
+        {shown.map(p => <button key={p.id} className={pane === p.id ? 'selected' : ''} onClick={() => { setPane(p.id); setChoose(false); setDismissed(true) }}><span className="settings-nav-icon" aria-hidden="true"><ProviderIcon provider={p.id}/></span><span className="account-name">{p.name}</span></button>)}
         {!shown.length && query && <p className="muted">没有匹配的账号</p>}
       </nav><div className="sidebar-footer">{prefs.enabledProviders.length} 个账号显示在面板</div>
     </aside>

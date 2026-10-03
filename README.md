@@ -12,7 +12,7 @@
 > native/multiple-display acceptance remain open.
 > Existing installations explicitly select the services to monitor; stored credentials are retained.
 
-**Download:** [GitHub Releases](https://github.com/wapearoudy/PulseWin/releases). Install 0.1.5 once to enable signed in-app updates; 0.1.4 can update directly. Subsequent releases can be installed with **Settings → General → Software updates → Update and restart**; preferences and credentials stay in place. Both GitHub Releases and local build directories are supported. See [update and release instructions](docs/updates.md).
+**Download:** [GitHub Releases](https://github.com/wapearoudy/PulseWin/releases). Install 0.1.6 once if upgrading from 0.1.3 or earlier; 0.1.4 and 0.1.5 can update directly. Subsequent releases can be installed with **Settings → General → Software updates → Update and restart**; preferences and credentials stay in place. Both GitHub Releases and local build directories are supported. See [update and release instructions](docs/updates.md).
 
 
 A **Windows** port of [Pulse](https://github.com/qunqin24/Pulse) — a tray monitor that shows how
@@ -27,8 +27,8 @@ Target platform: Windows 11 Pro (x64). The last release build in this tree produ
 | Artifact | Path | Size |
 | --- | --- | --- |
 | Application | `src-tauri/target/release/pulsewin.exe` | ~7.06 MiB |
-| Installer (MSI) | `src-tauri/target/release/bundle/msi/PulseWin_0.1.5_x64_en-US.msi` | ~4.38 MiB |
-| Installer (NSIS) | `src-tauri/target/release/bundle/nsis/PulseWin_0.1.5_x64-setup.exe` | ~2.74 MiB |
+| Installer (MSI) | `src-tauri/target/release/bundle/msi/PulseWin_0.1.6_x64_en-US.msi` | ~4.38 MiB |
+| Installer (NSIS) | `src-tauri/target/release/bundle/nsis/PulseWin_0.1.6_x64-setup.exe` | ~2.74 MiB |
 
 What is covered by tests, and what is not, is set out under [Tests](#tests).
 

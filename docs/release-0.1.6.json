@@ -1,0 +1,206 @@
+{
+  "version": "0.1.6",
+  "verifiedAt": "2026-10-03T08:31:16.5090474Z",
+  "repository": "wapearoudy/PulseWin",
+  "tests": {
+    "browser": 35,
+    "frontend": 181
+  },
+  "nativeSmoke": {
+    "passed": true,
+    "checks": [
+      "native startup",
+      "no automatic collection",
+      "settings IPC permission",
+      "preferences persistence",
+      "shared panel preferences",
+      "floating rail restoration",
+      "native capsule geometry",
+      "floating stays expanded"
+    ],
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\native-profile-VfSNK0",
+    "testedAt": "2026-10-03T08:29:54.402Z"
+  },
+  "cliSmoke": {
+    "passed": true,
+    "testedAt": "2026-10-03T08:29:52.005Z",
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\cli-profile-pOoy5Z",
+    "checks": [
+      "release dispatch before GUI",
+      "enabled accounts only",
+      "actual window id pin",
+      "panel display rounding",
+      "dated observations",
+      "read-only files",
+      "no credential migration"
+    ]
+  },
+  "updateSmoke": {
+    "passed": true,
+    "testedAt": "2026-10-03T08:29:53.392Z",
+    "version": "0.1.6",
+    "checks": [
+      "isolated update configuration and default release source",
+      "signed local download with real Tauri plugin",
+      "tampered bytes rejected",
+      "forged version rejected",
+      "same version skipped",
+      "native test install blocked",
+      "account preferences unchanged",
+      "personal update settings unchanged"
+    ]
+  },
+  "sidebar": {
+    "passed": true,
+    "light": [
+      {
+        "text": "外观",
+        "labelX": 50,
+        "iconWidth": 18,
+        "height": 33.5,
+        "color": "rgb(36, 36, 40)",
+        "selected": false,
+        "svgStroke": "rgb(36, 36, 40)"
+      },
+      {
+        "text": "圆环与数字",
+        "labelX": 50,
+        "iconWidth": 18,
+        "height": 33.5,
+        "color": "rgb(36, 36, 40)",
+        "selected": false,
+        "svgStroke": "rgb(36, 36, 40)"
+      },
+      {
+        "text": "位置与行为",
+        "labelX": 50,
+        "iconWidth": 18,
+        "height": 33.5,
+        "color": "rgb(36, 36, 40)",
+        "selected": false,
+        "svgStroke": "rgb(36, 36, 40)"
+      },
+      {
+        "text": "管理账号",
+        "labelX": 50,
+        "iconWidth": 18,
+        "height": 33.5,
+        "color": "rgb(36, 36, 40)",
+        "selected": false,
+        "svgStroke": "rgb(36, 36, 40)"
+      },
+      {
+        "text": "通知",
+        "labelX": 50,
+        "iconWidth": 18,
+        "height": 33.5,
+        "color": "rgb(36, 36, 40)",
+        "selected": false,
+        "svgStroke": "rgb(36, 36, 40)"
+      },
+      {
+        "text": "Token 消耗",
+        "labelX": 50,
+        "iconWidth": 18,
+        "height": 33.5,
+        "color": "rgb(36, 36, 40)",
+        "selected": false,
+        "svgStroke": "rgb(36, 36, 40)"
+      },
+      {
+        "text": "通用",
+        "labelX": 50,
+        "iconWidth": 18,
+        "height": 33.5,
+        "color": "rgb(255, 255, 255)",
+        "selected": true,
+        "svgStroke": "rgb(255, 255, 255)"
+      }
+    ],
+    "dark": [
+      {
+        "text": "外观",
+        "labelX": 50,
+        "iconWidth": 18,
+        "height": 33.5,
+        "color": "rgb(238, 238, 240)",
+        "selected": false,
+        "svgStroke": "rgb(238, 238, 240)"
+      },
+      {
+        "text": "圆环与数字",
+        "labelX": 50,
+        "iconWidth": 18,
+        "height": 33.5,
+        "color": "rgb(238, 238, 240)",
+        "selected": false,
+        "svgStroke": "rgb(238, 238, 240)"
+      },
+      {
+        "text": "位置与行为",
+        "labelX": 50,
+        "iconWidth": 18,
+        "height": 33.5,
+        "color": "rgb(238, 238, 240)",
+        "selected": false,
+        "svgStroke": "rgb(238, 238, 240)"
+      },
+      {
+        "text": "管理账号",
+        "labelX": 50,
+        "iconWidth": 18,
+        "height": 33.5,
+        "color": "rgb(238, 238, 240)",
+        "selected": false,
+        "svgStroke": "rgb(238, 238, 240)"
+      },
+      {
+        "text": "通知",
+        "labelX": 50,
+        "iconWidth": 18,
+        "height": 33.5,
+        "color": "rgb(238, 238, 240)",
+        "selected": false,
+        "svgStroke": "rgb(238, 238, 240)"
+      },
+      {
+        "text": "Token 消耗",
+        "labelX": 50,
+        "iconWidth": 18,
+        "height": 33.5,
+        "color": "rgb(238, 238, 240)",
+        "selected": false,
+        "svgStroke": "rgb(238, 238, 240)"
+      },
+      {
+        "text": "通用",
+        "labelX": 50,
+        "iconWidth": 18,
+        "height": 33.5,
+        "color": "rgb(255, 255, 255)",
+        "selected": true,
+        "svgStroke": "rgb(255, 255, 255)"
+      }
+    ],
+    "narrow": true,
+    "search": true
+  },
+  "installationExecuted": false,
+  "artifacts": [
+    {
+      "sha256": "E3099A86C7D2B4FBADDACB5EB83E4ACB0DCB7CF1E032677B8411DFC3FFBB5C32",
+      "path": "src-tauri/target/release/pulsewin.exe",
+      "bytes": 7407616
+    },
+    {
+      "sha256": "79B3BF4EED64C38A7125FA2C0BD0EEFD51C464AD73A66EB4D3BC1E4C65AE8C89",
+      "path": "src-tauri/target/release/bundle/nsis/PulseWin_0.1.6_x64-setup.exe",
+      "bytes": 2878175
+    },
+    {
+      "sha256": "4F207873DA4ACCAD9AECFB2B543798C5EFB7661DDF070897313707493EAC0501",
+      "path": "src-tauri/target/release/bundle/msi/PulseWin_0.1.6_x64_en-US.msi",
+      "bytes": 4587520
+    }
+  ]
+}
