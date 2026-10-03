@@ -1,6 +1,6 @@
 {
   "version": "0.1.8",
-  "verifiedAt": "2026-10-03T09:19:48.065776+00:00",
+  "verifiedAt": "2026-10-03T09:23:37.076864+00:00",
   "repository": "wapearoudy/PulseWin",
   "tests": {
     "rust": 840,
@@ -84,5 +84,51 @@
     "Browser OAuth login, automatic renewal and per-account local transcript ownership remain incomplete.",
     "OpenCode Go availability confirmed by the user; no new live quota request in this release.",
     "Installer execution and overwrite/restart were not performed."
-  ]
+  ],
+  "publicRelease": {
+    "passed": true,
+    "testedAt": "2026-10-03T09:21:35.649Z",
+    "repository": "wapearoudy/PulseWin",
+    "release": "https://github.com/wapearoudy/PulseWin/releases/tag/v0.1.8",
+    "version": "0.1.8",
+    "anonymousAssets": [
+      {
+        "name": "latest.json",
+        "bytes": 2435,
+        "sha256": "69bc3a89a5b94be73075aa164dc7b18f0176ae4a4e2f1fc6506b7a7b0a9daae6"
+      },
+      {
+        "name": "PulseWin_0.1.8_x64-setup.exe",
+        "bytes": 2899716,
+        "sha256": "5d2caf6901579d465e843424bd63114e071e02834640adf0f7a28916ca7101a6"
+      },
+      {
+        "name": "PulseWin_0.1.8_x64-setup.exe.sig",
+        "bytes": 436,
+        "sha256": "997935a98ec2129b3c65721cf1308ca60d0a726f433cbd5e4fe03438dbd579b4"
+      },
+      {
+        "name": "PulseWin_0.1.8_x64_en-US.msi",
+        "bytes": 4616192,
+        "sha256": "b66fb89f43504831280999faae995b7aec08fa034b55a84c62c33bfc4387eba4"
+      },
+      {
+        "name": "PulseWin_0.1.8_x64_en-US.msi.sig",
+        "bytes": 436,
+        "sha256": "f22fbe3c40f469ee31a9ca475bd912c7f39ee380d1a375650642271dd550a29f"
+      }
+    ],
+    "nativeCheck": {
+      "phase": "current",
+      "source": "https://github.com/wapearoudy/PulseWin/releases/latest/download/latest.json",
+      "currentVersion": "0.1.8"
+    },
+    "installationExecuted": false,
+    "signedUpgradeDownload": {
+      "from": "0.1.4",
+      "to": "0.1.8",
+      "passed": true,
+      "actualPublishedPackage": true
+    }
+  }
 }
