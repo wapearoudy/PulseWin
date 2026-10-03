@@ -160,3 +160,8 @@ Verification: 849 Rust, 181 frontend, 49 full-suite browser tests, followed by 1
 Added system / manual HTTP CONNECT / SOCKS5 settings, atomic validated endpoints, shared provider policy and proxy reconfiguration cancellation. Proxy changes retry only enabled accounts; generic stale preference writes cannot replace the authoritative network configuration. Kiro / Alibaba helper environments and models.dev price fetches consume the saved policy; gateway redirects remain disabled, editor loopback remains direct and updates retain system proxy policy. Network refresh cadence moved to its own page. About exposes compiled version, existing signed updates, allowlisted project / attribution links and bundled licenses.
 
 Verification: 861 Rust tests plus one ignored, 181 frontend tests, 58 browser flows and 13 final targeted flows. Real native isolated-profile smoke tests proxy replacement and restart persistence without an upstream connection; CONNECT fake servers observe FIN by draining their socket. Details and remaining PAC / auth / real-account limits are in [networking.md](networking.md).
+
+
+### 0.1.11 — malformed system proxy compatibility
+
+System proxy configuration is external to validated application preferences. Restored the previous tolerance for malformed WinINET URL values so users can still launch Settings and choose a valid manual endpoint. Added client-initialization and real system bypass-list regressions; 863 Rust tests pass plus one ignored. The unchanged frontend retains the 0.1.10 browser and unit evidence. Final binary and public release checks are recorded in [release-0.1.11.json](release-0.1.11.json).

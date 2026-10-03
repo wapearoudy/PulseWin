@@ -28,3 +28,8 @@ Rust 本地监听器验证真实 HTTP 绝对 URI、HTTPS CONNECT、SOCKS5 远端
 `node scripts/network-smoke.mjs` 运行独立 APPDATA / WebView2 的实际发布程序，使用假 DeepSeek key 和本地 CONNECT 服务器，验证旧挂起请求取消、新代理立即重试、旧通用偏好不能覆盖网络配置、无效值拒绝、SOCKS5 与检查间隔重启恢复、实际版本和本地许可、原用户偏好字节不变。CONNECT 测试服务器必须读取 socket 才能观察 FIN；最初未读取导致假超时，修正后实际取消完成。
 
 该批并不证明全部真实服务登录、所有辅助工具现场代理连接、Windows PAC、混合 DPI 或完整原版功能覆盖。发布证据与耗时见 [release-0.1.10.json](release-0.1.10.json)。
+
+
+## 0.1.11 启动兼容修正
+
+恢复原系统代理读取容错：WinINET 注册表里损坏的代理 URL 不阻止 HTTP 客户端初始化，应用仍可进入设置选择有效手动代理；手动保存继续严格校验。新增损坏系统地址初始化及有效系统代理绕过列表的真实连接回归。0.1.10 的功能和浏览器验收仍有效，0.1.11 发布程序另行验证原生网络、助手、托盘、CLI 与签名更新。证据见 [release-0.1.11.json](release-0.1.11.json)。

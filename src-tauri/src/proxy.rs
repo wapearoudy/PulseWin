@@ -74,11 +74,18 @@ pub fn configure(mut builder:reqwest::ClientBuilder,settings:&NetworkProxySettin
             if target.host_str().is_some_and(is_loopback){None}else{Some(url.clone())}
         }));
     }else if let Some(url)=system_proxy(){
-        let proxy=reqwest::Proxy::all(url).map_err(|_|"Windows 系统代理地址无效。")?
-            .no_proxy(reqwest::NoProxy::from_string(&system_no_proxy().unwrap_or_default()));
-        builder=builder.proxy(proxy);
+        builder=configure_system_proxy(builder,&url,system_no_proxy().as_deref());
     }
     Ok(builder)
+}
+// External WinINET configuration is not validated by our settings command.
+// Preserve the old startup policy: malformed registry values must not prevent
+// users from reaching Settings to configure a working manual endpoint.
+fn configure_system_proxy(builder:reqwest::ClientBuilder,endpoint:&str,bypass:Option<&str>)->reqwest::ClientBuilder{
+    match reqwest::Proxy::all(endpoint){
+        Ok(proxy)=>builder.proxy(proxy.no_proxy(reqwest::NoProxy::from_string(bypass.unwrap_or_default()))),
+        Err(_)=>builder,
+    }
 }
 #[derive(Serialize)]#[serde(rename_all="camelCase")]
 pub struct NetworkStatus {pub settings:NetworkProxySettings,pub source:String,pub endpoint:Option<String>,pub manual_ready:bool}

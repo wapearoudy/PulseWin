@@ -111,3 +111,22 @@ async fn gateway_client_still_refuses_to_forward_keys_through_redirects() {
     let ctx=crate::providers::Ctx::with_network(&config).unwrap();let response=ctx.gateway_client.get("http://gateway.invalid/usage").header("Authorization","Bearer synthetic-key").send().await.unwrap();
     assert_eq!(response.status(),302);assert!(server.await.unwrap().contains("Bearer synthetic-key"));
 }
+
+#[test]
+fn malformed_external_system_proxy_does_not_block_client_initialization() {
+    for endpoint in ["http://", "http://["] {
+        assert!(reqwest::Proxy::all(endpoint).is_err(), "{endpoint}");
+        assert!(configure_system_proxy(reqwest::Client::builder(), endpoint, None).build().is_ok());
+    }
+}
+#[tokio::test]
+async fn a_valid_system_proxy_still_applies_its_bypass_list() {
+    let proxy=TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let direct=TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let endpoint=format!("http://{}",proxy.local_addr().unwrap());
+    let target=format!("http://{}/usage",direct.local_addr().unwrap());
+    let server=tokio::spawn(async move {let (mut stream,_)=direct.accept().await.unwrap();request_headers(&mut stream).await;answer(&mut stream).await;});
+    let client=configure_system_proxy(reqwest::Client::builder().no_proxy().timeout(Duration::from_secs(3)),&endpoint,Some("127.0.0.1")).build().unwrap();
+    assert_eq!(client.get(target).send().await.unwrap().text().await.unwrap(),"usage");server.await.unwrap();
+    assert!(tokio::time::timeout(Duration::from_millis(30),proxy.accept()).await.is_err());
+}
