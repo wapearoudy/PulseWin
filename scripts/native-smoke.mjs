@@ -58,6 +58,43 @@ try {
   assert.deepEqual(application.unavailable,{})
   assert.equal(application.autostartError,null,'Native startup status must be read without changing it')
   assert.equal(typeof application.autostartEnabled,'boolean')
+  // Additional accounts are created disabled, so synthetic secrets never leave
+  // this isolated profile or cause a request to a real service.
+  const added=await page.evaluate(async()=>{
+    const invoke=window.__TAURI_INTERNALS__.invoke;
+    await invoke('save_provider_credential',{provider:'codex',apiKey:'native-synthetic-primary',baseUrl:null});
+    const first=await invoke('add_account',{provider:'codex',label:'工作账号',credential:JSON.stringify({tokens:{access_token:'native-synthetic-work',account_id:'workspace-work'}}),importLocal:false,enabled:false});
+    const second=await invoke('add_account',{provider:'codex',label:'备用账号',credential:'native-synthetic-backup',importLocal:false,enabled:false});
+    return {first,second,prefs:await invoke('get_preferences'),rows:await invoke('provider_settings')};
+  });
+  assert.equal(added.prefs.accounts.length,2);
+  assert.deepEqual(added.prefs.enabledProviders,[]);
+  const primaryBytes=await readFile(path.join(profile,'PulseWin/codex.json'));
+  for(const id of [added.first,added.second]) {
+    assert.equal(added.rows.find(row=>row.id===id).providerId,'codex');
+    assert.equal(added.rows.find(row=>row.id===id).additional,true);
+    const stored=await readFile(path.join(profile,`PulseWin/${id}.json`),'utf8');
+    assert.equal(JSON.parse(stored).format,'pulsewin-dpapi');
+    assert(!stored.includes('native-synthetic'),'Account credentials must be encrypted');
+  }
+  await page.evaluate(async({id,prefs})=>{
+    const invoke=window.__TAURI_INTERNALS__.invoke;
+    // A stale settings window cannot erase metadata created by another window.
+    await invoke('save_preferences',{value:{...prefs,accounts:[],accountLabels:{...prefs.accountLabels,[id]:'公司账号'}}});
+  },{id:added.first,prefs:added.prefs});
+  const renamed=await page.evaluate(()=>window.__TAURI_INTERNALS__.invoke('get_preferences'));
+  assert.equal(renamed.accounts.length,2);assert.equal(renamed.accountLabels[added.first],'公司账号');
+  await page.getByRole('button',{name:'公司账号',exact:true}).click();
+  await page.getByRole('heading',{name:'公司账号',exact:true}).waitFor();
+  await page.screenshot({path:path.join(root,'test-results/native-multi-account.png')});
+  await page.evaluate(async(ids)=>{for(const account of ids)await window.__TAURI_INTERNALS__.invoke('remove_account',{account});},[added.first,added.second]);
+  const removed=await page.evaluate(()=>window.__TAURI_INTERNALS__.invoke('get_preferences'));
+  assert.equal(removed.accounts.length,0);assert.deepEqual(removed.enabledProviders,[]);
+  assert.deepEqual(await readFile(path.join(profile,'PulseWin/codex.json')),primaryBytes,'Removing an extra account must preserve primary credentials');
+  for(const id of [added.first,added.second]) {
+    await assert.rejects(readFile(path.join(profile,`PulseWin/${id}.json`)),{code:'ENOENT'});
+  }
+  await page.getByRole('button',{name:'外观',exact:true}).click();
   if(process.env.PULSEWIN_TEST_KEEP_OPEN==='1') {
     const hotkey=await page.evaluate(()=>window.__TAURI_INTERNALS__.invoke('set_application_shortcut',{action:'openSettings',value:'Control+Alt+Shift+F12'}))
     assert.equal(hotkey.unavailable.openSettings,undefined,'Temporary native test shortcut must register')
@@ -91,10 +128,10 @@ try {
   assert(Math.abs(position.y+rail.y*scale-80)<=2,`Native rail must restore its Y: ${JSON.stringify({position,rail,scale,placement:await main.evaluate(()=>window.__TAURI_INTERNALS__.invoke('panel_placement'))})}`)
   await main.locator('.rail').screenshot({path:path.join(root,'test-results/native-assistant.png')})
   await writeFile(path.join(root, 'test-results/native-smoke.json'), JSON.stringify({
-    passed: true, checks: ['native startup', 'no automatic collection', 'settings IPC permission', 'preferences persistence', 'shared panel preferences', 'floating rail restoration', 'native capsule geometry', 'floating stays expanded'],
+    passed: true, checks: ['native startup', 'no automatic collection', 'settings IPC permission', 'preferences persistence', 'shared panel preferences', 'floating rail restoration', 'native capsule geometry', 'floating stays expanded', 'disabled additional accounts never collect', 'per-account encrypted credentials', 'stale window preserves account metadata', 'account rename persists', 'removal preserves primary credentials'],
     profile, testedAt: new Date().toISOString(),
   }, null, 2))
-  console.log('PASS: native startup, isolated preferences, restored floating rail coordinates, capsule/ring geometry and floating visibility.')
+  console.log('PASS: native startup and assistant geometry; additional accounts stay isolated, encrypted, renameable and removable without touching the primary.')
   if(process.env.PULSEWIN_TEST_KEEP_OPEN==='1') {
     await page.evaluate(()=>window.__TAURI_INTERNALS__.invoke('plugin:window|hide',{label:'settings'}))
     console.log('NATIVE_READY: isolated assistant available for real input validation')

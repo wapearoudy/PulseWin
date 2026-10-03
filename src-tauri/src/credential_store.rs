@@ -135,6 +135,15 @@ pub fn update_at(path: &Path, provider: &str, api_key: Option<&str>, base_url: O
     atomic_write(path, &encrypted, previous.as_deref())
 }
 
+/// Replace a login snapshot, preserving the encrypted and atomic storage contract.
+pub fn write_document(path: &Path, provider: &str, document: &Value) -> io::Result<()> {
+    ensure_id(provider)?;
+    let _guard=STORE_LOCK.lock().map_err(|_|invalid("Credential store is unavailable"))?;
+    let previous=read_bytes(path)?;
+    if let Some(bytes)=previous.as_deref(){decode(provider,parse_document(bytes)?)?;}
+    atomic_write(path,&encode(provider,document)?,previous.as_deref())
+}
+
 fn set_field(object: &mut Map<String, Value>, field: &str, value: Option<&str>) {
     if let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) {
         object.insert(field.to_string(), Value::String(value.to_string()));
@@ -291,6 +300,21 @@ mod tests {
         let decoded = read_at(&path, "synthetic").unwrap().unwrap();
         assert_eq!(decoded["apiKey"], "synthetic-test-secret");
         assert_eq!(decoded["baseUrl"], "https://example.invalid");
+    }
+    #[cfg(windows)]
+    #[test]
+    fn two_codex_accounts_cannot_decrypt_each_other_or_overwrite_the_primary() {
+        let primary=fixture("codex");let extra=fixture("codex--account-ab");
+        let a=serde_json::json!({"apiKey":"synthetic-a","accountId":"workspace-a"});
+        let b=serde_json::json!({"apiKey":"synthetic-b","accountId":"workspace-b"});
+        write_document(&primary,"codex",&a).unwrap();let before=fs::read(&primary).unwrap();
+        write_document(&extra,"codex--account-ab",&b).unwrap();
+        assert_eq!(read_at(&extra,"codex--account-ab").unwrap(),Some(b));
+        assert!(read_at(&extra,"codex").is_err());assert_eq!(fs::read(&primary).unwrap(),before);
+        assert!(!fs::read_to_string(&extra).unwrap().contains("synthetic-b"));
+        write_document(&extra,"codex--account-ab",&serde_json::json!({"apiKey":"synthetic-c","accountId":"workspace-c"})).unwrap();
+        assert_eq!(read_at(&extra,"codex--account-ab").unwrap().unwrap()["accountId"],"workspace-c");
+        assert_eq!(fs::read(&primary).unwrap(),before);
     }
 
     #[cfg(windows)]

@@ -16,6 +16,8 @@ export type PanelEdgeName = 'left' | 'right' | 'top'
 
 /** One row of the settings list. Mirrors `ProviderSetting` in lib.rs. */
 export interface ProviderSetting {
+  providerId?: string
+  additional?: boolean
   credentialError?: string | null
   id: string
   name: string
@@ -150,3 +152,7 @@ export const onMenuChanged = (handler:(open:boolean)=>void) => listen<boolean>('
 export const onRefreshChanged = (handler:(event:{ids:string[];refreshing:boolean})=>void) => listen<{ids:string[];refreshing:boolean}>('refresh-changed',e=>handler(e.payload))
 
 export const setPanelPosition = (position:'left'|'right'|'top'|'free') => invoke<PanelPlacement>('set_panel_position',{position})
+
+export const addAccount = (provider:string,label:string,credential:string|null,importLocal:boolean,enabled=true) => invoke<string>('add_account',{provider,label,credential,importLocal,enabled})
+export const removeAccount = (account:string) => invoke<void>('remove_account',{account})
+export const importAccountLogin = (provider:string) => invoke<void>('save_provider_credential',{provider,apiKey:null,baseUrl:null,importLocal:true})

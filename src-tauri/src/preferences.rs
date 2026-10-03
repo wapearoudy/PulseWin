@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Preferences {
+    pub accounts: Vec<crate::accounts::Account>,
+    pub account_labels: std::collections::HashMap<String, String>,
     pub open_settings_shortcut: Option<String>,
     pub toggle_panel_shortcut: Option<String>,
     pub alerts: crate::alerts::AlertPreferences,
@@ -37,7 +39,7 @@ pub struct Preferences {
 
 impl Default for Preferences {
     fn default() -> Self {
-        Self { open_settings_shortcut: None, toggle_panel_shortcut: None, alerts: Default::default(), token_spend_enabled: false, token_spend_span: "week".into(), reset_celebration: true, enabled_providers: vec![], provider_order: vec![], panel_size: 1.0,
+        Self { accounts: vec![], account_labels: Default::default(), open_settings_shortcut: None, toggle_panel_shortcut: None, alerts: Default::default(), token_spend_enabled: false, token_spend_span: "week".into(), reset_celebration: true, enabled_providers: vec![], provider_order: vec![], panel_size: 1.0,
             rail_spacing: 1.0, round_ends: false, shows_remaining: false,
             show_percentages: true, label_above: false, auto_collapse: true,
             warning_threshold: 0.75, refresh_seconds: 120, refresh_automatic: true, show_reset_clock: false,
@@ -47,6 +49,13 @@ impl Default for Preferences {
 
 impl Preferences {
     pub fn normalize(&mut self, known: &[String]) {
+        let mut seen_accounts=std::collections::HashSet::new();
+        self.accounts.retain(|a| crate::accounts::valid(a) && seen_accounts.insert(a.id.clone()));
+        self.accounts.truncate(64);
+        let known=known.iter().cloned().chain(self.accounts.iter().map(|a|a.id.clone())).collect::<Vec<_>>();
+        let known=known.as_slice();
+        self.account_labels.retain(|id,value|known.contains(id) && crate::accounts::label(value).is_ok());
+        for value in self.account_labels.values_mut(){*value=value.trim().to_owned();}
         for value in [&mut self.open_settings_shortcut,&mut self.toggle_panel_shortcut] {
             if value.as_deref().is_some_and(|v|crate::application::validate(v).is_err()){*value=None;}
         }
@@ -90,6 +99,19 @@ mod tests {
     #[test] fn first_launch_never_enables_discovered_services() {
         let mut p = Preferences::default(); p.normalize(&["codex".into()]);
         assert!(p.enabled_providers.is_empty());
+    }
+    #[test] fn additional_accounts_keep_independent_preferences_and_legacy_defaults() {
+        let mut p:Preferences=serde_json::from_str(r#"{"enabledProviders":["codex"],"accountAppearance":{"codex":{"body":"gem"}}}"#).unwrap();
+        assert!(p.accounts.is_empty());
+        p.accounts.push(crate::accounts::Account{id:"codex--account-ab".into(),provider:"codex".into()});
+        p.enabled_providers.push("codex--account-ab".into());p.account_labels.insert("codex--account-ab".into(),"工作".into());
+        p.pinned_windows.insert("codex--account-ab".into(),"secondary_window".into());
+        p.normalize(&["codex".into()]);
+        assert_eq!(p.enabled_providers.len(),2);assert_eq!(p.account_appearance["codex"].body,"gem");
+        assert_eq!(p.pinned_windows["codex--account-ab"],"secondary_window");
+        let roundtrip:Preferences=serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();assert_eq!(p,roundtrip);
+        p.accounts.clear();p.normalize(&["codex".into()]);
+        assert_eq!(p.enabled_providers,vec!["codex"]);assert!(p.account_labels.is_empty());assert!(p.pinned_windows.is_empty());
     }
     #[test] fn restores_order_without_duplicates_or_unknown_accounts() {
         let mut p = Preferences { enabled_providers: vec!["codex".into(), "gone".into(), "codex".into()],

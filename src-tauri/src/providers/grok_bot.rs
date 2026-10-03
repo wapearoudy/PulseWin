@@ -57,12 +57,13 @@ impl Provider for GrokBot {
     }
 
     fn fetch(&self, ctx: Arc<Ctx>) -> FetchFuture {
-        Box::pin(async move { fetch_inner(ctx).await })
+        Box::pin(async move { fetch_inner(ctx, None).await })
     }
 }
 
-async fn fetch_inner(ctx: Arc<Ctx>) -> ProviderUsage {
-    let Some(cookie) = super::pasted::cookie(ID) else {
+pub(crate) async fn fetch_inner(ctx: Arc<Ctx>, explicit: Option<serde_json::Value>) -> ProviderUsage {
+    let cookie=if let Some(document)=explicit {crate::accounts::token(&document)} else {super::pasted::cookie(ID)};
+    let Some(cookie) = cookie else {
         return ProviderUsage::failed(ID, NAME, super::pasted::needed(ID, "Cursor session cookie"));
     };
 

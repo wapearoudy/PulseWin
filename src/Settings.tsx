@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { getSnapshot, onUsageUpdated, onSettingsAccount, panelPlacement, onPlacementChanged, setPanelPosition, providerSettings, refreshProvider, saveProviderCredential, type ProviderSetting } from './api'
+import { getSnapshot, onUsageUpdated, onSettingsAccount, panelPlacement, onPlacementChanged, setPanelPosition, providerSettings, addAccount, removeAccount, importAccountLogin, refreshProvider, saveProviderCredential, type ProviderSetting } from './api'
 import { usePreferences, savePreferences, defaultAccountAppearance, type Preferences } from './preferences'
 import { formatReset, type ProviderUsage, type Snapshot } from './types'
 import { percentFigure } from './usagePresentation'
@@ -30,7 +30,8 @@ const settingsPanes:[string,string,ReactNode,string][]=[
 
 export default function Settings() {
   const { preferences: prefs, loaded, error: loadError } = usePreferences()
-  const [providers, setProviders] = useState<ProviderSetting[]>([])
+  const [providerRows, setProviders] = useState<ProviderSetting[]>([])
+  const providers=useMemo(()=>providerRows.map(p=>({...p,name:prefs.accountLabels[p.id]??p.name})),[providerRows,prefs.accountLabels])
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
   const [pane, setPane] = useState(()=>new URLSearchParams(window.location.search).get('account') ?? 'appearance'), [query, setQuery] = useState('')
   useEffect(()=>{let live=true,off:(()=>void)|undefined;void onSettingsAccount(id=>{if(live){setPane(id);setChoose(false);setDismissed(true)}}).then(fn=>{if(live)off=fn;else fn()}).catch(()=>undefined);return()=>{live=false;off?.()}},[])
@@ -39,6 +40,7 @@ export default function Settings() {
   const [position,setPosition]=useState<'left'|'right'|'top'|'free'>('right')
   useEffect(()=>{let live=true,off:(()=>void)|undefined;const sync=(p:{dockEdge:'left'|'right'|'top'|null;railPosition:[number,number]|null})=>{if(live)setPosition(p.dockEdge??(p.railPosition?'free':'right'))};panelPlacement().then(sync).catch(()=>undefined);onPlacementChanged(sync).then(fn=>{if(live)off=fn;else fn()}).catch(()=>undefined);return()=>{live=false;off?.()}},[])
   const reload = () => providerSettings().then(setProviders).catch(e => setError(String(e)))
+  useEffect(()=>{void reload()},[prefs.accounts])
   useEffect(() => {
     let live = true, off: (() => void) | undefined
     void providerSettings().then(p => { if(live) setProviders(p) }).catch(e => { if(live) setError(String(e)) })
@@ -116,9 +118,9 @@ export default function Settings() {
         : pane === 'token-spend' ? <TokenSpendPane enabled={prefs.tokenSpendEnabled} onEnabledChange={v=>change({tokenSpendEnabled:v})} span={prefs.tokenSpendSpan} onSpanChange={v=>change({tokenSpendSpan:v})}/>
         : pane === 'accounts' ? <>
         <h1>管理账号</h1><p className="page-description">控制面板显示的服务和排列顺序。</p><button onClick={() => { setSelection(prefs.enabledProviders); setChoose(true) }}>选择服务</button>
-        <Group title="排列顺序">{shown.filter(p=>prefs.enabledProviders.includes(p.id)).map(p => <div key={p.id} draggable onDragStart={e=>e.dataTransfer.setData('application/x-pulse-account',p.id)} onDragOver={e=>{if(e.dataTransfer.types.includes('application/x-pulse-account'))e.preventDefault()}} onDrop={e=>{e.preventDefault();moveTo(e.dataTransfer.getData('application/x-pulse-account'),p.id)}}><Row title={p.name} subtitle={prefs.enabledProviders.includes(p.id) ? '显示在面板' : '未显示'}><div className="toolbar"><button disabled={busy || orderedEnabled.indexOf(p.id) === 0} aria-label={`上移 ${p.name}`} onClick={() => move(p.id,-1)}>↑</button><button disabled={busy || orderedEnabled.indexOf(p.id) === orderedEnabled.length-1} aria-label={`下移 ${p.name}`} onClick={() => move(p.id,1)}>↓</button></div></Row></div>)}</Group>
+        <AddAccountForm onCreated={id=>{void reload();setPane(id)}} onError={setError}/><Group title="排列顺序">{shown.filter(p=>prefs.enabledProviders.includes(p.id)).map(p => <div key={p.id} draggable onDragStart={e=>e.dataTransfer.setData('application/x-pulse-account',p.id)} onDragOver={e=>{if(e.dataTransfer.types.includes('application/x-pulse-account'))e.preventDefault()}} onDrop={e=>{e.preventDefault();moveTo(e.dataTransfer.getData('application/x-pulse-account'),p.id)}}><Row title={p.name} subtitle={prefs.enabledProviders.includes(p.id) ? '显示在面板' : '未显示'}><div className="toolbar"><button disabled={busy || orderedEnabled.indexOf(p.id) === 0} aria-label={`上移 ${p.name}`} onClick={() => move(p.id,-1)}>↑</button><button disabled={busy || orderedEnabled.indexOf(p.id) === orderedEnabled.length-1} aria-label={`下移 ${p.name}`} onClick={() => move(p.id,1)}>↓</button></div></Row></div>)}</Group>
       </> : provider ? <>
-        <h1>{provider.name}</h1><p className="page-description">{provider.configured ? '已发现凭据；连接结果以下方实际检查为准。' : '尚未发现可用凭据。'}</p>
+        <h1>{provider.name}</h1><AccountIdentity key={provider.id} provider={provider} onRename={name=>update({accountLabels:{...prefs.accountLabels,[provider.id]:name}})} onRemoved={()=>{void reload();setPane('accounts')}} onError={setError}/><p className="page-description">{provider.configured ? '已发现凭据；连接结果以下方实际检查为准。' : '尚未发现可用凭据。'}</p>
         {provider.credentialError&&<div role="alert" className="settings-alert">{provider.credentialError}</div>}
         {enabled&&accountUsage?.creditRemaining&&<LowBalanceAlert value={prefs.alerts.lowBalance[pane]} currency={accountUsage.creditRemaining.currency} disabled={busy} onChange={v=>{const lowBalance={...prefs.alerts.lowBalance};if(v===undefined)delete lowBalance[pane];else lowBalance[pane]=v;change({alerts:{...prefs.alerts,lowBalance}})}}/>}
         <Group title="面板"><Toggle title="显示在面板" subtitle="关闭后停止此账号的用量检查。" disabled={busy} value={enabled} onChange={v => change({ enabledProviders: v ? [...prefs.enabledProviders,pane] : prefs.enabledProviders.filter(id => id !== pane) })} /></Group>
@@ -142,9 +144,10 @@ function AccountDetails({ provider, usage, onError, onChanged }: { provider: Pro
     try { if(save) { await saveProviderCredential(provider.id,key||null,address||null); setKey(''); setAddress(''); setSaved(true); onChanged() } else await refreshProvider(provider.id) }
     catch(e) { onError(String(e)) } finally { setBusy(false) }
   }
-  return <><Group title="连接"><Row title="访问凭据" subtitle={provider.stored ? '已保存凭据。留空保留现有值。' : '填写 API Key、Token 或 Cookie。'}><input type="password" aria-label="访问凭据" autoComplete="off" placeholder="粘贴凭据" value={key} onChange={e => { setKey(e.target.value); setSaved(false) }} /></Row>
-    <Row title="服务器地址" subtitle="仅自建网关需要；留空保留现有地址。"><input type="url" aria-label="服务器地址" placeholder="https://…" value={address} onChange={e => { setAddress(e.target.value); setSaved(false) }} /></Row>
+  return <><Group title="连接"><Row title="访问凭据" subtitle={provider.additional?'仅用于此账号。可粘贴 OAuth Token、登录 JSON 或会话 Cookie。':provider.stored ? '已保存凭据。留空保留现有值。' : '填写 API Key、Token 或 Cookie。'}><input type="password" aria-label="访问凭据" autoComplete="off" placeholder="粘贴凭据" value={key} onChange={e => { setKey(e.target.value); setSaved(false) }} /></Row>
+    {!provider.additional && <Row title="服务器地址" subtitle="仅自建网关需要；留空保留现有地址。"><input type="url" aria-label="服务器地址" placeholder="https://…" value={address} onChange={e => { setAddress(e.target.value); setSaved(false) }} /></Row>}
     <div className="group-actions"><span role="status">{saved ? '已保存，连接结果见下方' : ''}</span><button disabled={busy || (!key.trim() && !address.trim())} onClick={() => { void action(true) }}>{busy ? '正在检查…' : '保存并检查'}</button></div>
+    {provider.additional && <div className="group-actions">{provider.providerId!=='grok-bot'&&<button disabled={busy} onClick={()=>{setBusy(true);onError(null);void importAccountLogin(provider.id).then(()=>{setSaved(true);onChanged()}).catch(e=>onError(String(e))).finally(()=>setBusy(false))}}>重新导入 CLI 登录</button>}</div>}
     <details><summary>凭据读取位置</summary>{provider.hints.map(p => <code key={p}>{p}</code>)}</details></Group>
     {provider.id === 'opencode-go' && <p className="group-copy">需要当前密钥所属账号和工作区的 Go 订阅。默认读取 OpenCode CLI 登录；在这里保存的 API key 优先于 CLI。若已订阅却提示未检测到订阅，请核对 OpenCode 控制台中的账号、工作区与密钥。</p>}
     {usage?.source && <p className="group-copy" data-testid="credential-source">凭据来源：{usage.source}</p>}
@@ -154,3 +157,24 @@ function AccountDetails({ provider, usage, onError, onChanged }: { provider: Pro
 }
 
 
+
+const MULTI_SERVICES=[['claude-code','Claude Code'],['codex','Codex'],['grok','Grok'],['grok-bot','Grok Bot']] as const
+function AddAccountForm({onCreated,onError}:{onCreated:(id:string)=>void;onError:(error:string|null)=>void}) {
+  const [open,setOpen]=useState(false),[provider,setProvider]=useState('codex'),[label,setLabel]=useState(''),[credential,setCredential]=useState(''),[mode,setMode]=useState('local'),[busy,setBusy]=useState(false),[enabled,setEnabled]=useState(true)
+  const local=mode==='local'&&provider!=='grok-bot'
+  const create=async()=>{setBusy(true);onError(null);try {const id=await addAccount(provider,label,local?null:credential,local,enabled);setCredential('');setOpen(false);onCreated(id)}catch(e){onError(String(e))}finally{setBusy(false)}}
+  return <Group title="附加账号">{!open?<div className="group-actions"><small>同一服务可分别显示多个账号。</small><button onClick={()=>setOpen(true)}>添加账号</button></div>:<>
+    <Row title="服务"><select aria-label="添加账号的服务" disabled={busy} value={provider} onChange={e=>{setProvider(e.target.value);setCredential('');if(e.target.value==='grok-bot')setMode('paste')}}>{MULTI_SERVICES.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></Row>
+    <Row title="账号名称"><input aria-label="新账号名称" maxLength={64} disabled={busy} value={label} placeholder="例如：工作账号" onChange={e=>setLabel(e.target.value)}/></Row>
+    <Row title="登录来源"><select aria-label="新账号登录来源" disabled={busy} value={local?'local':'paste'} onChange={e=>{setMode(e.target.value);setCredential('')}}>{provider!=='grok-bot'&&<option value="local">导入当前 CLI 登录</option>}<option value="paste">粘贴独立登录信息</option></select></Row>
+    {local?<p className="group-copy">先在 CLI 登录要添加的账号，再导入。保存后此账号独立读取用量；以后切换 CLI 登录不会替换它。登录过期时可重新导入。</p>:<Row title={provider==='grok-bot'?'会话 Cookie':'OAuth Token / 登录 JSON'}><input type="password" autoComplete="off" aria-label="新账号登录信息" disabled={busy} value={credential} onChange={e=>setCredential(e.target.value)}/></Row>}
+    <Toggle title="添加后显示在面板" value={enabled} disabled={busy} onChange={setEnabled}/>
+    <div className="group-actions"><button disabled={busy} onClick={()=>{setOpen(false);setCredential('');onError(null)}}>取消</button><button className="primary" disabled={busy||!label.trim()||(!local&&!credential.trim())} onClick={()=>{void create()}}>{busy?'正在添加…':enabled?'添加并检查':'添加账号'}</button></div>
+  </>}</Group>
+}
+function AccountIdentity({provider,onRename,onRemoved,onError}:{provider:ProviderSetting;onRename:(name:string)=>Promise<void>;onRemoved:()=>void;onError:(error:string|null)=>void}) {
+  const [name,setName]=useState(provider.name),[busy,setBusy]=useState(false),[confirm,setConfirm]=useState(false)
+  useEffect(()=>setName(provider.name),[provider.name])
+  const action=async(remove:boolean)=>{setBusy(true);onError(null);try {if(remove){await removeAccount(provider.id);onRemoved()}else{await onRename(name.trim())}}catch(e){onError(String(e))}finally{setBusy(false)}}
+  return <Group title="账号"><Row title="显示名称"><div className="toolbar"><input aria-label="账号显示名称" maxLength={64} disabled={busy} value={name} onChange={e=>setName(e.target.value)}/><button disabled={busy||!name.trim()||name.trim()===provider.name} onClick={()=>{void action(false)}}>保存名称</button></div></Row>{provider.additional&&<div className="group-actions">{confirm?<><small>移除此账号及其保存的登录信息？</small><button disabled={busy} onClick={()=>setConfirm(false)}>取消移除</button><button disabled={busy} onClick={()=>{void action(true)}}>确认移除</button></>:<button onClick={()=>setConfirm(true)}>移除账号</button>}</div>}</Group>
+}

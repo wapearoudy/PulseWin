@@ -6,7 +6,8 @@ test.beforeEach(async ({ page }) => {
     const w = window as any
     let seq = 0
     const callbacks: Record<number, Function> = {}, listeners: Record<number, any> = {}
-    const prefs = { enabledProviders: [], providerOrder: ['codex','claude-code','deepseek'], panelSize: 1, railSpacing: 1, roundEnds: false, showsRemaining: false, showPercentages: true, labelAbove: false, autoCollapse: true, warningThreshold: .75, refreshSeconds: 120, showResetClock: false, clockRemaining: false, pinnedWindows: {} }
+    const prefs: any = { accounts: [], accountLabels: {}, enabledProviders: [], providerOrder: ['codex','claude-code','deepseek'], panelSize: 1, railSpacing: 1, roundEnds: false, showsRemaining: false, showPercentages: true, labelAbove: false, autoCollapse: true, warningThreshold: .75, refreshSeconds: 120, showResetClock: false, clockRemaining: false, pinnedWindows: {} }
+    let providers: any[] = [{id:'codex',name:'Codex',configured:true},{id:'claude-code',name:'Claude Code',configured:true},{id:'deepseek',name:'DeepSeek',configured:false}].map(x=>({...x,providerId:x.id,stored:false,hints:['Local tool sign-in'],credentialPath:null}))
     w.testCommands = []; w.testPrefs = prefs
     const emit = (event: string, payload: unknown) => Object.values(listeners).filter(x => x.event === event).forEach(x => callbacks[x.handler]?.({ event, payload }))
     w.testEmit=emit
@@ -19,7 +20,18 @@ test.beforeEach(async ({ page }) => {
         if(cmd === 'plugin:event|unlisten') return
         if(cmd === 'get_preferences') return structuredClone(prefs)
         if(cmd === 'save_preferences') { Object.assign(prefs,args.value); emit('preferences-changed',structuredClone(prefs)); return }
-        if(cmd === 'provider_settings') return [{id:'codex',name:'Codex',configured:true},{id:'claude-code',name:'Claude Code',configured:true},{id:'deepseek',name:'DeepSeek',configured:false}].map(x => ({...x,stored:false,hints:['Local tool sign-in'],credentialPath:null}))
+        if(cmd === 'provider_settings') return structuredClone(providers)
+        if(cmd === 'add_account') {
+          const id=args.provider+'--account-ab';prefs.accounts.push({id,provider:args.provider});prefs.accountLabels[id]=args.label;
+          if(args.enabled!==false)prefs.enabledProviders.push(id);prefs.providerOrder.push(id);
+          providers.push({id,providerId:args.provider,additional:true,name:args.label,configured:true,stored:true,hints:['Independent encrypted login'],credentialPath:null});
+          emit('preferences-changed',structuredClone(prefs));return id
+        }
+        if(cmd === 'remove_account') {
+          providers=providers.filter(p=>p.id!==args.account);prefs.accounts=prefs.accounts.filter((a:any)=>a.id!==args.account);
+          prefs.enabledProviders=prefs.enabledProviders.filter((id:string)=>id!==args.account);prefs.providerOrder=prefs.providerOrder.filter((id:string)=>id!==args.account);
+          delete prefs.accountLabels[args.account];emit('preferences-changed',structuredClone(prefs));return
+        }
         if(cmd === 'get_snapshot') return {providers:[],fetchedAt:new Date().toISOString()}
         if(cmd === 'save_provider_credential') throw new Error('模拟保存失败：磁盘不可写')
         if(cmd === 'refresh_provider') {
@@ -133,4 +145,30 @@ test('a failed check retains dated quota and money alerts stay scoped to its acc
   expect(await page.evaluate(()=>(window as any).testPrefs.alerts.lowBalance)).toEqual({})
   await page.getByRole('button',{name:'Claude Code',exact:true}).click()
   await expect(page.getByLabel('余额提醒金额')).toHaveCount(0)
+})
+
+test('same-service accounts add, rename, refresh and remove independently',async({page})=>{
+  await page.getByRole('button',{name:'选择已检测到的服务'}).click();await page.getByRole('button',{name:'完成',exact:true}).click()
+  await page.getByRole('button',{name:'管理账号',exact:true}).click();await page.getByRole('button',{name:'添加账号',exact:true}).click()
+  await page.getByLabel('新账号名称',{exact:true}).fill('工作 Codex')
+  await page.getByLabel('新账号登录来源',{exact:true}).selectOption('paste')
+  await page.getByLabel('新账号登录信息',{exact:true}).fill('synthetic-token-only')
+  await page.getByRole('button',{name:'添加并检查',exact:true}).click()
+  await expect(page.getByRole('heading',{name:'工作 Codex',exact:true})).toBeVisible()
+  await expect(page.locator('nav').getByRole('button',{name:'Codex',exact:true})).toBeVisible()
+  const icons=await page.locator('nav [data-provider-icon="codex--account-ab"]').evaluate(e=>getComputedStyle(e).maskImage)
+  const baseIcon=await page.locator('nav [data-provider-icon="codex"]').evaluate(e=>getComputedStyle(e).maskImage)
+  expect(icons).toBe(baseIcon)
+  await page.getByLabel('账号显示名称',{exact:true}).fill('公司账号');await page.getByRole('button',{name:'保存名称',exact:true}).click()
+  await expect(page.getByRole('heading',{name:'公司账号',exact:true})).toBeVisible()
+  await page.getByRole('switch',{name:'使用动画机器人'}).check()
+  await page.getByRole('button',{name:'刷新此账号',exact:true}).click()
+  expect(await page.evaluate(()=>(window as any).testCommands.filter((x:any)=>x.cmd==='refresh_provider').map((x:any)=>x.args.provider))).toEqual(['codex--account-ab'])
+  const prefs=await page.evaluate(()=>(window as any).testPrefs)
+  expect(prefs.accountAppearance['codex--account-ab'].animatedMark).toBe(true);expect(prefs.accountAppearance.codex).toBeUndefined()
+  await page.screenshot({path:'test-results/settings-multi-account.png',fullPage:true})
+  await page.getByRole('button',{name:'移除账号',exact:true}).click();await page.getByRole('button',{name:'确认移除',exact:true}).click()
+  await expect(page.getByRole('heading',{name:'管理账号',exact:true})).toBeVisible()
+  await expect(page.locator('nav').getByRole('button',{name:'公司账号',exact:true})).toHaveCount(0)
+  expect(await page.evaluate(()=>(window as any).testPrefs.enabledProviders)).toEqual(['codex','claude-code'])
 })

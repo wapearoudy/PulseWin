@@ -5,6 +5,7 @@
 
 // Public so `examples/probe.rs` (and anything else) can drive a single provider
 // from the command line without starting the GUI.
+pub mod accounts;
 pub mod credentials;
 pub mod credential_store;
 pub mod model;
@@ -119,6 +120,7 @@ pub struct AppState {
     pub snapshot: Mutex<Snapshot>,
     /// Serializes refreshes so a manual refresh cannot overlap the timer loop.
     pub refreshing: Mutex<()>,
+    pub account_mutations: Mutex<()>,
     /// Regions the frontend currently claims; empty means "not laid out yet".
     pub hit_regions: Mutex<Vec<HitRegion>>,
     /// Which edge the rail is docked to. Held here rather than in the frontend
@@ -155,8 +157,13 @@ impl AppState {
                 prefs
             }),
             ctx: Arc::new(ctx),
-            snapshot: Mutex::new(usage_cache::stored_snapshot(&preferences::load().enabled_providers)),
+            snapshot: Mutex::new({
+                let prefs=preferences::load();let mut snapshot=usage_cache::stored_snapshot(&prefs.enabled_providers);
+                for p in &mut snapshot.providers{if let Some(label)=prefs.account_labels.get(&p.id){p.name=label.clone();}}
+                snapshot
+            }),
             refreshing: Mutex::new(()),
+            account_mutations: Mutex::new(()),
             hit_regions: Mutex::new(Vec::new()),
             edge: std::sync::Mutex::new(edge),
             placement: std::sync::Mutex::new(settings::load()),
@@ -205,7 +212,7 @@ async fn refresh_pass(app:&AppHandle,state:&AppState,target:Option<&str>,due_onl
     if enabled.is_empty(){return state.snapshot.lock().await.clone();}
     let started=std::time::Instant::now();
     if !enabled.is_empty() { let _=app.emit("refresh-changed",serde_json::json!({"ids":enabled,"refreshing":true})); }
-    let fetched = providers::collect_selected(Arc::clone(&state.ctx), &enabled).await;
+    let fetched = providers::collect_accounts(Arc::clone(&state.ctx), &enabled, &prefs).await;
     if !enabled.is_empty() {
         if let Some(remaining)=Duration::from_millis(650).checked_sub(started.elapsed()) { tokio::time::sleep(remaining).await; }
         let _=app.emit("refresh-changed",serde_json::json!({"ids":enabled,"refreshing":false}));
@@ -220,7 +227,8 @@ async fn refresh_pass(app:&AppHandle,state:&AppState,target:Option<&str>,due_onl
     {
         let mut cache=state.usage_cache.lock().unwrap();
         let mut memory=state.alert_memory.lock().unwrap();
-        for raw in fetched {
+        for mut raw in fetched {
+            if let Some(label)=prefs.account_labels.get(&raw.id){raw.name=label.clone();}
             let previous=cache.readings.get(&raw.id).cloned();
             if raw.error.is_none() && !raw.stale && usage_cache::valid_age(&raw.fetched_at,now) {
                 if cache.readings.get(&raw.id).is_some_and(|old| usage_cache::valid_age(&old.fetched_at,now) &&
@@ -231,7 +239,8 @@ async fn refresh_pass(app:&AppHandle,state:&AppState,target:Option<&str>,due_onl
                     let _=app.emit("resets-changed",state.resets.lock().unwrap().clone());
                 }
             }
-            let display=cache.reconcile(raw.clone(),now);
+            let mut display=cache.reconcile(raw.clone(),now);
+            display.name=raw.name.clone();
             if adaptive_refresh::figures_changed(previous.as_ref(),&display) {
                 state.refresh_schedule.lock().unwrap().changed(&raw.id,chrono::Utc::now().timestamp_millis());
             }
@@ -404,13 +413,19 @@ fn get_preferences(state: State<'_, AppState>) -> preferences::Preferences {
 
 #[tauri::command]
 async fn save_preferences(app: AppHandle, state: State<'_, AppState>, mut value: preferences::Preferences) -> Result<(), String> {
+    let _guard=state.account_mutations.lock().await;
+    // Metadata is changed only by account commands; old windows cannot erase it.
+    value.accounts=state.preferences.lock().unwrap().accounts.clone();
+    apply_preferences(app,&state,value).await
+}
+async fn apply_preferences(app: AppHandle, state: &AppState, mut value: preferences::Preferences) -> Result<(), String> {
     value.normalize(&providers::registry().iter().map(|p| p.id().to_string()).collect::<Vec<_>>());
     let previous = state.preferences.lock().unwrap().clone();
     preferences::save(&value)?;
     *state.preferences.lock().unwrap() = value.clone();
     state.refresh_schedule.lock().unwrap().primary.retain(|id,_|value.enabled_providers.contains(id));
     state.refresh_wake.notify_one();
-    if value.enabled_providers != previous.enabled_providers {
+    if value.enabled_providers != previous.enabled_providers || value.accounts != previous.accounts {
         state.generation.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         token_spend::cancel_card_reads();
     }
@@ -427,9 +442,14 @@ async fn save_preferences(app: AppHandle, state: State<'_, AppState>, mut value:
         state.fullscreen_hidden.store(false,std::sync::atomic::Ordering::SeqCst);
         if let Some(window) = app.get_webview_window("main") { let _ = window.hide(); }
     } else if previous.enabled_providers.is_empty() { show_panel(&app); }
-    if value.enabled_providers != previous.enabled_providers || value.provider_order != previous.provider_order {
+    if value.enabled_providers != previous.enabled_providers || value.provider_order != previous.provider_order || value.account_labels != previous.account_labels {
         let mut snapshot = state.snapshot.lock().await;
         snapshot.providers.retain(|p| value.enabled_providers.contains(&p.id));
+        for reading in &mut snapshot.providers {
+            let base=value.accounts.iter().find(|a|a.id==reading.id).map(|a|a.provider.as_str()).unwrap_or(&reading.id);
+            if let Some(name)=value.account_labels.get(&reading.id) {reading.name=name.clone();}
+            else if let Some(provider)=providers::registry().iter().find(|p|p.id()==base){reading.name=provider.name().into();}
+        }
         snapshot.providers.sort_by_key(|p| value.provider_order.iter().position(|id| id == &p.id).unwrap_or(usize::MAX));
         let _ = app.emit(EVENT_USAGE_UPDATED, &*snapshot);
         update_tray(&app, &snapshot);
@@ -509,6 +529,8 @@ fn credential_hint(provider: String) -> Vec<String> {
 struct ProviderSetting {
     credential_error: Option<String>,
     id: String,
+    provider_id: String,
+    additional: bool,
     name: String,
     /// The provider's own verdict: this tool is on the machine.
     configured: bool,
@@ -525,26 +547,59 @@ struct ProviderSetting {
 /// Offline: `is_configured` makes no network call, so opening settings cannot
 /// fire a request at every provider it ships.
 #[tauri::command]
-fn provider_settings() -> Vec<ProviderSetting> {
-    providers::registry()
-        .into_iter()
-        .map(|provider| {
-            let id = provider.id().to_string();
-            let result=settings::read_credential_checked(&id);
-            let credential_error=result.as_ref().err().map(|_| "保存的凭据无法解密或迁移，请使用原 Windows 账户并检查文件权限。".to_string());
-            let stored=result.unwrap_or_default();
-            ProviderSetting {
-                credential_error,
-                name: provider.name().to_string(),
-                configured: stored.api_key.is_some() || provider.is_configured(),
-                stored: stored.api_key.is_some() || stored.base_url.is_some(),
-                credential_path: settings::credential_file(&id)
-                    .map(|path| path.display().to_string()),
-                hints: hint_paths(&id),
-                id,
-            }
-        })
-        .collect()
+fn provider_settings(state: State<'_,AppState>) -> Vec<ProviderSetting> {
+    let prefs=state.preferences.lock().unwrap().clone();
+    let mut entries=providers::registry().into_iter().map(|provider| {
+        let id=provider.id().to_owned();let stored=settings::read_credential_checked(&id);
+        let error=stored.as_ref().err().map(|_|"保存的凭据无法解密，请使用原 Windows 账户。".to_string());
+        let stored=stored.unwrap_or_default();
+        ProviderSetting {credential_error:error,provider_id:id.clone(),additional:false,
+            name:prefs.account_labels.get(&id).cloned().unwrap_or_else(||provider.name().into()),
+            configured:stored.api_key.is_some()||provider.is_configured(),stored:stored.api_key.is_some()||stored.base_url.is_some(),
+            credential_path:settings::credential_file(&id).map(|p|p.display().to_string()),hints:hint_paths(&id),id}
+    }).collect::<Vec<_>>();
+    for account in &prefs.accounts {
+        let result=settings::read_credential_document(&account.id);
+        let error=result.as_ref().err().map(|_|"保存的凭据无法解密，请使用原 Windows 账户。".to_string());
+        let stored=result.ok().flatten().is_some_and(|d|accounts::token(&d).is_some());
+        let name=providers::registry().into_iter().find(|p|p.id()==account.provider).map(|p|p.name()).unwrap_or("Account");
+        let path=settings::credential_file(&account.id).map(|p|p.display().to_string());
+        entries.push(ProviderSetting {id:account.id.clone(),provider_id:account.provider.clone(),additional:true,
+            name:prefs.account_labels.get(&account.id).cloned().unwrap_or_else(||name.into()),
+            configured:stored,stored,credential_error:error,credential_path:path.clone(),hints:path.into_iter().collect()});
+    }
+    entries
+}
+
+#[tauri::command]
+async fn add_account(app:AppHandle,provider:String,label:String,credential:Option<String>,import_local:bool,enabled:Option<bool>)->Result<String,String> {
+    let state=app.state::<AppState>();let _guard=state.account_mutations.lock().await;
+    if !accounts::SUPPORTED.contains(&provider.as_str()){return Err("此服务暂不支持附加账号。".into());}
+    let mut prefs=state.preferences.lock().unwrap().clone();
+    if prefs.accounts.len()>=64{return Err("最多可添加 64 个附加账号。".into());}
+    let label=accounts::label(&label)?;
+    let document=if import_local {accounts::local_document(&provider)?} else {accounts::document(&provider,credential.as_deref().unwrap_or(""))?};
+    let id=accounts::new_id(&provider);let path=settings::credential_file(&id).ok_or("无法获取凭据目录。")?;
+    credential_store::write_document(&path,&id,&document).map_err(|_|"无法加密保存账号凭据。".to_string())?;
+    prefs.accounts.push(accounts::Account{id:id.clone(),provider});prefs.account_labels.insert(id.clone(),label);
+    if enabled.unwrap_or(true){prefs.enabled_providers.push(id.clone());}prefs.provider_order.push(id.clone());
+    if let Err(error)=apply_preferences(app.clone(),&state,prefs).await {let _=std::fs::remove_file(path);return Err(error);}
+    Ok(id)
+}
+#[tauri::command]
+async fn remove_account(app:AppHandle,account:String)->Result<(),String> {
+    let state=app.state::<AppState>();let _guard=state.account_mutations.lock().await;
+    let mut prefs=state.preferences.lock().unwrap().clone();
+    if !prefs.accounts.iter().any(|a|a.id==account){return Err("只能移除附加账号；本机账号可以关闭显示。".into());}
+    prefs.accounts.retain(|a|a.id!=account);
+    apply_preferences(app.clone(),&state,prefs).await?;
+    let mut cache=state.usage_cache.lock().unwrap();cache.readings.remove(&account);cache.save().map_err(|e|e.to_string())?;
+    state.resets.lock().unwrap().remove(&account);
+    {let mut alerts=state.alert_memory.lock().unwrap();alerts.accounts.remove(&account);let _=alerts.save();}
+    if let Some(path)=settings::credential_file(&account) {
+        match std::fs::remove_file(path) {Ok(())=>{},Err(e) if e.kind()==std::io::ErrorKind::NotFound=>{},Err(_)=>return Err("账号已移除，但无法删除其加密凭据文件。".into())}
+    }
+    Ok(())
 }
 
 /// Store a pasted credential and re-read the tools that can now answer.
@@ -557,8 +612,27 @@ async fn save_provider_credential(
     provider: String,
     api_key: Option<String>,
     base_url: Option<String>,
+    import_local: Option<bool>,
 ) -> Result<(), String> {
-    if !providers::registry().iter().any(|p| p.id() == provider) { return Err("Unknown provider".into()); }
+    let state=app.state::<AppState>();let _account_guard=state.account_mutations.lock().await;
+    let additional=state.preferences.lock().unwrap().accounts.iter().find(|a|a.id==provider).cloned();
+    if additional.is_none() && !providers::registry().iter().any(|p| p.id() == provider) { return Err("Unknown provider".into()); }
+    if let Some(account)=additional {
+        let document=if import_local.unwrap_or(false){accounts::local_document(&account.provider)?} else {
+            let input=api_key.filter(|v|!v.trim().is_empty()).ok_or("请填写此账号的新登录信息。")?;
+            accounts::document(&account.provider,&input)?
+        };
+        let path=settings::credential_file(&provider).ok_or("无法获取凭据目录。")?;
+        credential_store::write_document(&path,&provider,&document).map_err(|_|"无法保存账号登录信息。".to_string())?;
+        state.generation.fetch_add(1,std::sync::atomic::Ordering::SeqCst);
+        let _guard=state.refreshing.lock().await;
+        {let mut cache=state.usage_cache.lock().unwrap();cache.readings.remove(&provider);let _=cache.save();}
+        {let mut alerts=state.alert_memory.lock().unwrap();alerts.accounts.remove(&provider);let _=alerts.save();}
+        state.resets.lock().unwrap().remove(&provider);
+        state.snapshot.lock().await.providers.retain(|p|p.id!=provider);
+        if state.preferences.lock().unwrap().enabled_providers.contains(&provider){refresh_locked(&app,&state,Some(&provider)).await;}
+        return Ok(());
+    }
     let stored = settings::read_credential_checked(&provider).map_err(|_|"保存的凭据无法解密或迁移，请使用原 Windows 账户并检查文件权限。".to_string())?;
     settings::write_credential(
         &provider,
@@ -583,7 +657,8 @@ async fn save_provider_credential(
 /// at when they find out.
 #[tauri::command]
 fn show_settings(app: AppHandle, provider: Option<String>) {
-    let provider=provider.filter(|id| providers::registry().iter().any(|p|p.id()==id));
+    let prefs=app.state::<AppState>().preferences.lock().unwrap().clone();
+    let provider=provider.filter(|id|providers::registry().iter().any(|p|p.id()==id)||prefs.accounts.iter().any(|a|&a.id==id));
     open_account_settings(&app,provider.as_deref());
 }
 
@@ -1321,6 +1396,8 @@ pub fn run() {
             credential_hint,
             report_error,
             provider_settings,
+            add_account,
+            remove_account,
             save_provider_credential,
             show_settings,
             set_hit_regions,

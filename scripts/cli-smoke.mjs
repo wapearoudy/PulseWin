@@ -36,5 +36,17 @@ assert.equal(report.accounts[0].observedAt,observed)
 assert(report.accounts[0].ageSeconds>=3600)
 assert.equal(run('--statusline'),'Codex 1%')
 assert.deepEqual(await Promise.all(Object.keys(documents).map(name=>readFile(path.join(directory,name),'utf8'))),before,'Read-only dispatch must not mutate cache, preferences or plaintext fixture credentials')
-await writeFile(path.join(root,'test-results/cli-smoke.json'),JSON.stringify({passed:true,testedAt:new Date().toISOString(),profile,checks:['release dispatch before GUI','enabled accounts only','actual window id pin','panel display rounding','dated observations','read-only files','no credential migration']},null,2))
+const extra='codex--account-ab';
+documents['preferences.json']={...documents['preferences.json'],accounts:[{id:extra,provider:'codex'}],enabledProviders:['codex',extra],providerOrder:[extra,'codex'],accountLabels:{[extra]:'工作账号'}};
+documents['usage-cache.json'].readings[extra]=reading(extra,[window('work-window',68)]);
+documents[`${extra}.json`]={tokens:{access_token:'synthetic-work-token',account_id:'synthetic-workspace'}};
+for(const [name,value] of Object.entries(documents))await writeFile(path.join(directory,name),JSON.stringify(value));
+const accountBefore=await Promise.all(Object.keys(documents).map(name=>readFile(path.join(directory,name),'utf8')));
+const multiple=JSON.parse(run('--json'));
+assert.equal(multiple.accounts.length,2);assert.equal(multiple.accounts[0].id,extra);
+assert.equal(multiple.accounts[0].provider,'codex');assert.equal(multiple.accounts[0].label,'工作账号');
+assert.equal(multiple.accounts[0].headline.usedPercent,68);assert.equal(multiple.accounts[1].headline.usedPercent,1);
+assert.equal(run('--statusline'),'工作账号 68% · Codex 1%');
+assert.deepEqual(await Promise.all(Object.keys(documents).map(name=>readFile(path.join(directory,name),'utf8'))),accountBefore,'Additional-account reporting must remain read-only');
+await writeFile(path.join(root,'test-results/cli-smoke.json'),JSON.stringify({passed:true,testedAt:new Date().toISOString(),profile,checks:['release dispatch before GUI','enabled accounts only','actual window id pin','panel display rounding','dated observations','read-only files','no credential migration','same-service account identity and labels','separate account percentages and statusline']},null,2))
 console.log('PASS: release CLI reads isolated dated cache, respects account/pin selection and leaves every fixture file unchanged.')

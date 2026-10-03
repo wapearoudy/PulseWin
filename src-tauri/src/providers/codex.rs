@@ -43,24 +43,23 @@ impl Provider for Codex {
     }
 
     fn fetch(&self, ctx: Arc<Ctx>) -> FetchFuture {
-        Box::pin(async move { fetch_inner(ctx).await })
+        Box::pin(async move { fetch_inner(ctx, None).await })
     }
 }
 
-async fn fetch_inner(ctx: Arc<Ctx>) -> ProviderUsage {
+pub(crate) async fn fetch_inner(ctx: Arc<Ctx>, explicit: Option<serde_json::Value>) -> ProviderUsage {
     const ID: &str = "codex";
     const NAME: &str = "Codex";
 
     let paths = codex_credential_paths();
-    let (token, source) = match credentials::resolve_token(ID, &paths, TOKEN_PATHS) {
+    let resolved=if let Some(document)=&explicit {crate::accounts::token(document).map(|token|(token,std::path::PathBuf::from("<account>"))).ok_or_else(||"账号凭据无效".to_string())} else {credentials::resolve_token(ID, &paths, TOKEN_PATHS)};
+    let (token, source) = match resolved {
         Ok(v) => v,
         Err(e) => return ProviderUsage::failed(ID, NAME, e),
     };
 
     // The account id is optional; some builds omit it.
-    let account_id = credentials::first_existing(&paths)
-        .and_then(|p| credentials::read_json(&p))
-        .and_then(|j| credentials::dig_first_str(&j, ACCOUNT_ID_PATHS));
+    let account_id = if let Some(document)=&explicit {credentials::dig_first_str(document,&["accountId","tokens.account_id","account_id"])} else {credentials::read_json(&source).and_then(|j| credentials::dig_first_str(&j, &["accountId",ACCOUNT_ID_PATHS[0],ACCOUNT_ID_PATHS[1]]))};
 
     let mut request = ctx
         .client
@@ -115,6 +114,8 @@ async fn fetch_inner(ctx: Arc<Ctx>) -> ProviderUsage {
 fn source_label(source: &std::path::Path) -> String {
     if source.to_string_lossy().starts_with("<env:") {
         "env token".to_string()
+    } else if source.to_string_lossy()=="<account>" {
+        "独立登录".to_string()
     } else {
         "CLI login".to_string()
     }

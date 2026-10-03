@@ -12,6 +12,8 @@ export interface AccountAppearance {
 }
 export const defaultAccountAppearance: AccountAppearance = { detailedCard: false, animatedMark: false, persona: 'automatic', body: 'blob', markColour: null, ringColour: null }
 export interface Preferences {
+  accounts: {id:string;provider:string}[]
+  accountLabels: Record<string,string>
   openSettingsShortcut: string | null
   togglePanelShortcut: string | null
   alerts: { threshold: number | null; onReset: boolean; onFailure: boolean; lowBalance: Record<string, number> }
@@ -43,6 +45,7 @@ export interface Preferences {
   pinnedWindows: Record<string, string>
 }
 export const defaultPreferences: Preferences = {
+  accounts: [], accountLabels: {},
   openSettingsShortcut: null, togglePanelShortcut: null,
   alerts: { threshold: null, onReset: false, onFailure: false, lowBalance: {} }, tokenSpendEnabled: false, tokenSpendSpan: 'week', resetCelebration: true,
   enabledProviders: [], providerOrder: [], panelSize: 1, railSpacing: 1,

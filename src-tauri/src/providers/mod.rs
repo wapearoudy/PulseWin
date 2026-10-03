@@ -289,6 +289,37 @@ pub async fn collect_selected(ctx: Arc<Ctx>, enabled: &[String]) -> Vec<Provider
     collect_from(ctx, enabled, registry()).await
 }
 
+/// Additional accounts only receive their own encrypted credential document.
+pub async fn collect_accounts(ctx: Arc<Ctx>, enabled: &[String], prefs: &crate::preferences::Preferences) -> Vec<ProviderUsage> {
+    let primary=collect_selected(Arc::clone(&ctx),enabled);
+    let tasks=prefs.accounts.iter().filter(|a|enabled.contains(&a.id)).map(|account| {
+        let ctx=Arc::clone(&ctx);let account=account.clone();
+        async move {
+            let name=registry().into_iter().find(|p|p.id()==account.provider).map(|p|p.name()).unwrap_or("Account");
+            let doc=crate::settings::read_credential_document(&account.id);
+            let mut usage=match doc {
+                Ok(Some(doc)) if crate::accounts::token(&doc).is_some()=>{
+                    let task=async {match account.provider.as_str() {
+                        "claude-code"=>claude_code::fetch_inner(ctx,Some(doc)).await,
+                        "codex"=>codex::fetch_inner(ctx,Some(doc)).await,
+                        "grok"=>grok::fetch_inner(ctx,Some(doc)).await,
+                        "grok-bot"=>grok_bot::fetch_inner(ctx,Some(doc)).await,
+                        _=>ProviderUsage::failed(&account.id,name,"Unknown account provider"),
+                    }};
+                    tokio::time::timeout(Duration::from_secs(45),task).await.unwrap_or_else(|_|ProviderUsage::failed(&account.id,name,"Usage check timed out. Try again."))
+                }
+                Ok(_)=>ProviderUsage::failed(&account.id,name,"此账号缺少独立登录信息，请重新导入或填写凭据。"),
+                Err(_)=>ProviderUsage::failed(&account.id,name,"此账号凭据无法解密，请使用原 Windows 用户。"),
+            };
+            usage.id=account.id;usage.source=Some("此账号独立保存的登录".into());usage
+        }
+    });
+    let (mut readings,additional)=futures::future::join(primary,futures::future::join_all(tasks)).await;
+    readings.extend(additional);
+    for usage in &mut readings {if let Some(label)=prefs.account_labels.get(&usage.id){usage.name=label.clone();}}
+    readings
+}
+
 async fn collect_from(ctx: Arc<Ctx>, enabled: &[String], providers: Vec<Arc<dyn Provider>>) -> Vec<ProviderUsage> {
     let futures: Vec<FetchFuture> = providers
         .iter()

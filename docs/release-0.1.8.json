@@ -1,0 +1,88 @@
+{
+  "version": "0.1.8",
+  "verifiedAt": "2026-10-03T09:19:48.065776+00:00",
+  "repository": "wapearoudy/PulseWin",
+  "tests": {
+    "rust": 840,
+    "rustIgnored": 1,
+    "frontend": 181,
+    "browser": 37,
+    "postChangeTargetedBrowser": 2
+  },
+  "scope": "Claude Code/Codex/Grok/Grok Bot additional accounts, separate DPAPI credentials and reads, CLI import, account labels/order/appearance/pinning/removal, read-only reporting",
+  "nativeSmoke": {
+    "passed": true,
+    "checks": [
+      "native startup",
+      "no automatic collection",
+      "settings IPC permission",
+      "preferences persistence",
+      "shared panel preferences",
+      "floating rail restoration",
+      "native capsule geometry",
+      "floating stays expanded",
+      "disabled additional accounts never collect",
+      "per-account encrypted credentials",
+      "stale window preserves account metadata",
+      "account rename persists",
+      "removal preserves primary credentials"
+    ],
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\native-profile-ilyt6L",
+    "testedAt": "2026-10-03T09:18:39.396Z"
+  },
+  "cliSmoke": {
+    "passed": true,
+    "testedAt": "2026-10-03T09:18:39.905Z",
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\cli-profile-5NdXp5",
+    "checks": [
+      "release dispatch before GUI",
+      "enabled accounts only",
+      "actual window id pin",
+      "panel display rounding",
+      "dated observations",
+      "read-only files",
+      "no credential migration",
+      "same-service account identity and labels",
+      "separate account percentages and statusline"
+    ]
+  },
+  "updateSmoke": {
+    "passed": true,
+    "testedAt": "2026-10-03T09:18:41.580Z",
+    "version": "0.1.8",
+    "checks": [
+      "isolated update configuration and default release source",
+      "signed local download with real Tauri plugin",
+      "tampered bytes rejected",
+      "forged version rejected",
+      "same version skipped",
+      "native test install blocked",
+      "account preferences unchanged",
+      "personal update settings unchanged"
+    ]
+  },
+  "artifacts": [
+    {
+      "name": "pulsewin.exe",
+      "bytes": 7473152,
+      "sha256": "4ebbe246ed1b34b2458fe4d51d8b83843ff9b6d6172e8b5b9b0b43bcdcdef54f"
+    },
+    {
+      "name": "PulseWin_0.1.8_x64-setup.exe",
+      "bytes": 2899716,
+      "sha256": "5d2caf6901579d465e843424bd63114e071e02834640adf0f7a28916ca7101a6"
+    },
+    {
+      "name": "PulseWin_0.1.8_x64_en-US.msi",
+      "bytes": 4616192,
+      "sha256": "b66fb89f43504831280999faae995b7aec08fa034b55a84c62c33bfc4387eba4"
+    }
+  ],
+  "boundaries": [
+    "Native account creation tests used disabled synthetic accounts and did not request a real provider.",
+    "Two independent quota values and refresh targets were tested with browser fixtures.",
+    "Browser OAuth login, automatic renewal and per-account local transcript ownership remain incomplete.",
+    "OpenCode Go availability confirmed by the user; no new live quota request in this release.",
+    "Installer execution and overwrite/restart were not performed."
+  ]
+}

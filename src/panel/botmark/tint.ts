@@ -63,7 +63,7 @@ export const MONOCHROME: ReadonlySet<string> = new Set([
 
 /** The brand colour for a provider, or `null` when it has none. */
 export function brandColour(providerId: string): string | null {
-  const hex = BRAND[providerId]
+  const hex = BRAND[providerId.split('--account-')[0]]
   return hex === undefined ? null : toCss(fromHex(hex))
 }
 

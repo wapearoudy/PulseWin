@@ -47,15 +47,16 @@ impl Provider for ClaudeCode {
     }
 
     fn fetch(&self, ctx: Arc<Ctx>) -> FetchFuture {
-        Box::pin(async move { fetch_inner(ctx).await })
+        Box::pin(async move { fetch_inner(ctx, None).await })
     }
 }
 
-async fn fetch_inner(ctx: Arc<Ctx>) -> ProviderUsage {
+pub(crate) async fn fetch_inner(ctx: Arc<Ctx>, explicit: Option<serde_json::Value>) -> ProviderUsage {
     const ID: &str = "claude-code";
     const NAME: &str = "Claude Code";
 
-    let (token, source) = match credentials::resolve_token(ID, &claude_credential_paths(), TOKEN_PATHS)
+    let resolved=if let Some(document)=explicit { crate::accounts::token(&document).map(|token|(token,std::path::PathBuf::from("<account>"))).ok_or_else(||"账号凭据无效".to_string()) } else {credentials::resolve_token(ID, &claude_credential_paths(), TOKEN_PATHS)};
+    let (token, source) = match resolved
     {
         Ok(v) => v,
         Err(e) => return ProviderUsage::failed(ID, NAME, format!("{e}{}", login_hint())),
@@ -111,6 +112,8 @@ async fn fetch_inner(ctx: Arc<Ctx>) -> ProviderUsage {
 
     let plain = if source.starts_with("<env:") {
         "env token".to_string()
+    } else if source.to_string_lossy()=="<account>" {
+        "独立登录".to_string()
     } else {
         "CLI login".to_string()
     };

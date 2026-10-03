@@ -67,7 +67,7 @@ impl Provider for Grok {
     }
 
     fn fetch(&self, ctx: Arc<Ctx>) -> FetchFuture {
-        Box::pin(async move { fetch_inner(ctx).await })
+        Box::pin(async move { fetch_inner(ctx, None).await })
     }
 }
 
@@ -78,11 +78,12 @@ enum Login {
     Usable(String),
 }
 
-async fn fetch_inner(ctx: Arc<Ctx>) -> ProviderUsage {
+pub(crate) async fn fetch_inner(ctx: Arc<Ctx>, explicit: Option<serde_json::Value>) -> ProviderUsage {
     const ID: &str = "grok";
     const NAME: &str = "Grok";
 
-    let token = match resolve_login() {
+    let login=if let Some(document)=explicit {match account_token(&document) {Ok(token)=>Login::Usable(token),Err(_)=>Login::Expired}} else {resolve_login()};
+    let token = match login {
         Login::None => {
             return ProviderUsage::failed(
                 ID,
@@ -194,6 +195,13 @@ fn auth_path() -> Option<std::path::PathBuf> {
         .next()
 }
 
+pub(crate) fn account_token(document:&Value)->Result<String,String> {
+    // Imported CLI documents retain the issuer entries and their real expiry.
+    if document.as_object().is_some_and(|entries|entries.values().any(|v|v.get("key").is_some())) {
+        return match select_login(document,Utc::now()) {Login::Usable(token)=>Ok(token),Login::Expired=>Err("Grok 登录已过期，请重新导入登录。".into()),Login::None=>Err("没有找到 Grok 登录。".into())};
+    }
+    crate::accounts::token(document).ok_or_else(||"没有找到 Grok Token。".into())
+}
 fn resolve_login() -> Login {
     // The port's way in for a machine whose CLI file lives somewhere else, and
     // the only route that does not need the CLI installed at all.
@@ -201,6 +209,7 @@ fn resolve_login() -> Login {
         return Login::Usable(token);
     }
 
+    if let Some(token)=crate::settings::read_credential("grok").api_key {return Login::Usable(token);}
     let Some(path) = auth_path() else {
         return Login::None;
     };

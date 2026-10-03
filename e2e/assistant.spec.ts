@@ -254,3 +254,19 @@ test('remaining mode leaves unknown quotas empty and colors both rings by accoun
   const [painted,rest]=second!.split(' ').map(Number)
   expect(painted/rest).toBeCloseTo(.6,4)
 })
+
+test('two Codex accounts keep separate rings, cards and refresh targets',async({page})=>{
+  await page.evaluate(()=>{const w=window as any,id='codex--account-ab';
+    const base=w.testSnapshot.providers.find((p:any)=>p.id==='codex');
+    w.testPrefs.enabledProviders=['codex',id];w.testPrefs.providerOrder=['codex',id];w.testPrefs.accountAppearance={};
+    w.testSnapshot.providers=[{...base,name:'个人账号',windows:[{label:'5h',percentUsed:13}]},{...base,id,name:'工作账号',windows:[{label:'5h',percentUsed:68}]}];
+    w.testEmit('preferences-changed',w.testPrefs);w.testEmit('usage-updated',w.testSnapshot)
+  })
+  await expect(page.locator('.rail__item')).toHaveCount(2)
+  await expect(page.locator('.rail__item').nth(0)).toContainText('13%');await expect(page.locator('.rail__item').nth(1)).toContainText('68%')
+  await page.evaluate(()=>(window as any).testEmit('hover-changed','entry:codex--account-ab'))
+  await expect(page.locator('.panel__card')).toContainText('工作账号')
+  await page.locator('.rail__item').nth(1).click({position:{x:21,y:18}})
+  expect(await page.evaluate(()=>(window as any).testCommands.filter((x:any)=>x.cmd==='refresh_provider').map((x:any)=>x.args.provider))).toEqual(['codex--account-ab'])
+  await page.locator('.rail').screenshot({path:'test-results/assistant-multi-account.png'})
+})
