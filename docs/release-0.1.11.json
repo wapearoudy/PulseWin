@@ -1,6 +1,6 @@
 {
   "version": "0.1.11",
-  "verifiedAt": "2026-10-03T11:18:32.549598+00:00",
+  "verifiedAt": "2026-10-03T11:19:42.520Z",
   "repository": "wapearoudy/PulseWin",
   "scope": "Network and About settings from 0.1.10 with restored malformed Windows system-proxy startup tolerance",
   "tests": {
@@ -178,5 +178,51 @@
       "account preferences unchanged",
       "personal update settings unchanged"
     ]
+  },
+  "publicGitHubVerification": {
+    "passed": true,
+    "testedAt": "2026-10-03T11:19:42.520Z",
+    "repository": "wapearoudy/PulseWin",
+    "release": "https://github.com/wapearoudy/PulseWin/releases/tag/v0.1.11",
+    "version": "0.1.11",
+    "anonymousAssets": [
+      {
+        "name": "latest.json",
+        "bytes": 2703,
+        "sha256": "9cba0a7881d43540c071ff2b6f065238a026923b1546eff7caa98f076ef03e52"
+      },
+      {
+        "name": "PulseWin_0.1.11_x64-setup.exe",
+        "bytes": 2958012,
+        "sha256": "47c439f4faafb8e416c756efd1badd63008259338897a4a928863f7a7549fbb7"
+      },
+      {
+        "name": "PulseWin_0.1.11_x64-setup.exe.sig",
+        "bytes": 440,
+        "sha256": "8ed4d082b4bde61d651dcac2eddac6634efd8ddcafdf17f5b4ba820d633cdb3b"
+      },
+      {
+        "name": "PulseWin_0.1.11_x64_en-US.msi",
+        "bytes": 4694016,
+        "sha256": "85c788056474a7c9b9d2ac60bba31c51036776e2d27476a4cc472ea876e20cd9"
+      },
+      {
+        "name": "PulseWin_0.1.11_x64_en-US.msi.sig",
+        "bytes": 440,
+        "sha256": "64798f22b0e43bfa609704ce849a37a4b7fab694d529bd73e9346583ef427fa6"
+      }
+    ],
+    "nativeCheck": {
+      "phase": "current",
+      "source": "https://github.com/wapearoudy/PulseWin/releases/latest/download/latest.json",
+      "currentVersion": "0.1.11"
+    },
+    "installationExecuted": false,
+    "signedUpgradeDownload": {
+      "from": "0.1.4",
+      "to": "0.1.11",
+      "passed": true,
+      "actualPublishedPackage": true
+    }
   }
 }
