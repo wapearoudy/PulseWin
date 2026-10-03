@@ -1,0 +1,76 @@
+{
+  "version": "0.1.3",
+  "verifiedAt": "2026-10-03T07:21:15.8410197Z",
+  "tests": {
+    "rustIgnored": 1,
+    "rust": 824,
+    "frontend": 181,
+    "browser": 30,
+    "liveGoEntitlementCheck": true
+  },
+  "nativeSmoke": {
+    "passed": true,
+    "checks": [
+      "native startup",
+      "no automatic collection",
+      "settings IPC permission",
+      "preferences persistence",
+      "shared panel preferences",
+      "floating rail restoration",
+      "native capsule geometry",
+      "floating stays expanded"
+    ],
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\native-profile-O8jSxC",
+    "testedAt": "2026-10-03T07:17:15.414Z"
+  },
+  "cliSmoke": {
+    "passed": true,
+    "testedAt": "2026-10-03T07:17:13.116Z",
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\cli-profile-PRnXAB",
+    "checks": [
+      "release dispatch before GUI",
+      "enabled accounts only",
+      "actual window id pin",
+      "panel display rounding",
+      "dated observations",
+      "read-only files",
+      "no credential migration"
+    ]
+  },
+  "nativeInput": {
+    "globalShortcutPassed": true,
+    "dragLimitation": "Computer Use reports background drag point is over explorer.exe FolderView, not the selected test window, even after activation and fresh capture.",
+    "dragPassed": false,
+    "testedShortcut": "Control+Alt+Shift+F12"
+  },
+  "liveOpenCodeGo": {
+    "successfulQuotaReading": false,
+    "secretPrinted": false,
+    "type": "EntitlementError",
+    "message": "OpenCode Go subscription required.",
+    "status": 403
+  },
+  "installerAcceptance": {
+    "installationPerformed": false,
+    "mediumIntegrityApplied": true,
+    "welcomePageCaptured": false,
+    "hiddenLaunchOnly": true
+  },
+  "artifacts": [
+    {
+      "sha256": "7F38409228272AAF0B4E58B79032ECE5A9B02CE6E9B8FF86D8308EAD7A83934A",
+      "bytes": 6912512,
+      "path": "E:\\AI\\ai-usage\\PulseWin\\src-tauri\\target\\release\\pulsewin.exe"
+    },
+    {
+      "sha256": "7677B13390A3209CD884FC4B3277F1C6261C3FF0A2D79BC2ABB8D6E7A99F3591",
+      "bytes": 2735811,
+      "path": "E:\\AI\\ai-usage\\PulseWin\\src-tauri\\target\\release\\bundle\\nsis\\PulseWin_0.1.3_x64-setup.exe"
+    },
+    {
+      "sha256": "3DAFD22F5DD6176B7B71F9F09F1E6D8C92478FA03E3E56C6325569CE62E3D847",
+      "bytes": 4337664,
+      "path": "E:\\AI\\ai-usage\\PulseWin\\src-tauri\\target\\release\\bundle\\msi\\PulseWin_0.1.3_x64_en-US.msi"
+    }
+  ]
+}

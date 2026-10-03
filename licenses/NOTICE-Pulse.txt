@@ -1,0 +1,5 @@
+PulseWin contains assets and modified ports of Pulse by qunqin24 and contributors.
+Source: https://github.com/qunqin24/Pulse
+License: Apache-2.0 (see Pulse-Apache-2.0.txt).
+Swift/AppKit/SwiftUI code is adapted to Rust/Tauri/React on Windows.
+BotMark choreography and SVG icons copied from the supplied Pulse-original checkout.

@@ -1,0 +1,280 @@
+/* PulseWin — rail panel.
+   Geometry comes from `berthShape.ts`, which is a port of the original's
+   `DockLayout`. These rules only cover what cannot be computed: paint, and the
+   two Core Animation loops the original runs off the main thread. */
+
+/* The travelling activity mark and the refresh sweep. The original drives both
+   with Core Animation rather than a per-frame timeline, because Pulse is an
+   accessory app that is essentially never the active one. CSS animations are
+   the equivalent here: they run off the main thread and keep turning while the
+   panel is in the background. */
+@keyframes ring-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ring__spin {
+  animation-name: ring-spin;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  /* The SVG viewBox is centred on the ring's centre, so rotating about the
+     user-space origin spins the dash around the ring with no extra maths. */
+  transform-origin: 0 0;
+}
+
+/* The dark disc the provider's glyph sits on. Near-black on a near-black rail,
+   which is why the original calls it a shadow rather than a surface — the ring
+   is the edge a reader actually sees. */
+.ring__disc {
+  fill: #0b0d12;
+}
+
+.ring__icon {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ring__spin {
+    animation: none;
+  }
+}
+
+/* ---------- the rail ---------- */
+
+/*
+  The window is a transparent frame down the screen edge. It is deliberately
+  wider than the rail: a card opens inside it as an **overlay**, and the frame
+  never resizes while one is open. Everything outside the rail and the card is
+  empty space, which the backend hands back to the desktop — see `watch_pointer`.
+*/
+.panel-root {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+
+.rail {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/*
+  The rail's body. Near-black and only just translucent: "Black stays default
+  because the panel sits over the user's work all day." Colour on this panel
+  means how much of a limit is gone, so the surface itself carries none.
+*/
+.rail__surface {
+  fill: #000;
+}
+
+.rail__item {
+  outline: none;
+}
+
+.rail__item:focus-visible .rail__percent {
+  color: #fff;
+}
+
+/*
+  `percentTextHeight` is a budget, not a measurement — the original measured a
+  rendered 15.6–16.0 against a written 15, and that fraction of a point pushed
+  ring hit targets up to 6pt off down a full rail. Same font recipe as the
+  original: medium weight, rounded design, tabular figures.
+*/
+.rail__percent {
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Segoe UI Variable Display', 'SF Pro Rounded', ui-rounded, 'Segoe UI',
+    system-ui, sans-serif;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.92);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* ---------- the mark ---------- */
+
+/*
+  BotMark stands where the provider's logo stood, inside the ring's dark disc.
+  It is drawn in the disc's own coordinate space by `viewBox`, so it needs no
+  size of its own — the ring decides, and the mark scales with it.
+*/
+.botmark {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* ---------- the hover card ---------- */
+
+/*
+  One surface, not two: the tail and the body are a single path, which is why
+  `bubbleShape.ts` warns that mirroring the outline would reverse the tail and
+  punch a gap between them.
+*/
+.card {
+  position: absolute;
+  left: 0;
+}
+
+.card__bubble {
+  display: block;
+}
+
+.card__surface {
+  fill: #000;
+}
+
+.card__content {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.card__header {
+  display: flex;
+  align-items: center;
+}
+
+.card__icon {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  flex: none;
+}
+
+.panel__card { transition: top .28s cubic-bezier(.2,.8,.2,1), left .28s cubic-bezier(.2,.8,.2,1); }
+.card__surface { transition: d .28s cubic-bezier(.2,.8,.2,1); }
+@media (prefers-reduced-motion: reduce) { .panel__card, .card__surface { transition:none; } }
+
+.card__title {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card__plan {
+  margin-left: auto;
+  flex: none;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.card__message {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.card__why {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* A path is read from the left, so it is truncated there rather than here. */
+.card__hint {
+  margin: 0;
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.38);
+  direction: rtl;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card__action {
+  align-self: flex-start;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.85);
+  font: inherit;
+  cursor: pointer;
+}
+
+.card__action:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.card__row {
+  display: flex;
+  flex-direction: column;
+}
+
+.card__row-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.card__row-label {
+  color: rgba(255, 255, 255, 0.9);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+/* The bar's ends are rounder than its height, the way the original's are. */
+.card__bar {
+  background: rgba(255, 255, 255, 0.13);
+  overflow: hidden;
+}
+
+.card__bar-fill {
+  height: 100%;
+}
+
+.card__percent {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.card__detail {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.card__reset {
+  margin-left: auto;
+  color: rgba(255, 255, 255, 0.45);
+  font-variant-numeric: tabular-nums;
+  white-space:nowrap;
+}
+
+.card__activity { display:flex; flex-direction:column; flex-shrink:0; }
+.card__divider { background:rgba(255,255,255,.12); flex-shrink:0; }
+.card__muted { color:rgba(255,255,255,.45); }
+.card__figures {display:flex; flex-shrink:0;}
+.card__figures>div {display:flex; flex-direction:column; flex:1; min-width:0; white-space:nowrap; font-variant-numeric:tabular-nums;}
+.card__chart {display:flex; align-items:flex-end; flex-shrink:0;}
+.card__chart>span {flex:1; min-width:0; background:rgba(255,255,255,.7); border-radius:2px;}
+.card__model {margin-left:auto; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.card__footnote,.card__estimate {white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+

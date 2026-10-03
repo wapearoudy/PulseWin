@@ -1,0 +1,50 @@
+{
+  "version": "0.1.2",
+  "verifiedAt": "2026-10-03T05:37:45.4088677Z",
+  "nativeSmoke": {
+    "passed": true,
+    "checks": [
+      "native startup",
+      "no automatic collection",
+      "settings IPC permission",
+      "preferences persistence",
+      "shared panel preferences",
+      "floating rail restoration",
+      "native capsule geometry",
+      "floating stays expanded"
+    ],
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\native-profile-M5MumS",
+    "testedAt": "2026-10-03T04:33:59.907Z"
+  },
+  "cliSmoke": {
+    "passed": true,
+    "testedAt": "2026-10-03T05:35:18.666Z",
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\cli-profile-1i449d",
+    "checks": [
+      "release dispatch before GUI",
+      "enabled accounts only",
+      "actual window id pin",
+      "panel display rounding",
+      "dated observations",
+      "read-only files",
+      "no credential migration"
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "E:\\AI\\ai-usage\\PulseWin\\src-tauri\\target\\release\\pulsewin.exe",
+      "bytes": 5824000,
+      "sha256": "5E21EF94BFA123B8CFB8F17068238B8BEF1438C91BF340D131C79AD8E133BCE7"
+    },
+    {
+      "path": "E:\\AI\\ai-usage\\PulseWin\\src-tauri\\target\\release\\bundle\\nsis\\PulseWin_0.1.2_x64-setup.exe",
+      "bytes": 2198049,
+      "sha256": "5877C46A2A8C8A0D5939AE15C95A12FC5EB8BC39F122EE233A117418DE2584F4"
+    },
+    {
+      "path": "E:\\AI\\ai-usage\\PulseWin\\src-tauri\\target\\release\\bundle\\msi\\PulseWin_0.1.2_x64_en-US.msi",
+      "bytes": 3104768,
+      "sha256": "182DB325BAD41EB49AE0322D34DD2F095D6AB8FCF78BE91A4103C3B10D8CF974"
+    }
+  ]
+}

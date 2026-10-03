@@ -1,0 +1,77 @@
+{
+  "version": "0.1.4",
+  "verifiedAt": "2026-10-03T08:00:53.6463311Z",
+  "repository": "wapearoudy/PulseWin",
+  "defaultSource": "https://github.com/wapearoudy/PulseWin/releases/latest/download/latest.json",
+  "tests": {
+    "frontend": 181,
+    "rustIgnored": 1,
+    "browser": 35,
+    "rust": 832
+  },
+  "nativeSmoke": {
+    "passed": true,
+    "checks": [
+      "native startup",
+      "no automatic collection",
+      "settings IPC permission",
+      "preferences persistence",
+      "shared panel preferences",
+      "floating rail restoration",
+      "native capsule geometry",
+      "floating stays expanded"
+    ],
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\native-profile-f13Tjx",
+    "testedAt": "2026-10-03T08:00:30.995Z"
+  },
+  "cliSmoke": {
+    "passed": true,
+    "testedAt": "2026-10-03T08:00:28.521Z",
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\cli-profile-D4gT7y",
+    "checks": [
+      "release dispatch before GUI",
+      "enabled accounts only",
+      "actual window id pin",
+      "panel display rounding",
+      "dated observations",
+      "read-only files",
+      "no credential migration"
+    ]
+  },
+  "updateSmoke": {
+    "passed": true,
+    "testedAt": "2026-10-03T08:00:29.669Z",
+    "version": "0.1.4",
+    "checks": [
+      "signed local download with real Tauri plugin",
+      "tampered bytes rejected",
+      "forged version rejected",
+      "same version skipped",
+      "native test install blocked",
+      "account preferences unchanged"
+    ]
+  },
+  "updateAcceptance": {
+    "signedVersionMismatchRejected": true,
+    "installationExecuted": false,
+    "signedDownloadPassed": true,
+    "tamperedBytesRejected": true
+  },
+  "artifacts": [
+    {
+      "sha256": "61E6487AFD6F44EA70CC4069EA958547D65223451E4E320EE8E99D17D3E9A821",
+      "path": "src-tauri/target/release/pulsewin.exe",
+      "bytes": 7407104
+    },
+    {
+      "sha256": "78A42F90CFBFFD42126E58C615D09F0103AF99DBA9A29ECA77962AEBFB458EA8",
+      "path": "src-tauri/target/release/bundle/nsis/PulseWin_0.1.4_x64-setup.exe",
+      "bytes": 2876448
+    },
+    {
+      "sha256": "F172F9713A8953D560118006A0D9B6F1679B0045E62FE1681B37549405FEDCF2",
+      "path": "src-tauri/target/release/bundle/msi/PulseWin_0.1.4_x64_en-US.msi",
+      "bytes": 4587520
+    }
+  ]
+}
