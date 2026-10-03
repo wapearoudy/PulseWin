@@ -37,7 +37,7 @@ function groups(records: SpendRecord[], key: (record: SpendRecord) => string | n
   }
   return [...buckets].map(([id, bucket]) => ({ id, ...bucket, ...amounts(bucket.records) })).sort((a, b) => b.tokens - a.tokens || a.name.localeCompare(b.name))
 }
-const agentNames: Record<string, string> = { claude: 'Claude Code', codex: 'Codex', qwen: 'Qwen Code', gemini: 'Gemini CLI', cursor: 'Cursor', antigravity: 'Antigravity', hindsight: 'Hindsight', mcode: 'MCode', opencode: 'OpenCode', kilo: 'Kilo CLI', micode: 'MiMo Code' }
+const agentNames: Record<string, string> = { claude: 'Claude Code', codex: 'Codex', qwen: 'Qwen Code', gemini: 'Gemini CLI', cursor: 'Cursor', antigravity: 'Antigravity', hindsight: 'Hindsight', mcode: 'MCode', opencode: 'OpenCode', kilo: 'Kilo CLI', micode: 'MiMo Code', dsh: 'DeepSeek Harness' }
 export const agentName = (id: string) => agentNames[id] ?? id
 export const modelKey = (record: SpendRecord) => record.modelName ?? record.model
 function projectKey(record: SpendRecord): string | null {

@@ -48,10 +48,19 @@ describe('Token Spend calendar and measured totals', () => {
     expect(summary.tokens).toBe(200); expect(summary.sessions).toHaveLength(0); expect(summary.projects).toHaveLength(0)
   })
   it('names the actual native and captured readers without replacing unknown ids', () => {
+    expect(agentName('dsh')).toBe('DeepSeek Harness')
     expect(agentName('gemini')).toBe('Gemini CLI'); expect(agentName('antigravity')).toBe('Antigravity')
     expect(agentName('opencode')).toBe('OpenCode'); expect(agentName('kilo')).toBe('Kilo CLI'); expect(agentName('micode')).toBe('MiMo Code')
     expect(agentName('hindsight')).toBe('Hindsight'); expect(agentName('mcode')).toBe('MCode')
     expect(agentName('not-implemented')).toBe('not-implemented')
+  })
+  it('includes Harness in totals and filters its models without losing cache usage', () => {
+    const all = [record(), record({ agent: 'dsh', model: 'deepseek-chat', tally: { input: 100, output: 40, cacheWrite: 10, cacheRead: 200 } }),
+      record({ agent: 'dsh', model: 'other-model', cost: null, costBreakdown: null })]
+    const s = summarize(all, 'today', new Date(2026, 9, 3), 'dsh')
+    expect(s.tokens).toBe(550); expect(s.tally.output).toBe(60); expect(s.tally.cacheRead).toBe(270)
+    expect(s.agents[0].name).toBe('DeepSeek Harness'); expect(s.models).toHaveLength(2); expect(s.unpricedTokens).toBe(200)
+    expect(summarize(all, 'today', new Date(2026, 9, 3), 'dsh', 'deepseek-chat').tokens).toBe(350)
   })
   it('does not invent a project for sessions without cwd', () => {
     const s = summarize([record({ project: null })], 'today', new Date(2026, 9, 3)); expect(s.sessions).toHaveLength(1); expect(s.projects).toHaveLength(0)

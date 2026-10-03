@@ -24,8 +24,9 @@ export interface TokenSpendPaneProps {
 const spans: [SpendSpan, string][] = [['today', '今天'], ['week', '最近 7 天'], ['month', '最近 30 天']]
 // This list is about actual readers, not provider registrations. Antigravity's
 // original catalog uses separate labels for CLI/IDE native stores and capture.
-const pendingSources = ['Grok Build','Kimi CLI','Devin','Pi','Oh My Pi','OmO Native','Kimchi','Prime Agent','Amp','Droid','OpenClaw','Roo Code','Kilo Code','Cline','CodeBuddy','WorkBuddy','Cherry Studio','Command Code','OpenCodeReview','ZCode','Hermes','Goose','Zed','Kiro','Crush','Unsloth','Antigravity CLI','Antigravity IDE','Devin Desktop','Mux','Codebuff','Freebuff','JCode','Augment','Gajae Code','Junie','DSH','Fx','LM Studio','Reasonix','Trae','Warp','Copilot']
+const pendingSources = ['Grok Build','Kimi CLI','Devin','Pi','Oh My Pi','OmO Native','Kimchi','Prime Agent','Amp','Droid','OpenClaw','Roo Code','Kilo Code','Cline','CodeBuddy','WorkBuddy','Cherry Studio','Command Code','OpenCodeReview','ZCode','Hermes','Goose','Zed','Kiro','Crush','Unsloth','Antigravity CLI','Antigravity IDE','Devin Desktop','Mux','Codebuff','Freebuff','JCode','Augment','Gajae Code','Junie','Fx','LM Studio','Reasonix','Trae','Warp','Copilot']
 const exportHelp: Record<string, string> = {
+  dsh: '自动读取 DeepSeek Harness 的 sessions 会话目录（默认 ~/.dsh，可通过 DSH_HOME 指定）。支持普通、版本化及 Zstandard 压缩 JSONL，分别统计输入、输出和缓存；分叉历史与迁移副本去重。CLI 与当前桌面版共享此目录。',
   cursor: '需要事先导出 Cursor usageEventsDisplay JSON 或带四类计数列的 CSV。不会读取 Cursor 原生日志或自动登录；CSV 只用于日统计。',
   antigravity: '需要同步工具事先生成语言服务器用量缓存 JSONL；Antigravity CLI 与 IDE 的原生数据库读取均未移植。不会自行连接或同步。',
   hindsight: '需要事先镜像服务 llm-requests 为 JSONL 用量账本；不会直接访问服务。',
@@ -88,7 +89,7 @@ export function TokenSpendPane({ enabled, onEnabledChange, span: savedSpan, onSp
     <h1 id="token-spend-title">Token 花费</h1>
     <p className="page-description">从本机记录查看 Token 去向，按公开 API 价格估算金额。</p>
     <div className="spend-opt-in">
-      <div><strong>读取本机用量记录</strong><p>默认关闭。开启后读取 Claude Code、Codex、Qwen Code、Gemini CLI 的本机计数及已有导出文件，并获取 models.dev 公开价格；不保存对话正文。</p></div>
+      <div><strong>读取本机用量记录</strong><p>默认关闭。开启后读取 Claude Code、Codex、Qwen Code、Gemini CLI、DeepSeek Harness 等工具的本机计数及已有导出文件，并获取 models.dev 公开价格；不保存对话正文。</p></div>
       <input role="switch" aria-label="读取本机 Token 用量记录" type="checkbox" checked={enabled} onChange={event => onEnabledChange(event.target.checked)} />
     </div>
     {enabled && <>

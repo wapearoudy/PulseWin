@@ -1,6 +1,6 @@
 [package]
 name = "pulsewin"
-version = "0.1.11"
+version = "0.1.12"
 description = "Windows tray monitor for AI coding tool quota"
 authors = ["PulseWin contributors"]
 edition = "2021"
@@ -32,6 +32,7 @@ futures = "0.3"
 rusqlite = { version = "0.32.1", features = ["bundled", "hooks"] }
 tauri-plugin-updater = { version = "2", default-features = false, features = ["native-tls", "zip"] }
 semver = "1"
+zstd = { version = "0.13", default-features = false }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = "2"
@@ -51,4 +52,7 @@ strip = true
 # MSVC's C debug-record writer can fail in inherited Windows integrity contexts
 # (D8050). Keep Rust debug information; the bundled SQLite C library needs none.
 [profile.dev.package.libsqlite3-sys]
+debug = false
+
+[profile.dev.package.zstd-sys]
 debug = false

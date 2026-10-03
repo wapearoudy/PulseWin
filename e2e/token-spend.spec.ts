@@ -16,7 +16,7 @@ test.beforeEach(async ({ page }) => {
       id,name,status:i < 2 ? 'counted' : 'not-detected',files:i < 2 ? 6 : 0,cachedFiles:0,records:i < 2 ? 6 : 0,
       origin:i >= 4 ? 'export' : 'native',roots:['E:\\synthetic-token-source\\' + id],
     }))
-    w.spendTestCommands = []; w.spendTestPrefs = prefs; w.spendHold = false
+    w.spendTestCommands = []; w.spendTestPrefs = prefs; w.spendHold = false; w.spendTestData = { records, sources }
     const emit = (event: string, payload: unknown) => Object.values(listeners).filter(x => x.event === event).forEach(x => callbacks[x.handler]?.({ event, payload }))
     w.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: (_: string, id: number) => delete listeners[id] }
     w.__TAURI_INTERNALS__ = {
@@ -32,7 +32,7 @@ test.beforeEach(async ({ page }) => {
         if(command === 'get_snapshot') return {providers:[],fetchedAt:new Date().toISOString()}
         if(command === 'spend_begin_scan') return `fixture-scan-${++sequence}`
         if(command === 'spend_get_scan') return { id: args.scanId, status: w.spendHold ? 'running' : 'completed', currentSource:'Claude Code',sourceIndex:1,sourceCount:sources.length,error:null,
-          snapshot: w.spendHold ? null : { scannedAt:new Date().toISOString(), records, sources,notes:[],pricesAt:new Date().toISOString(),pricingStatus:'fresh' } }
+          snapshot: w.spendHold ? null : { scannedAt:new Date().toISOString(), ...w.spendTestData,notes:[],pricesAt:new Date().toISOString(),pricingStatus:'fresh' } }
         if(command === 'spend_cancel_scan' || command === 'spend_clear_snapshot') return
       },
     }
@@ -47,7 +47,7 @@ test('default off reads nothing; model navigation, range changes and sidebar reu
   await page.getByRole('switch',{name:'读取本机 Token 用量记录'}).check()
   await expect(page.getByRole('heading',{name:'每日 Token',exact:true})).toBeVisible()
   await expect(page.locator('.spend-sources>div')).toHaveCount(8)
-  await expect(page.getByText('其他 43 个原版来源尚未移植')).toBeVisible()
+  await expect(page.getByText('其他 42 个原版来源尚未移植')).toBeVisible()
   await page.getByText('支持格式与读取位置 · 8 个实际 reader').click()
   await expect(page.getByText('需要事先导出 Cursor', { exact: false })).toBeVisible()
   expect(await page.evaluate(() => (window as any).spendTestPrefs.tokenSpendEnabled)).toBe(true)
@@ -73,6 +73,31 @@ test('default off reads nothing; model navigation, range changes and sidebar reu
   await page.getByRole('switch',{name:'读取本机 Token 用量记录'}).uncheck()
   await expect(page.getByRole('heading',{name:'每日 Token',exact:true})).toHaveCount(0)
   expect(await page.evaluate(() => (window as any).spendTestCommands.some((c:any)=>c.command === 'spend_clear_snapshot'))).toBe(true)
+})
+
+test('Harness source, cache buckets, model drilldown and unpriced amounts appear together', async ({page}) => {
+  await page.evaluate(() => {
+    const w = window as any, day = w.spendTestData.records[0].day
+    w.spendTestData = { records: [{ agent: 'dsh', model: 'deepseek-chat', modelName: 'DeepSeek Chat', day, hour: 9,
+      session: 'synthetic-harness', project: 'E:/synthetic-harness', tally: { input: 100, output: 40, cacheWrite: 10, cacheRead: 200 },
+      cost: null, costBreakdown: null }], sources: [{ id: 'dsh', name: 'DeepSeek Harness', status: 'counted', files: 3,
+      cachedFiles: 2, records: 1, origin: 'native', roots: ['E:/synthetic-home/.dsh/sessions'] }] }
+  })
+  await page.getByRole('switch', { name: '读取本机 Token 用量记录' }).check()
+  await expect(page.locator('.spend-headline')).toContainText('350')
+  await expect(page.locator('.spend-sources')).toContainText('DeepSeek Harness')
+  await expect(page.locator('.spend-sources')).toContainText('3 个记录文件 · 2 个缓存命中')
+  const agents = page.getByRole('heading', { name: 'Agent', exact: true }).locator('..')
+  await agents.getByRole('button', { name: 'DeepSeek Harness', exact: false }).click()
+  await expect(page.getByRole('heading', { name: 'DeepSeek Harness', exact: true })).toBeVisible()
+  const models = page.getByRole('heading', { name: '模型', exact: true }).locator('..')
+  await models.getByRole('button', { name: 'DeepSeek Chat', exact: false }).click()
+  await expect(page.getByRole('heading', { name: 'DeepSeek Chat', exact: true })).toBeVisible()
+  await expect(page.locator('.spend-splits')).toContainText('200')
+  await expect(page.locator('.spend-splits')).toContainText('40')
+  await expect(page.getByText('350 Token 无法计价', { exact: false })).toBeVisible()
+  await page.getByText('支持格式与读取位置 · 1 个实际 reader').click()
+  await expect(page.getByText('支持普通、版本化及 Zstandard 压缩 JSONL', { exact: false })).toBeVisible()
 })
 
 test('an unfinished scan can be stopped and is cancelled on sidebar departure', async ({page}) => {

@@ -436,7 +436,7 @@ mod tests {
         assert_eq!(roots(home,"mcode",&env)[0],PathBuf::from("fixture-cache/headless/mcode"));
         assert_eq!(roots(home,"hindsight",&env)[0],PathBuf::from("fixture-hindsight/usage"));
         assert!(roots(home,"warp",&env).is_empty());
-        assert_eq!(AGENTS.len(),11);
+        assert_eq!(AGENTS.len(),12);
     }
     #[test] fn gemini_session_cache_overlap_tool_and_reasoning_are_disjoint() {
         let fixture = Fixture::new();

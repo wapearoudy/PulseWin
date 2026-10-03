@@ -120,7 +120,12 @@ MCode captured stream-json. These four import formats require files prepared bef
 does not connect or sync them. Readers use bounded streaming, replay deduplication, file caching and cooperative cancellation.
 The page has today/7-day/30-day ranges, model and agent details, daily/hourly charts, project and
 session sorting/pagination, and public models.dev price estimates. Unknown prices stay unknown.
-Native read-only SQLite readers now cover OpenCode, Kilo CLI and MiMo Code, including active WAL files. The original's other 43 sources, including native Antigravity CLI/IDE stores,
+Native read-only SQLite readers now cover OpenCode, Kilo CLI and MiMo Code, including active WAL files.
+DeepSeek Harness reads normal and versioned JSONL sessions, including concatenated Zstandard checkpoints,
+under `~/.dsh/sessions` or `$DSH_HOME/sessions`. CLI and the current desktop share this directory.
+It includes provider-reported failed attempts and compaction calls, excludes fork-inherited counters,
+and deduplicates migrated copies. Reasoning stays inside output; input and cache buckets are disjoint.
+The original's other 42 sources, including native Antigravity CLI/IDE stores,
 are explicitly unsupported until their readers are implemented. Aggregate Cursor exports do not
 generate a fabricated hour chart.
 

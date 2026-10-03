@@ -99,6 +99,8 @@ pub fn get_app_info()->AppInfo {
         License{title:"Pulse 版权声明",text:include_str!("../../licenses/NOTICE-Pulse.txt")},
         License{title:"Pulse · Apache License 2.0",text:include_str!("../../licenses/Pulse-Apache-2.0.txt")},
         License{title:"rusqlite · MIT License",text:include_str!("../../licenses/rusqlite-MIT.txt")},
+        License{title:"zstd-rs · MIT License",text:include_str!("../../licenses/zstd-rs-MIT.txt")},
+        License{title:"Zstandard · BSD 3-Clause",text:include_str!("../../licenses/Zstandard-BSD-3-Clause.txt")},
     ]}
 }
 fn about_link(key:&str)->Result<&'static str,String>{match key{
@@ -122,7 +124,7 @@ pub fn open_about_link(app:AppHandle,key:String)->Result<(),String>{
         for key in ["https://evil.example","file:///C:/Windows","javascript:alert(1)","source?token=secret",""] {assert!(about_link(key).is_err());}
     }
     #[test] fn version_and_attribution_come_from_bundled_sources(){
-        let value=get_app_info();assert_eq!(value.version,env!("CARGO_PKG_VERSION"));assert_eq!(value.licenses.len(),3);
+        let value=get_app_info();assert_eq!(value.version,env!("CARGO_PKG_VERSION"));assert_eq!(value.licenses.len(),5);
         assert!(value.licenses[0].text.contains("qunqin24"));assert!(value.licenses[1].text.contains("Apache License"));assert!(value.licenses[2].text.contains("Permission is hereby granted"));
     }
 }

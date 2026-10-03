@@ -29,6 +29,22 @@ All unchecked items remain incomplete or unverified. No overall completion perce
 
 ## Verification baseline
 
+Current Token Spend readers: 12 of 54. DeepSeek Harness is implemented in
+0.1.12; 42 sources remain unsupported. Four implemented readers require prepared
+exports/captures. Historical milestone counts below describe their release date.
+
+0.1.12 Harness acceptance: ordinary/versioned JSONL and concatenated Zstandard
+frames, fork inheritance, failed-attempt settlements and retries, compaction
+usage, inclusive reasoning, copy deduplication, bounded/cancellable streaming,
+cache hits and appended-frame invalidation. Local compressed user logs were
+read without modifying any input and independently checked against Python's
+Zstandard decoder; aggregate counters matched with no reading warnings. Private
+logs, paths and totals were not published. Real release WebView2/IPC used only
+synthetic session fixtures. See `harness-token-spend.md`, `release-0.1.12.json`
+and `screenshots/native-harness.png`. Validation: 883 offline Rust, 182 frontend
+and 59 browser tests; native Harness, assistant, tray, CLI, network and signed
+update checks pass. Actual installation/overwrite/restart was not executed.
+
 2026-10-02: existing frontend build passes; 102 frontend tests pass. These cover pure rules and geometry, not end-to-end parity.
 
 ### Implemented milestone — selection, preferences and settings

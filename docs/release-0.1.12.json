@@ -1,0 +1,200 @@
+{
+  "version": "0.1.12",
+  "verifiedAt": "2026-10-03T11:56:46.778553+00:00",
+  "repository": "wapearoudy/PulseWin",
+  "scope": "DeepSeek Harness measured Token Spend, bundled Zstandard streaming, historical/fork/settlement reconciliation and native source/model UI",
+  "tests": {
+    "rust": 883,
+    "rustIgnored": 2,
+    "frontend": 182,
+    "browser": 59,
+    "harnessReader": 20,
+    "localReadOnlyVerification": true,
+    "independentDecoderCountersMatch": true
+  },
+  "installationExecuted": false,
+  "limitations": [
+    "Not complete original parity: 42 Token Spend sources remain unsupported",
+    "Unknown model prices remain unpriced; estimates are not subscription charges",
+    "Format versions after 4 are explicitly unsupported",
+    "Actual installer overwrite/restart and physical pointer/mixed-DPI acceptance remain open"
+  ],
+  "artifacts": [
+    {
+      "file": "pulsewin.exe",
+      "bytes": 7747072,
+      "sha256": "b5ebeb128982816ad40dd35ec1c87f78a510a4b4b136587513f22f08079ecf33",
+      "signature": false,
+      "mediumIntegrityRepaired": true
+    },
+    {
+      "file": "PulseWin_0.1.12_x64-setup.exe",
+      "bytes": 3000289,
+      "sha256": "a0e43282b38b697f01f16db8117e9a09bd88a3d6a0f865acb9fffc37799bdec6",
+      "signature": true,
+      "mediumIntegrityRepaired": true
+    },
+    {
+      "file": "PulseWin_0.1.12_x64_en-US.msi",
+      "bytes": 4820992,
+      "sha256": "f78fb5ecf7c1a9a7d8c154954c52acd821de7e3430b217b623ef041ea654070c",
+      "signature": true,
+      "mediumIntegrityRepaired": true
+    }
+  ],
+  "nativeHarnessSmoke": {
+    "passed": true,
+    "version": "0.1.12",
+    "testedAt": "2026-10-03T11:55:40.210Z",
+    "checks": [
+      "real native UI and IPC",
+      "default-off guard",
+      "concatenated zstd checkpoints",
+      "plain and migrated copy deduplication",
+      "inclusive reasoning and disjoint cache",
+      "cached reread",
+      "appended frame invalidation",
+      "read-only inputs",
+      "no transcript content retained",
+      "opt-out guard"
+    ]
+  },
+  "nativeSmoke": {
+    "passed": true,
+    "checks": [
+      "native startup",
+      "no automatic collection",
+      "settings IPC permission",
+      "preferences persistence",
+      "shared panel preferences",
+      "floating rail restoration",
+      "native capsule geometry",
+      "floating stays expanded",
+      "disabled additional accounts never collect",
+      "per-account encrypted credentials",
+      "stale window preserves account metadata",
+      "account rename persists",
+      "removal preserves primary credentials"
+    ],
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\native-profile-KiqbVL",
+    "testedAt": "2026-10-03T11:54:12.045Z"
+  },
+  "cliSmoke": {
+    "passed": true,
+    "testedAt": "2026-10-03T11:54:12.588Z",
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\cli-profile-5F5Ahq",
+    "checks": [
+      "release dispatch before GUI",
+      "enabled accounts only",
+      "actual window id pin",
+      "panel display rounding",
+      "dated observations",
+      "read-only files",
+      "no credential migration",
+      "same-service account identity and labels",
+      "separate account percentages and statusline"
+    ]
+  },
+  "nativeUpdateSmoke": {
+    "passed": true,
+    "testedAt": "2026-10-03T11:54:14.206Z",
+    "version": "0.1.12",
+    "checks": [
+      "isolated update configuration and default release source",
+      "signed local download with real Tauri plugin",
+      "tampered bytes rejected",
+      "forged version rejected",
+      "same version skipped",
+      "native test install blocked",
+      "account preferences unchanged",
+      "personal update settings unchanged"
+    ]
+  },
+  "nativeNetworkSmoke": {
+    "passed": true,
+    "version": "0.1.12",
+    "testedAt": "2026-10-03T11:54:51.789Z",
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\native-profile-network-qQg1mQ",
+    "cancellationMs": 3,
+    "requests": [
+      [
+        "api.deepseek.com:443"
+      ],
+      [
+        "api.deepseek.com:443"
+      ]
+    ],
+    "checks": [
+      "real native UI and IPC",
+      "atomic manual endpoint save",
+      "no provider collection on opening",
+      "pending CONNECT cancelled",
+      "immediate retry through new proxy",
+      "errors do not become zero quota",
+      "stale generic saves preserve network",
+      "invalid endpoints preserve valid proxy",
+      "SOCKS5 and cadence restart persistence",
+      "native metadata and bundled licenses",
+      "unknown link rejected",
+      "installed profile byte equality"
+    ]
+  },
+  "nativeTraySmoke": {
+    "passed": true,
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\native-profile-tray-mimjcy",
+    "testedAt": "2026-10-03T11:54:55.830Z",
+    "geometry": {
+      "position": {
+        "x": 3360,
+        "y": 1477
+      },
+      "size": {
+        "width": 480,
+        "height": 603
+      },
+      "monitor": {
+        "name": "\\\\.\\DISPLAY2",
+        "size": {
+          "width": 3840,
+          "height": 2160
+        },
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "workArea": {
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "size": {
+            "width": 3840,
+            "height": 2088
+          }
+        },
+        "scaleFactor": 1.5
+      },
+      "scale": 1.5,
+      "viewport": [
+        320,
+        402
+      ]
+    },
+    "checks": [
+      "native popup IPC and permissions",
+      "320 logical pixel width",
+      "content height adapts without resizing assistant",
+      "clamped to monitor work area",
+      "independent additional-account tabs",
+      "real settings style persistence",
+      "tray-only monitoring remains enabled",
+      "assistant visibility persists after process restart",
+      "Escape hides popup"
+    ],
+    "notTested": [
+      "physical taskbar mouse click",
+      "mixed-DPI displays",
+      "visual sharpness of OS-scaled tray icon"
+    ]
+  }
+}

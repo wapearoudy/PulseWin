@@ -32,8 +32,8 @@
 | 可配置全局快捷键 | App/GlobalShortcut；Docs/ui/input.md | 部分：打开设置和显隐助手两个快捷键默认未设置；录入、取消、删除、系统注册和逐项冲突提示已接通；真实 OS 按键响应单独记录，浏览器录入测试不算全局响应验收 |
 | 五种语言 | Resources/*.lproj；Docs/development.md | 部分：设置中文、供应商原名；面板统一翻译、其他四语及大数规则尚缺 |
 | 同服务多账号 / 自定义标签 | AccountKey；Docs/providers/README.md | 部分：Claude Code/Codex/Grok/Grok Bot 的独立账号身份、DPAPI 凭据、CLI 登录快照导入、手动 Token/登录 JSON/Cookie、自定义名称、单独显隐/刷新/排序/外观/置顶及移除已接通；原版内置网页登录、自动续期和附加账号日志归属仍缺。新增账号不回退到主账号 CLI，也不借用主账号本机历史 |
-| Token 消耗本机读取开关 / 54 来源 | Docs/token-spend.md | 部分：默认关闭，11/54 实际 reader：Claude Code、Codex、Qwen Code、Gemini CLI，OpenCode/Kilo CLI/MiMo Code 的只读 SQLite，以及 Cursor、Antigravity、Hindsight、MCode 的导出/同步/捕获文件；后四项需要用户先准备文件，不会自动同步；目录扫描、流式解析、取消、去重、缓存与坏 metadata 有测试；SQLite 的 WAL 更新失效、只读、不改写数据库、限时、取消和镜像去重有 fixture 测试；新增数据库 reader 尚未用真实用户日志验收；其余 43 来源含 Antigravity IDE 原生数据库未覆盖 |
-| 7 天区间 / 公开价格估算 | Docs/token-spend.md | 部分：今天/7 天/30 天、公开 models.dev 价格、24 小时价格缓存与离线旧价格已接通；未知模型和未分类 Token 不伪造费用；Cursor 日聚合导出不编造小时，相关范围的小时图明确不可用；真实用户日志及在线价格刷新尚未验收 |
+| Token 消耗本机读取开关 / 54 来源 | Docs/token-spend.md | 部分：默认关闭，12/54 实际 reader：Claude Code、Codex、Qwen Code、Gemini CLI，OpenCode/Kilo CLI/MiMo Code 的只读 SQLite，DeepSeek Harness 的普通/版本化/压缩会话，以及 Cursor、Antigravity、Hindsight、MCode 的导出/同步/捕获文件；后四项需要用户先准备文件，不会自动同步；目录扫描、流式解析、取消、去重、缓存与坏 metadata 有测试；SQLite 的 WAL 更新失效、只读、不改写数据库、限时、取消和镜像去重有 fixture 测试；新增数据库 reader 尚未用真实用户日志验收；其余 42 来源含 Antigravity IDE 原生数据库未覆盖 |
+| 7 天区间 / 公开价格估算 | Docs/token-spend.md | 部分：今天/7 天/30 天、公开 models.dev 价格、24 小时价格缓存与离线旧价格已接通；未知模型和未分类 Token 不伪造费用；Cursor 日聚合导出不编造小时，相关范围的小时图明确不可用；Harness 真实压缩日志已通过只读与独立脚本汇总核对；其他真实用户日志及在线价格刷新尚未验收 |
 | 模型 / Agent 明细 / 日与小时图 / 排序分页 | Settings TokenSpend；Docs/token-spend.md | 已接通模型详情、Agent、日/小时图、项目与会话排序分页、重扫/停止；离开页面停止未完成扫描，已完成快照可重用，关闭设置释放会话；使用 fixture 验证 UI，来源数量仍受上一行限制 |
 | 77 个额度服务商与各自登录来源 | Docs/providers/README.md、Docs/setup | 部分：注册 77 个适配器，不代表路由、登录回退、账户隔离或真实账号已验收；逐提供商检查另列 |
 | 登录流程与失败回退 | Auth；原版各服务商连接流程 | 部分：Claude Code 仅 OAuth usage 路由，Codex 仅 wham usage 路由；原版其他读数回退没有完整移植。Cursor 未自动读取 SQLite 登录态，Ollama Cloud 仍需手动 Cookie；Copilot 可读已有 token，但无完整设备码登录 UI |

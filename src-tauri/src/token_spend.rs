@@ -19,9 +19,11 @@ const TRANSCRIPT_VERSION: u32 = 5;
 const MAX_LINE: usize = 8 * 1024 * 1024;
 const MAX_FILES: usize = 50_000;
 const MAX_RECORDS: usize = 1_000_000;
-const AGENTS: [(&str, &str); 11] = [("claude", "Claude Code"), ("codex", "Codex"), ("qwen", "Qwen Code"),
+const AGENTS: [(&str, &str); 12] = [("claude", "Claude Code"), ("codex", "Codex"), ("qwen", "Qwen Code"),
     ("gemini", "Gemini CLI"), ("cursor", "Cursor"), ("antigravity", "Antigravity"), ("hindsight", "Hindsight"), ("mcode", "MCode"),
-    ("opencode", "OpenCode"), ("kilo", "Kilo CLI"), ("micode", "MiMo Code")];
+    ("opencode", "OpenCode"), ("kilo", "Kilo CLI"), ("micode", "MiMo Code"), ("dsh", "DeepSeek Harness")];
+#[path = "token_spend/dsh_reader.rs"]
+mod dsh_reader;
 #[path = "token_spend/measured_readers.rs"]
 mod measured_readers;
 #[path = "token_spend/opencode_store.rs"]
@@ -288,13 +290,14 @@ fn roots(home: &Path, agent: &str, environment: impl Fn(&str) -> Option<String>)
         }).unwrap_or_else(|| home.join(".gemini")).join("tmp")],
         "cursor" | "antigravity" | "hindsight" | "mcode" => measured_readers::roots(home, agent, &environment),
         "opencode" | "kilo" | "micode" => opencode_store::roots(home,agent,&environment),
+        "dsh" => dsh_reader::roots(home, &environment),
         _ => Vec::new(),
     }
 }
 fn enumerate(root: &Path, agent: &str, files: &mut Vec<PathBuf>, cancel: &AtomicBool, notes: &mut Vec<String>) -> Result<(), String> {
     check(cancel)?;
     if root.is_file() {
-        if !fs::symlink_metadata(root).map(|m|m.file_type().is_symlink()).unwrap_or(true) && opencode_store::candidate(root,agent) { files.push(root.into()); }
+        if !fs::symlink_metadata(root).map(|m|m.file_type().is_symlink()).unwrap_or(true) && (opencode_store::candidate(root,agent) || (agent == "dsh" && dsh_reader::candidate(root))) { files.push(root.into()); }
         return Ok(());
     }
     let entries = match fs::read_dir(root) { Ok(v) => v, Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()), Err(e) => { notes.push(format!("无法读取目录 {}：{e}", root.display())); return Ok(()); } };
@@ -306,7 +309,7 @@ fn enumerate(root: &Path, agent: &str, files: &mut Vec<PathBuf>, cancel: &Atomic
         if kind.is_symlink() { continue; }
         let path = entry.path();
         if kind.is_dir() { enumerate(&path, agent, files, cancel, notes)?; }
-        else if kind.is_file() && (if opencode_store::agent(agent) {opencode_store::candidate(&path,agent)}else{measured_readers::candidate(&path, agent)}) { files.push(path); }
+        else if kind.is_file() && (if agent == "dsh" {dsh_reader::candidate(&path)} else if opencode_store::agent(agent) {opencode_store::candidate(&path,agent)}else{measured_readers::candidate(&path, agent)}) { files.push(path); }
     }
     Ok(())
 }
@@ -337,6 +340,7 @@ fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl
                     && chrono::NaiveDate::parse_from_str(&record.day, "%Y-%m-%d").is_ok()
                     && (record.tally.total() > 0 || record.unclassified_tokens > 0)
                     && (*agent != "qwen" || record.deduplication_id.is_some())
+                    && (*agent != "dsh" || (record.deduplication_id.is_some() && record.source_timestamp.is_some()))
                     && (*agent != "cursor" || (record.source_timestamp.is_some() && record.source_scope.is_some()))));
             let records = if let Some(c) = cached { source.cached_files += 1; c.records } else {
                 let (records, notes) = match parse_file(&file, agent, cancel) {
@@ -373,6 +377,7 @@ fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl
 
 fn counter(value: &Value) -> u64 { value.as_u64().or_else(|| value.as_f64().filter(|x| x.is_finite() && *x >= 0.).map(|x| x as u64)).unwrap_or(0) }
 fn parse_file(path: &Path, agent: &str, cancel: &AtomicBool) -> Result<(Vec<SpendRecord>, Vec<String>), String> {
+    if agent == "dsh" { return dsh_reader::read(path, cancel); }
     if opencode_store::agent(agent) { return opencode_store::read(path, agent, cancel); }
     if matches!(agent, "gemini" | "cursor" | "antigravity" | "hindsight" | "mcode") { return measured_readers::parse_file(path, agent, cancel); }
     let file = File::open(path).map_err(|e| format!("无法读取 {}：{e}", path.display()))?;

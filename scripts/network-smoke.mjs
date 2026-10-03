@@ -80,7 +80,7 @@ try {
   await page.waitForFunction(async () => (await window.__TAURI_INTERNALS__.invoke('get_preferences')).refreshSeconds === 600)
   await page.screenshot({ path: path.join(root, 'test-results/native-network.png') })
   await page.getByRole('button', { name: '关于', exact: true }).click(); await page.getByText(`版本 ${version}`, { exact: true }).waitFor()
-  assert.equal((await call('get_app_info')).licenses.length, 3)
+  assert.equal((await call('get_app_info')).licenses.length, 5)
   await page.screenshot({ path: path.join(root, 'test-results/native-about.png') })
   await assert.rejects(call('open_about_link', { key: 'https://invalid.example' }))
   const saved = JSON.parse(await readFile(path.join(dir, 'preferences.json'), 'utf8'))
