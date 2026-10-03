@@ -1,6 +1,6 @@
 {
-  "version": "0.1.4",
-  "verifiedAt": "2026-10-03T08:00:53.6463311Z",
+  "version": "0.1.5",
+  "verifiedAt": "2026-10-03T08:12:34.7317792Z",
   "repository": "wapearoudy/PulseWin",
   "defaultSource": "https://github.com/wapearoudy/PulseWin/releases/latest/download/latest.json",
   "tests": {
@@ -21,13 +21,13 @@
       "native capsule geometry",
       "floating stays expanded"
     ],
-    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\native-profile-f13Tjx",
-    "testedAt": "2026-10-03T08:00:30.995Z"
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\native-profile-OZR1VC",
+    "testedAt": "2026-10-03T08:11:41.483Z"
   },
   "cliSmoke": {
     "passed": true,
-    "testedAt": "2026-10-03T08:00:28.521Z",
-    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\cli-profile-D4gT7y",
+    "testedAt": "2026-10-03T08:11:38.984Z",
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\cli-profile-fGrQOt",
     "checks": [
       "release dispatch before GUI",
       "enabled accounts only",
@@ -40,15 +40,17 @@
   },
   "updateSmoke": {
     "passed": true,
-    "testedAt": "2026-10-03T08:00:29.669Z",
-    "version": "0.1.4",
+    "testedAt": "2026-10-03T08:11:40.129Z",
+    "version": "0.1.5",
     "checks": [
+      "isolated update configuration and default release source",
       "signed local download with real Tauri plugin",
       "tampered bytes rejected",
       "forged version rejected",
       "same version skipped",
       "native test install blocked",
-      "account preferences unchanged"
+      "account preferences unchanged",
+      "personal update settings unchanged"
     ]
   },
   "updateAcceptance": {
@@ -56,24 +58,24 @@
     "installationExecuted": false,
     "signedDownloadPassed": true,
     "tamperedBytesRejected": true,
-    "configurationIsolation": false
+    "configurationIsolation": true
   },
   "artifacts": [
     {
-      "sha256": "61E6487AFD6F44EA70CC4069EA958547D65223451E4E320EE8E99D17D3E9A821",
-      "path": "src-tauri/target/release/pulsewin.exe",
-      "bytes": 7407104
+      "bytes": 7407104,
+      "sha256": "45EA70AEC0E1F6287273B26986225C40153B8241041647DF38F463C7291E6EA6",
+      "path": "src-tauri/target/release/pulsewin.exe"
     },
     {
-      "sha256": "78A42F90CFBFFD42126E58C615D09F0103AF99DBA9A29ECA77962AEBFB458EA8",
-      "path": "src-tauri/target/release/bundle/nsis/PulseWin_0.1.4_x64-setup.exe",
-      "bytes": 2876448
+      "bytes": 2875641,
+      "sha256": "50130FAC4BAC5C2421B415E7F2571013CC770D864E8CD688D8DC302C30D557E8",
+      "path": "src-tauri/target/release/bundle/nsis/PulseWin_0.1.5_x64-setup.exe"
     },
     {
-      "sha256": "F172F9713A8953D560118006A0D9B6F1679B0045E62FE1681B37549405FEDCF2",
-      "path": "src-tauri/target/release/bundle/msi/PulseWin_0.1.4_x64_en-US.msi",
-      "bytes": 4587520
+      "bytes": 4587520,
+      "sha256": "1765C72BA7EFF90B180C2E31719D251CD572411EE1AA5F11D8A8A84C3B7A8F9E",
+      "path": "src-tauri/target/release/bundle/msi/PulseWin_0.1.5_x64_en-US.msi"
     }
   ],
-  "laterFinding": "Online acceptance found the update settings did not follow isolated APPDATA. Fixed in 0.1.5; earlier signature checks remain valid."
+  "frontendAndBrowser": "UI unchanged from 0.1.4 full regression; 0.1.5 native, CLI and update acceptance repeated."
 }

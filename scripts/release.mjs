@@ -17,9 +17,13 @@ const lock = JSON.parse(readFileSync(lockFile, 'utf8')); lock.version = version;
 pkg.version = version
 const cargoFile = path.join(root, 'src-tauri/Cargo.toml')
 const cargo = readFileSync(cargoFile, 'utf8').replace(/^(version\s*=\s*")\d+\.\d+\.\d+(")/m, `$1${version}$2`)
-writeFileSync(packageFile, JSON.stringify(pkg, null, 2)+'\n')
-writeFileSync(lockFile, JSON.stringify(lock, null, 2)+'\n')
-writeFileSync(configFile, JSON.stringify(config, null, 2)+'\n')
+function writeJson(file, value) {
+  const eol=readFileSync(file,'utf8').includes('\r\n')?'\r\n':'\n'
+  writeFileSync(file,(JSON.stringify(value,null,2)+'\n').replace(/\n/g,eol))
+}
+writeJson(packageFile, pkg)
+writeJson(lockFile, lock)
+writeJson(configFile, config)
 writeFileSync(cargoFile, cargo)
 const result = spawnSync(process.execPath, [path.join(root, 'scripts/tauri.mjs'), 'build'], { cwd:root,stdio:'inherit' })
 if (result.error) throw result.error

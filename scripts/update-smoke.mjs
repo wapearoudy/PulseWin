@@ -6,6 +6,9 @@ import { homedir } from 'node:os'
 import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..')
+const personalConfig=path.join(process.env.APPDATA,'PulseWin/updates.json')
+const configBytes=()=>readFile(personalConfig).catch(error=>{if(error.code==='ENOENT')return null;throw error})
+const personalBefore=await configBytes()
 const current=JSON.parse(await readFile(path.join(root,'package.json'),'utf8')).version
 const parts=current.split('.').map(Number);parts[2]++;const next=parts.join('.')
 await mkdir(path.join(root,'test-results'),{recursive:true})
@@ -30,7 +33,10 @@ try{
   await page.waitForFunction(()=>!!window.__TAURI_INTERNALS__)
   const call=(cmd,args={})=>page.evaluate(({cmd,args})=>window.__TAURI_INTERNALS__.invoke(cmd,args),{cmd,args})
   const prefs=JSON.stringify(await call('get_preferences'))
+  const initial=await call('get_update_status')
+  assert.equal(initial.settings.source,JSON.parse(await readFile(path.join(root,'release-channel.json'),'utf8')).source,'A fresh profile must use the configured release source')
   await call('save_update_settings',{settings:{source:channel,automatic:false}})
+  assert.deepEqual(JSON.parse(await readFile(path.join(profile,'PulseWin/updates.json'),'utf8')),{source:channel,automatic:false},'Update settings must stay inside the isolated application profile')
   const available=await call('check_app_update');assert.equal(available.phase,'available');assert.equal(available.version,next)
   await call('verify_app_update_smoke',{version:next})
   assert.equal((await call('get_update_status')).downloaded,original.length)
@@ -47,6 +53,7 @@ try{
   assert.equal((await call('check_app_update')).phase,'current')
   await assert.rejects(call('install_app_update',{version:next}),/不允许安装/)
   assert.equal(JSON.stringify(await call('get_preferences')),prefs)
+  assert.deepEqual(await configBytes(),personalBefore,'Native update acceptance must not modify the user update settings')
   await call('show_settings',{provider:null})
   await page.goto(page.url().split('?')[0]+'?view=settings&account=general')
   // A fresh profile intentionally starts with explicit provider selection.
@@ -54,7 +61,7 @@ try{
   await page.getByRole('button',{name:'通用',exact:true}).click()
   await page.getByRole('button',{name:'检查更新',exact:true}).waitFor()
   await page.screenshot({path:path.join(root,'test-results/native-updates.png')})
-  const checks=['signed local download with real Tauri plugin','tampered bytes rejected','forged version rejected','same version skipped','native test install blocked','account preferences unchanged']
+  const checks=['isolated update configuration and default release source','signed local download with real Tauri plugin','tampered bytes rejected','forged version rejected','same version skipped','native test install blocked','account preferences unchanged','personal update settings unchanged']
   await writeFile(path.join(root,'test-results/update-smoke.json'),JSON.stringify({passed:true,testedAt:new Date().toISOString(),version:current,checks},null,2))
   console.log('PASS: signed local update download, tamper/version rejection, same-version skip and preferences preservation. No installer executed.')
 }finally{await browser?.close().catch(()=>{});child.kill()}

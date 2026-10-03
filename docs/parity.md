@@ -137,3 +137,7 @@ Signed in-app updates now support local build folders and public GitHub Releases
 Gemini OAuth client constants are no longer bundled. Refresh uses a complete client pair from explicit environment settings, credential JSON, or the installed Gemini CLI's static configuration. An unexpired access token does not need these values. Missing refresh configuration reports how to renew the CLI login rather than inventing credentials.
 
 Validation: 832 offline Rust regressions (one online test ignored), 181 frontend tests and 35 browser flows. Real native signed-download verification rejects tampered bytes and mismatched versions; native and read-only CLI smoke also pass. Installer execution and restart still require separate acceptance. This milestone does not establish full Pulse parity; remaining gaps above still apply. Evidence: release-0.1.4.json and screenshots/native-updates.png.
+
+### 0.1.5 maintenance release, 2026-10-03
+
+Online acceptance caught update configuration using the Windows Known Folder independently of the application's APPDATA profile. Updates now share the existing settings directory. Native regressions assert fresh default source, persisted isolated configuration and byte-for-byte unchanged personal update settings. The 0.1.4 signature checks remain valid, but configuration isolation was not established by those earlier tests. The current release evidence is release-0.1.5.json.

@@ -35,7 +35,7 @@ impl Default for Status {
 #[derive(Default)]
 pub struct UpdateState { status: Mutex<Status>, operation: tokio::sync::Mutex<()> }
 
-fn config_path() -> Option<PathBuf> { crate::credentials::config_dir().map(|p|p.join("PulseWin/updates.json")) }
+fn config_path() -> Option<PathBuf> { crate::settings::directory().map(|p|p.join("updates.json")) }
 fn load() -> UpdateSettings {
     config_path().and_then(|p|std::fs::read(p).ok()).and_then(|b|serde_json::from_slice::<UpdateSettings>(&b).ok())
         .filter(|s|validate_source(&s.source).is_ok()).unwrap_or_default()
