@@ -35,3 +35,9 @@ html.settings-view,html.settings-view body {background:#f5f5f7;color:#242428;ove
 .setting-control input[type=color] { width:36px; height:28px; padding:2px; border-radius:7px; cursor:pointer }
 .balance-input { display:flex; align-items:center; gap:8px; min-width:0 }
 .balance-input input[type=number] { width:115px }
+
+.network-endpoint{border-top:1px solid #ececef}.network-error{color:#9c4025;display:flex;align-items:center;justify-content:space-between;gap:12px}.about-version{color:#7a7a82;white-space:nowrap}.license-copy{font:11px/1.6 ui-monospace,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;max-height:320px;overflow:auto;margin:12px 0}.settings-group details:first-child{border-top:0}
+@media(prefers-color-scheme:dark){.network-endpoint{border-color:#45454a}.network-error{color:#ffd0b5}.about-version{color:#a7a7b0}}
+
+.settings-shell .update-source{background:#fff;border:1px solid #d6d6dc;border-radius:6px;padding:5px 8px;color:inherit}
+@media(prefers-color-scheme:dark){.settings-shell .update-source{background:#424247;border-color:#55555b;color:#eeeef0}}

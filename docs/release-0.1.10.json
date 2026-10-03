@@ -1,0 +1,181 @@
+{
+  "version": "0.1.10",
+  "verifiedAt": "2026-10-03T11:09:31.344778+00:00",
+  "repository": "wapearoudy/PulseWin",
+  "tests": {
+    "rust": 861,
+    "rustIgnored": 1,
+    "frontend": 181,
+    "browser": 58,
+    "finalTargetedBrowser": 13
+  },
+  "scope": "Network and refresh settings, HTTP CONNECT and SOCKS5 manual policy, superseded request cancellation, About metadata and licenses, grouped settings sidebar",
+  "nativeNetworkSmoke": {
+    "passed": true,
+    "version": "0.1.10",
+    "testedAt": "2026-10-03T11:06:26.980Z",
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\native-profile-network-eFdKaV",
+    "cancellationMs": 11,
+    "requests": [
+      [
+        "api.deepseek.com:443"
+      ],
+      [
+        "api.deepseek.com:443"
+      ]
+    ],
+    "checks": [
+      "real native UI and IPC",
+      "atomic manual endpoint save",
+      "no provider collection on opening",
+      "pending CONNECT cancelled",
+      "immediate retry through new proxy",
+      "errors do not become zero quota",
+      "stale generic saves preserve network",
+      "invalid endpoints preserve valid proxy",
+      "SOCKS5 and cadence restart persistence",
+      "native metadata and bundled licenses",
+      "unknown link rejected",
+      "installed profile byte equality"
+    ]
+  },
+  "nativeSmoke": {
+    "passed": true,
+    "checks": [
+      "native startup",
+      "no automatic collection",
+      "settings IPC permission",
+      "preferences persistence",
+      "shared panel preferences",
+      "floating rail restoration",
+      "native capsule geometry",
+      "floating stays expanded",
+      "disabled additional accounts never collect",
+      "per-account encrypted credentials",
+      "stale window preserves account metadata",
+      "account rename persists",
+      "removal preserves primary credentials"
+    ],
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\native-profile-xbbK4h",
+    "testedAt": "2026-10-03T11:07:00.728Z"
+  },
+  "cliSmoke": {
+    "passed": true,
+    "testedAt": "2026-10-03T11:06:58.133Z",
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\cli-profile-pL34Sm",
+    "checks": [
+      "release dispatch before GUI",
+      "enabled accounts only",
+      "actual window id pin",
+      "panel display rounding",
+      "dated observations",
+      "read-only files",
+      "no credential migration",
+      "same-service account identity and labels",
+      "separate account percentages and statusline"
+    ]
+  },
+  "traySmoke": {
+    "passed": true,
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\native-profile-tray-9OgQ2y",
+    "testedAt": "2026-10-03T11:07:03.838Z",
+    "geometry": {
+      "position": {
+        "x": 3360,
+        "y": 1477
+      },
+      "size": {
+        "width": 480,
+        "height": 603
+      },
+      "monitor": {
+        "name": "\\\\.\\DISPLAY2",
+        "size": {
+          "width": 3840,
+          "height": 2160
+        },
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "workArea": {
+          "position": {
+            "x": 0,
+            "y": 0
+          },
+          "size": {
+            "width": 3840,
+            "height": 2088
+          }
+        },
+        "scaleFactor": 1.5
+      },
+      "scale": 1.5,
+      "viewport": [
+        320,
+        402
+      ]
+    },
+    "checks": [
+      "native popup IPC and permissions",
+      "320 logical pixel width",
+      "content height adapts without resizing assistant",
+      "clamped to monitor work area",
+      "independent additional-account tabs",
+      "real settings style persistence",
+      "tray-only monitoring remains enabled",
+      "assistant visibility persists after process restart",
+      "Escape hides popup"
+    ],
+    "notTested": [
+      "physical taskbar mouse click",
+      "mixed-DPI displays",
+      "visual sharpness of OS-scaled tray icon"
+    ]
+  },
+  "updateSmoke": {
+    "passed": true,
+    "testedAt": "2026-10-03T11:07:07.075Z",
+    "version": "0.1.10",
+    "checks": [
+      "isolated update configuration and default release source",
+      "signed local download with real Tauri plugin",
+      "tampered bytes rejected",
+      "forged version rejected",
+      "same version skipped",
+      "native test install blocked",
+      "account preferences unchanged",
+      "personal update settings unchanged"
+    ]
+  },
+  "installationExecuted": false,
+  "limitations": [
+    "Not complete original parity",
+    "PAC/WPAD and proxy authentication absent",
+    "Real provider accounts and all helper proxy traffic not reverified",
+    "Actual installer overwrite/restart, mixed DPI and physical pointer acceptance remain open"
+  ],
+  "artifacts": [
+    {
+      "file": "pulsewin.exe",
+      "bytes": 7633920,
+      "sha256": "f87052bc716c324550ada0a9bcf7af2d0dbdf1e78ba84f686915ec37fce9cfe8",
+      "signature": false,
+      "mediumIntegrityRepaired": true
+    },
+    {
+      "file": "PulseWin_0.1.10_x64-setup.exe",
+      "bytes": 2959123,
+      "sha256": "de62f273c4338607e1a321307b03964681c7ca8af19388d3bee3ed739cd44426",
+      "signature": true,
+      "mediumIntegrityRepaired": true
+    },
+    {
+      "file": "PulseWin_0.1.10_x64_en-US.msi",
+      "bytes": 4694016,
+      "sha256": "e34118e0ecf34547affa8c8ec54f52e0548fe3b24b2d5be893ec551c122b5f3b",
+      "signature": true,
+      "mediumIntegrityRepaired": true
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # 应用内更新
 
-旧版首次安装带更新器的 0.1.5，之后通过「设置 → 通用 → 软件更新」或助手/托盘右键的「检查更新…」获取新版，再点「更新并重启」。0.1.4 已有更新器，可直接检查更新。更新沿用安装位置，账号选择、DPAPI 凭据和助手设置保存在原有用户目录，安装过程不清空这些数据。
+旧版首次安装带更新器的 0.1.5，之后通过「设置 → 通用（0.1.10 也可从关于进入）→ 软件更新」或助手/托盘右键的「检查更新…」获取新版，再点「更新并重启」。0.1.4 已有更新器，可直接检查更新。更新沿用安装位置，账号选择、DPAPI 凭据和助手设置保存在原有用户目录，安装过程不清空这些数据。
 
 默认发布地址：[GitHub Releases](https://github.com/wapearoudy/PulseWin/releases)。应用读取 `https://github.com/wapearoudy/PulseWin/releases/latest/download/latest.json`，无需 GitHub 登录。也可在「更新来源」填入绝对本机目录，例如 `E:\AI\ai-usage\PulseWin\updates`，保存后检查。
 

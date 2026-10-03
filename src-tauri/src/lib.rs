@@ -121,7 +121,7 @@ pub struct AppState {
     pub menu_open: std::sync::atomic::AtomicBool,
     pub generation: std::sync::atomic::AtomicU64,
     pub preferences: std::sync::Mutex<preferences::Preferences>,
-    pub ctx: Arc<Ctx>,
+    pub ctx: std::sync::RwLock<Arc<Ctx>>,
     pub snapshot: Mutex<Snapshot>,
     /// Serializes refreshes so a manual refresh cannot overlap the timer loop.
     pub refreshing: Mutex<()>,
@@ -164,7 +164,7 @@ impl AppState {
                 prefs.normalize(&providers::registry().iter().map(|p| p.id().to_string()).collect::<Vec<_>>());
                 prefs
             }),
-            ctx: Arc::new(ctx),
+            ctx: std::sync::RwLock::new(Arc::new(ctx)),
             snapshot: Mutex::new({
                 let prefs=preferences::load();let mut snapshot=usage_cache::stored_snapshot(&prefs.enabled_providers);
                 for p in &mut snapshot.providers{if let Some(label)=prefs.account_labels.get(&p.id){p.name=label.clone();}}
@@ -220,7 +220,14 @@ async fn refresh_pass(app:&AppHandle,state:&AppState,target:Option<&str>,due_onl
     if enabled.is_empty(){return state.snapshot.lock().await.clone();}
     let started=std::time::Instant::now();
     if !enabled.is_empty() { let _=app.emit("refresh-changed",serde_json::json!({"ids":enabled,"refreshing":true})); }
-    let fetched = providers::collect_accounts(Arc::clone(&state.ctx), &enabled, &prefs).await;
+    let ctx=Arc::clone(&state.ctx.read().unwrap());
+    let fetched=tokio::select!{
+        result=providers::collect_accounts(Arc::clone(&ctx),&enabled,&prefs)=>result,
+        _=ctx.cancelled.cancelled()=>{
+            let _=app.emit("refresh-changed",serde_json::json!({"ids":enabled,"refreshing":false}));
+            return state.snapshot.lock().await.clone();
+        }
+    };
     if !enabled.is_empty() {
         if let Some(remaining)=Duration::from_millis(650).checked_sub(started.elapsed()) { tokio::time::sleep(remaining).await; }
         let _=app.emit("refresh-changed",serde_json::json!({"ids":enabled,"refreshing":false}));
@@ -408,19 +415,37 @@ fn get_preferences(state: State<'_, AppState>) -> preferences::Preferences {
 async fn save_preferences(app: AppHandle, state: State<'_, AppState>, mut value: preferences::Preferences) -> Result<(), String> {
     let _guard=state.account_mutations.lock().await;
     // Metadata is changed only by account commands; old windows cannot erase it.
-    value.accounts=state.preferences.lock().unwrap().accounts.clone();
+    let authoritative=state.preferences.lock().unwrap().clone();
+    value.accounts=authoritative.accounts;
+    value.network_proxy=authoritative.network_proxy;
     apply_preferences(app,&state,value).await
+}
+#[tauri::command]
+fn get_network_status(state:State<'_,AppState>)->proxy::NetworkStatus{proxy::status(state.preferences.lock().unwrap().network_proxy.clone())}
+#[tauri::command]
+async fn save_network_settings(app:AppHandle,state:State<'_,AppState>,mut value:proxy::NetworkProxySettings)->Result<proxy::NetworkStatus,String>{
+    let _guard=state.account_mutations.lock().await;value.validate()?;
+    let mut prefs=state.preferences.lock().unwrap().clone();
+    if value.mode=="manual"&&value.endpoint().is_none()&&prefs.network_proxy.endpoint().is_some(){return Err("请填写完整主机和端口；无效输入不会替换原代理。".into())}
+    prefs.network_proxy=value;apply_preferences(app,&state,prefs).await?;
+    Ok(proxy::status(state.preferences.lock().unwrap().network_proxy.clone()))
 }
 async fn apply_preferences(app: AppHandle, state: &AppState, mut value: preferences::Preferences) -> Result<(), String> {
     value.normalize(&providers::registry().iter().map(|p| p.id().to_string()).collect::<Vec<_>>());
     let previous = state.preferences.lock().unwrap().clone();
+    let network_changed=value.network_proxy!=previous.network_proxy;
+    let replacement=if network_changed{Some(Arc::new(Ctx::with_network(&value.network_proxy).map_err(|_|"无法应用代理设置，已保留原设置。")?))}else{None};
     preferences::save(&value)?;
     *state.preferences.lock().unwrap() = value.clone();
     state.refresh_schedule.lock().unwrap().primary.retain(|id,_|value.enabled_providers.contains(id));
     state.refresh_wake.notify_one();
-    if value.enabled_providers != previous.enabled_providers || value.accounts != previous.accounts {
+    if value.enabled_providers != previous.enabled_providers || value.accounts != previous.accounts || network_changed {
         state.generation.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         token_spend::cancel_card_reads();
+    }
+    if let Some(next)=replacement {
+        let old=std::mem::replace(&mut *state.ctx.write().unwrap(),next);old.cancelled.cancel();
+        token_spend::spend_clear_snapshot();
     }
     let _ = app.emit("preferences-changed", &value);
     if previous.token_spend_enabled && !value.token_spend_enabled { token_spend::spend_clear_snapshot(); token_spend::cancel_card_reads(); }
@@ -448,7 +473,7 @@ async fn apply_preferences(app: AppHandle, state: &AppState, mut value: preferen
         update_tray(&app, &snapshot);
     }
     update_tray(&app,&*state.snapshot.lock().await);
-    if value.enabled_providers != previous.enabled_providers && !value.enabled_providers.is_empty() {
+    if (value.enabled_providers != previous.enabled_providers || network_changed) && !value.enabled_providers.is_empty() {
         tauri::async_runtime::spawn(async move {
             let state = app.state::<AppState>();
             refresh(&app, &state).await;
@@ -1400,6 +1425,10 @@ pub fn run() {
             get_activity,
             get_resets,
             get_preferences,
+            application::get_app_info,
+            application::open_about_link,
+            get_network_status,
+            save_network_settings,
             save_preferences,
             refresh_provider,
             refresh_now,

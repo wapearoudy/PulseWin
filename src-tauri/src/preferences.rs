@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Preferences {
+    pub network_proxy: crate::proxy::NetworkProxySettings,
     pub panel_visible: bool,
     pub tray_shows_usage: bool,
     pub tray_style: String,
@@ -43,7 +44,7 @@ pub struct Preferences {
 
 impl Default for Preferences {
     fn default() -> Self {
-        Self { panel_visible:true, tray_shows_usage:false, tray_style:"figure".into(), tray_account:None, accounts: vec![], account_labels: Default::default(), open_settings_shortcut: None, toggle_panel_shortcut: None, alerts: Default::default(), token_spend_enabled: false, token_spend_span: "week".into(), reset_celebration: true, enabled_providers: vec![], provider_order: vec![], panel_size: 1.0,
+        Self { network_proxy:Default::default(), panel_visible:true, tray_shows_usage:false, tray_style:"figure".into(), tray_account:None, accounts: vec![], account_labels: Default::default(), open_settings_shortcut: None, toggle_panel_shortcut: None, alerts: Default::default(), token_spend_enabled: false, token_spend_span: "week".into(), reset_celebration: true, enabled_providers: vec![], provider_order: vec![], panel_size: 1.0,
             rail_spacing: 1.0, round_ends: false, shows_remaining: false,
             show_percentages: true, label_above: false, auto_collapse: true,
             warning_threshold: 0.75, refresh_seconds: 120, refresh_automatic: true, show_reset_clock: false,
@@ -53,6 +54,7 @@ impl Default for Preferences {
 
 impl Preferences {
     pub fn normalize(&mut self, known: &[String]) {
+        self.network_proxy.normalize();
         let mut seen_accounts=std::collections::HashSet::new();
         self.accounts.retain(|a| crate::accounts::valid(a) && seen_accounts.insert(a.id.clone()));
         self.accounts.truncate(64);
@@ -184,5 +186,18 @@ impl AccountAppearance {
         let mut p=Preferences::default();p.account_appearance.insert("codex".into(),AccountAppearance{animated_mark:true,persona:"curious".into(),body:"gem".into(),..Default::default()});
         let saved:Preferences=serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
         assert_eq!(saved,p);assert!(saved.enabled_providers.is_empty());
+    }
+}
+
+#[cfg(test)] mod network_tests {
+    use super::*;
+    #[test] fn legacy_preferences_follow_system_without_enabling_accounts(){
+        let p:Preferences=serde_json::from_str("{}").unwrap();assert_eq!(p.network_proxy,crate::proxy::NetworkProxySettings::default());assert!(p.enabled_providers.is_empty());
+    }
+    #[test] fn manual_network_roundtrip_and_invalid_settings_keep_selection(){
+        let mut p:Preferences=serde_json::from_str(r#"{"networkProxy":{"mode":"manual","kind":"socks5","host":"127.0.0.1","port":1080},"enabledProviders":["codex"]}"#).unwrap();
+        p.normalize(&["codex".into()]);assert_eq!(p.network_proxy.endpoint().as_deref(),Some("socks5h://127.0.0.1:1080"));
+        assert_eq!(serde_json::from_str::<Preferences>(&serde_json::to_string(&p).unwrap()).unwrap(),p);
+        p.network_proxy.host="http://bad/path".into();p.normalize(&["codex".into()]);assert_eq!(p.network_proxy,crate::proxy::NetworkProxySettings::default());assert_eq!(p.enabled_providers,vec!["codex"]);
     }
 }

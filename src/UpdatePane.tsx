@@ -44,7 +44,7 @@ export function UpdatePane() {
       </div>
       <div className="setting-row"><div><strong>自动检查更新</strong><small>启动后和运行期间检查，有新版时由你选择更新。</small></div><div className="setting-control"><input type="checkbox" role="switch" aria-label="自动检查更新" checked={status?.settings.automatic??false} disabled={!status||busy||sourceDirty.current} onChange={event=>{void save(event.target.checked)}}/></div></div>
       <div className="setting-row"><div><strong>更新来源</strong><small>本机更新目录或 HTTPS 发布地址。保存后检查即可。</small></div></div>
-      <div className="group-copy" style={{display:'flex',gap:8,paddingBottom:12}}><input style={{flex:1,minWidth:0}} aria-label="更新来源" value={source} disabled={!status||busy} onChange={event=>{sourceDirty.current=true;setSource(event.target.value)}}/><button disabled={!status||busy||!sourceDirty.current} onClick={()=>{void save()}}>保存来源</button></div>
+      <div className="group-copy" style={{display:'flex',gap:8,paddingBottom:12}}><input className="update-source" style={{flex:1,minWidth:0}} aria-label="更新来源" value={source} disabled={!status||busy} onChange={event=>{sourceDirty.current=true;setSource(event.target.value)}}/><button disabled={!status||busy||!sourceDirty.current} onClick={()=>{void save()}}>保存来源</button></div>
       {status?.phase==='downloading'&&<div className="group-copy"><progress aria-label="更新下载进度" max={status.total??undefined} value={status.total?status.downloaded:undefined}/></div>}
       {status?.phase==='available'&&status.notes&&<p className="group-copy" style={{whiteSpace:'pre-wrap'}}>{status.notes}</p>}
       {(problem||status?.phase==='error')&&<p className="group-copy" role="alert">{problem??status?.error}</p>}

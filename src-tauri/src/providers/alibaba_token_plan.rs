@@ -342,7 +342,7 @@ fn environment(binary: &Path) -> Vec<(OsString, OsString)> {
     }
     environment.push((OsString::from("PATH"), joined));
 
-    environment
+    crate::preferences::load().network_proxy.process_environment(environment)
 }
 
 /// The command that runs `binary`, wrapped in `cmd.exe` when it is a batch file

@@ -88,3 +88,41 @@ pub fn set_autostart(app:AppHandle,enabled:bool)->Result<ApplicationSettings,Str
         for key in ["Control+KeyP","Alt+F5","Super+Shift+KeyP"]{assert!(validate(key).is_ok());}
     }
 }
+
+#[derive(Serialize)]
+pub struct AppInfo {version:&'static str,licenses:Vec<License>}
+#[derive(Serialize)]
+struct License {title:&'static str,text:&'static str}
+#[tauri::command]
+pub fn get_app_info()->AppInfo {
+    AppInfo{version:env!("CARGO_PKG_VERSION"),licenses:vec![
+        License{title:"Pulse 版权声明",text:include_str!("../../licenses/NOTICE-Pulse.txt")},
+        License{title:"Pulse · Apache License 2.0",text:include_str!("../../licenses/Pulse-Apache-2.0.txt")},
+        License{title:"rusqlite · MIT License",text:include_str!("../../licenses/rusqlite-MIT.txt")},
+    ]}
+}
+fn about_link(key:&str)->Result<&'static str,String>{match key{
+    "source"=>Ok("https://github.com/wapearoudy/PulseWin"),
+    "upstream"=>Ok("https://github.com/qunqin24/Pulse"),
+    "vinz"=>Ok("https://x.com/hivinz_/status/2092996055248126353"),
+    "icons"=>Ok("https://github.com/lobehub/lobe-icons"),
+    "morphbot"=>Ok("https://github.com/iduu/grokbot-animation"),
+    _=>Err("未知的关于页面链接。".into()),
+}}
+#[tauri::command]
+pub fn open_about_link(app:AppHandle,key:String)->Result<(),String>{
+    use tauri_plugin_opener::OpenerExt;
+    app.opener().open_url(about_link(&key)?,None::<&str>).map_err(|_|"无法打开浏览器，请稍后重试。".into())
+}
+
+#[cfg(test)] mod about_tests {
+    use super::*;
+    #[test] fn only_known_public_about_links_can_be_opened(){
+        for key in ["source","upstream","vinz","icons","morphbot"] {assert!(about_link(key).unwrap().starts_with("https://"));}
+        for key in ["https://evil.example","file:///C:/Windows","javascript:alert(1)","source?token=secret",""] {assert!(about_link(key).is_err());}
+    }
+    #[test] fn version_and_attribution_come_from_bundled_sources(){
+        let value=get_app_info();assert_eq!(value.version,env!("CARGO_PKG_VERSION"));assert_eq!(value.licenses.len(),3);
+        assert!(value.licenses[0].text.contains("qunqin24"));assert!(value.licenses[1].text.contains("Apache License"));assert!(value.licenses[2].text.contains("Permission is hereby granted"));
+    }
+}

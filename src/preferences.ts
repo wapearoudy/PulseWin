@@ -11,7 +11,15 @@ export interface AccountAppearance {
   ringColour: string | null
 }
 export const defaultAccountAppearance: AccountAppearance = { detailedCard: false, animatedMark: false, persona: 'automatic', body: 'blob', markColour: null, ringColour: null }
+export interface NetworkProxySettings {
+  mode: 'system' | 'manual'
+  kind: 'http' | 'socks5'
+  host: string
+  port: number | null
+}
+export const defaultNetworkProxy: NetworkProxySettings = { mode: 'system', kind: 'http', host: '', port: null }
 export interface Preferences {
+  networkProxy: NetworkProxySettings
   panelVisible: boolean
   trayShowsUsage: boolean
   trayStyle: 'figure' | 'ring' | 'split'
@@ -49,6 +57,7 @@ export interface Preferences {
   pinnedWindows: Record<string, string>
 }
 export const defaultPreferences: Preferences = {
+  networkProxy: { ...defaultNetworkProxy },
   panelVisible:true, trayShowsUsage:false, trayStyle:'figure', trayAccount:null,
   accounts: [], accountLabels: {},
   openSettingsShortcut: null, togglePanelShortcut: null,

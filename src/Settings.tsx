@@ -12,6 +12,8 @@ import { brandColour } from './panel/botmark/tint'
 import './settings.css'
 import { NotificationsPane, LowBalanceAlert } from './NotificationsPane'
 import { GeneralPane } from './GeneralPane'
+import { NetworkPane } from './NetworkPane'
+import { AboutPane } from './AboutPane'
 import { TokenSpendPane, releaseSpendSession } from './token-spend/TokenSpendPane'
 
 function SidebarSymbol({children}:{children:ReactNode}) {
@@ -21,10 +23,12 @@ function SidebarSymbol({children}:{children:ReactNode}) {
 const settingsPanes:[string,string,ReactNode,string][]=[
   ['appearance','外观',<SidebarSymbol><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.5-3.3 1.4 1.4 0 0 1 1-2.4H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3Z"/><circle cx="7.5" cy="10" r=".7" fill="currentColor"/><circle cx="10" cy="6.7" r=".7" fill="currentColor"/><circle cx="14" cy="6.7" r=".7" fill="currentColor"/><circle cx="17" cy="10" r=".7" fill="currentColor"/></SidebarSymbol>,'大小 间距 圆角 动画'],
   ['rings','圆环与数字',<SidebarSymbol><circle cx="12" cy="12" r="8" strokeDasharray="2.5 2.5"/></SidebarSymbol>,'百分比 剩余 预测 时间 第二圆环'],
-  ['behavior','位置与行为',<SidebarSymbol><rect x="3" y="4" width="18" height="16" rx="2"/><rect x="14" y="7" width="4" height="10" rx=".5" fill="currentColor" stroke="none"/></SidebarSymbol>,'收起 刷新 停靠 悬浮'],
+  ['behavior','位置与行为',<SidebarSymbol><rect x="3" y="4" width="18" height="16" rx="2"/><rect x="14" y="7" width="4" height="10" rx=".5" fill="currentColor" stroke="none"/></SidebarSymbol>,'收起 停靠 悬浮'],
   ['accounts','管理账号',<SidebarSymbol><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M12 4v16M4 12h16"/></SidebarSymbol>,'服务商 排序 添加'],
   ['notifications','通知',<SidebarSymbol><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M10 21h4"/></SidebarSymbol>,'额度 提醒 阈值 重置 失败 余额'],
   ['token-spend','Token 消耗',<SidebarSymbol><path d="M4 20h16"/><rect x="5" y="11" width="3" height="9" rx=".5"/><rect x="10.5" y="4" width="3" height="16" rx=".5"/><rect x="16" y="8" width="3" height="12" rx=".5"/></SidebarSymbol>,'统计 历史 费用 用量'],
+  ['network','网络与刷新',<SidebarSymbol><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18M5 6h14M5 18h14"/></SidebarSymbol>,'代理 proxy HTTP SOCKS5 主机 端口 刷新 检查间隔'],
+  ['about','关于',<SidebarSymbol><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7" r=".7" fill="currentColor"/></SidebarSymbol>,'版本 开源 致谢 许可 软件 更新'],
   ['general','通用',<SidebarSymbol><path d="M3 6h4m4 0h10M3 12h10m4 0h4M3 18h3m4 0h11"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/></SidebarSymbol>,'启动 快捷键 软件 更新'],
 ]
 
@@ -84,11 +88,14 @@ export default function Settings() {
     <aside className="settings-sidebar" aria-label="设置导航">
       <div className="settings-brand"><span className="brand-mark">◉</span><strong>Pulse</strong><span>Windows</span></div>
       <input type="search" aria-label="搜索设置与账号" placeholder="搜索设置与账号" value={query} onChange={e => setQuery(e.target.value)} />
-      <nav><p className="nav-section">面板</p>
-        {settingsPanes.filter(([id,title,,terms]) => `${id} ${title} ${terms}`.toLowerCase().includes(query.toLowerCase())).map(([id,title,icon]) => <button key={id} className={pane === id ? 'selected' : ''} onClick={() => { setPane(id); setChoose(false); setDismissed(true) }}><span className="settings-nav-icon" aria-hidden="true">{icon}</span><span className="settings-nav-label">{title}</span></button>)}
+      <nav>{[['面板', ['appearance', 'rings', 'behavior']], ['应用', ['general', 'notifications', 'network', 'accounts', 'token-spend']]].map(([title, ids]) => {
+        const entries = settingsPanes.filter(([id, name,,terms]) => (ids as string[]).includes(id) && `${id} ${name} ${terms}`.toLowerCase().includes(query.toLowerCase())).sort((a,b) => (ids as string[]).indexOf(a[0]) - (ids as string[]).indexOf(b[0]))
+        return entries.length > 0 && <div key={String(title)}><p className="nav-section">{title}</p>{entries.map(([id,name,icon]) => <button key={id} className={pane === id ? 'selected' : ''} onClick={() => { setPane(id); setChoose(false); setDismissed(true) }}><span className="settings-nav-icon" aria-hidden="true">{icon}</span><span className="settings-nav-label">{name}</span></button>)}</div>
+      })}
         <p className="nav-section">账号</p>
         {shown.map(p => <button key={p.id} className={pane === p.id ? 'selected' : ''} onClick={() => { setPane(p.id); setChoose(false); setDismissed(true) }}><span className="settings-nav-icon" aria-hidden="true"><ProviderIcon provider={p.id}/></span><span className="account-name">{p.name}</span></button>)}
         {!shown.length && query && <p className="muted">没有匹配的账号</p>}
+        {settingsPanes.filter(([id,name,,terms]) => id === 'about' && `${id} ${name} ${terms}`.toLowerCase().includes(query.toLowerCase())).map(([id,name,icon]) => <button key={id} className={pane === id ? 'selected' : ''} onClick={() => { setPane(id); setChoose(false); setDismissed(true) }}><span className="settings-nav-icon" aria-hidden="true">{icon}</span><span className="settings-nav-label">{name}</span></button>)}
       </nav><div className="sidebar-footer">{prefs.enabledProviders.length} 个账号显示在面板</div>
     </aside>
     <main className="settings-content">
@@ -110,11 +117,13 @@ export default function Settings() {
         <Toggle title="顶部显示百分比" value={prefs.topShowPercentages} disabled={busy} onChange={v=>change({topShowPercentages:v})}/><Toggle title="显示第二个用量圆环" subtitle="在主环内显示第二个额度窗口，单一窗口保持单环。" value={prefs.showSecondRing} disabled={busy} onChange={v=>change({showSecondRing:v})}/><Toggle title="收起时显示预警颜色" value={prefs.dockAlertColour} disabled={busy} onChange={v=>change({dockAlertColour:v})}/><Toggle title="数字显示在圆环上方" value={prefs.labelAbove} disabled={busy} onChange={v => change({ labelAbove: v })} />
         <Toggle title="显示用量预测" subtitle="按窗口内的平均使用速度估算，只在有足够信息时显示。" value={prefs.showForecast} disabled={busy} onChange={v=>change({showForecast:v})}/><Toggle title="重置时间圆环" subtitle="仅在服务明确报告窗口时长时显示。" value={prefs.showResetClock} disabled={busy} onChange={v => change({ showResetClock: v })} /><Toggle title="时间圆环显示剩余时间" value={prefs.clockRemaining} disabled={busy || !prefs.showResetClock} onChange={v => change({ clockRemaining: v })} /><Row title="变红阈值"><select disabled={busy} value={prefs.warningThreshold} onChange={e => change({ warningThreshold: Number(e.target.value) })}>{[.6,.7,.75,.8,.85,.9].map(v => <option key={v} value={v}>{Math.round(v*100)}%</option>)}</select></Row></Group>
       </> : pane === 'behavior' ? <>
-        <h1>位置与行为</h1><p className="page-description">面板交互与用量检查。</p>
+        <h1>位置与行为</h1><p className="page-description">面板位置、停靠与交互行为。</p>
         <Group title="面板"><Row title="位置" subtitle="靠近边缘停靠，也可以自由悬浮。"><select aria-label="面板位置" value={position} onChange={e=>{void setPanelPosition(e.target.value as typeof position).catch(err=>setError(String(err)))}}><option value="left">左侧</option><option value="top">顶部</option><option value="free">自由悬浮</option><option value="right">右侧</option></select></Row><Toggle title="全屏时隐藏" subtitle="在面板所在屏幕播放全屏内容时暂时隐藏，退出后恢复。" value={prefs.hideInFullscreen} disabled={busy} onChange={v=>change({hideInFullscreen:v})}/><Toggle title="跟随鼠标所在屏幕" subtitle="移到另一块屏幕时，保留面板在屏幕上的相对位置。" value={prefs.followActiveDisplay} disabled={busy} onChange={v=>change({followActiveDisplay:v})}/><Toggle title="自动收起" subtitle="鼠标离开后收起至屏幕边缘。" value={prefs.autoCollapse} disabled={busy} onChange={v => change({ autoCollapse: v })} /></Group>
-        <Group title="刷新"><Row title="检查间隔" subtitle="自动按工作活动和读数变化调整，仅检查已启用的账号。"><select disabled={busy} value={prefs.refreshAutomatic ? 'automatic' : String(prefs.refreshSeconds)} onChange={e => change(e.target.value === 'automatic' ? { refreshAutomatic: true } : { refreshAutomatic: false, refreshSeconds: Number(e.target.value) })}><option value="automatic">自动（2–30 分钟）</option>{[120,300,600,1800].map(v => <option key={v} value={v}>{v/60} 分钟</option>)}</select></Row></Group>
+
       </> : pane === 'notifications' ? <NotificationsPane alerts={prefs.alerts} disabled={busy} onChange={patch=>change({alerts:{...prefs.alerts,...patch}})}/>
         : pane === 'general' ? <GeneralPane/>
+        : pane === 'network' ? <NetworkPane preferences={prefs} disabled={busy} onChange={change}/>
+        : pane === 'about' ? <AboutPane/>
         : pane === 'token-spend' ? <TokenSpendPane enabled={prefs.tokenSpendEnabled} onEnabledChange={v=>change({tokenSpendEnabled:v})} span={prefs.tokenSpendSpan} onSpanChange={v=>change({tokenSpendSpan:v})}/>
         : pane === 'accounts' ? <>
         <h1>管理账号</h1><p className="page-description">控制面板显示的服务和排列顺序。</p><button onClick={() => { setSelection(prefs.enabledProviders); setChoose(true) }}>选择服务</button>

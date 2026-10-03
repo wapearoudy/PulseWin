@@ -92,6 +92,7 @@ use crate::model::{ProviderUsage, UsageWindow};
 /// hard timeout, so a provider that never answers degrades to an error card
 /// instead of freezing the refresh loop.
 pub struct Ctx {
+    pub cancelled: tokio_util::sync::CancellationToken,
     pub client: reqwest::Client,
     /// The same client with redirects turned **off**, for the self-hosted
     /// gateways.
@@ -109,12 +110,17 @@ pub struct Ctx {
 
 impl Ctx {
     pub fn new() -> anyhow::Result<Self> {
-        let client = configured_builder().build()?;
-        let gateway_client = configured_builder()
+        let mut network=crate::preferences::load().network_proxy;network.normalize();
+        Self::with_network(&network)
+    }
+    pub fn with_network(network:&crate::proxy::NetworkProxySettings)->anyhow::Result<Self>{
+        let client = configured_builder(network)?.build()?;
+        let gateway_client = configured_builder(network)?
             .redirect(reqwest::redirect::Policy::none())
             .build()?;
 
         Ok(Self {
+            cancelled: tokio_util::sync::CancellationToken::new(),
             client,
             gateway_client,
         })
@@ -124,29 +130,12 @@ impl Ctx {
 /// The client every request is made with, before the one thing the gateways
 /// need differently is applied.
 ///
-/// Built twice rather than cloned: `ClientBuilder` is not `Clone`, and the two
-/// clients around this share a connection pool anyway because the settings are
-/// identical apart from the redirect policy.
-fn configured_builder() -> reqwest::ClientBuilder {
-    let mut builder = reqwest::Client::builder()
-        .timeout(Duration::from_secs(20))
-        .connect_timeout(Duration::from_secs(8))
-        .user_agent(concat!("PulseWin/", env!("CARGO_PKG_VERSION")));
-
-    // Windows keeps its proxy configuration in the registry, not in the
-    // environment. Without this, every provider call times out for users
-    // behind a local proxy (Clash, v2ray, a corporate MITM) — which is the
-    // common setup for anyone using these tools.
-    if let Some(url) = crate::proxy::system_proxy() {
-        if let Ok(mut proxy) = reqwest::Proxy::all(&url) {
-            if let Some(no_proxy) = crate::proxy::system_no_proxy() {
-                proxy = proxy.no_proxy(reqwest::NoProxy::from_string(&no_proxy));
-            }
-            builder = builder.proxy(proxy);
-        }
-    }
-
-    builder
+/// Built twice because `ClientBuilder` is not `Clone`. Each client retains its
+/// own connection pool, and both receive the same current proxy policy.
+fn configured_builder(network:&crate::proxy::NetworkProxySettings)->anyhow::Result<reqwest::ClientBuilder>{
+    crate::proxy::configure(reqwest::Client::builder()
+        .timeout(Duration::from_secs(20)).connect_timeout(Duration::from_secs(8))
+        .user_agent(concat!("PulseWin/", env!("CARGO_PKG_VERSION"))),network).map_err(anyhow::Error::msg)
 }
 
 pub type FetchFuture = BoxFuture<'static, ProviderUsage>;

@@ -153,3 +153,10 @@ General settings select the tightest pinned quota automatically or a named enabl
 Panel visibility is persisted independently from enabled accounts and restored on process startup. Hiding the assistant does not disable collection. Native dashboard geometry uses the clicked monitor's physical work area and DPI, stays inside it, and adapts its own content height without changing the assistant frame. Escape and lost focus hide the dashboard.
 
 Verification: 849 Rust, 181 frontend, 49 full-suite browser tests, followed by 13 targeted dashboard tests after the native window-thread and pending-close corrections. Native IPC, restart and release evidence: `docs/release-0.1.9.json`, `docs/tray-dashboard.md`. Physical taskbar clicks and mixed-DPI transitions remain unverified; this milestone is not a declaration of complete parity.
+
+
+### 0.1.10 milestone — network and About
+
+Added system / manual HTTP CONNECT / SOCKS5 settings, atomic validated endpoints, shared provider policy and proxy reconfiguration cancellation. Proxy changes retry only enabled accounts; generic stale preference writes cannot replace the authoritative network configuration. Kiro / Alibaba helper environments and models.dev price fetches consume the saved policy; gateway redirects remain disabled, editor loopback remains direct and updates retain system proxy policy. Network refresh cadence moved to its own page. About exposes compiled version, existing signed updates, allowlisted project / attribution links and bundled licenses.
+
+Verification: 861 Rust tests plus one ignored, 181 frontend tests, 58 browser flows and 13 final targeted flows. Real native isolated-profile smoke tests proxy replacement and restart persistence without an upstream connection; CONNECT fake servers observe FIN by draining their socket. Details and remaining PAC / auth / real-account limits are in [networking.md](networking.md).

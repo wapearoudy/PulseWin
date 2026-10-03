@@ -223,8 +223,8 @@ async fn fetch_prices(cache: &Path, cancel: &AtomicBool) -> (Prices, Option<Stri
         return (value.prices.clone(), DateTime::from_timestamp(value.fetched_at, 0).map(|d| d.to_rfc3339()), "cached".into());
     } }
     let request = async {
-        let mut builder = reqwest::Client::builder().timeout(Duration::from_secs(30));
-        if let Some(proxy) = crate::proxy::system_proxy() { if let Ok(proxy) = reqwest::Proxy::all(proxy) { builder = builder.proxy(proxy); } }
+        let network=crate::preferences::load().network_proxy;
+        let builder=crate::proxy::configure(reqwest::Client::builder().timeout(Duration::from_secs(30)),&network).ok()?;
         let response = builder.build().ok()?.get("https://models.dev/api.json").send().await.ok()?.error_for_status().ok()?;
         // The public table has a bound too; no transcript, key or identity is sent.
         if response.content_length().is_some_and(|n| n > 32 * 1024 * 1024) { return None; }
