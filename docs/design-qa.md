@@ -26,3 +26,7 @@
 0.1.4 更新设置：screenshots/native-updates.png 为真实发布版 WebView2、隔离用户目录。通用设置显示当前版本、来源、自动检查开关和手动检查入口。来源编辑和下载/安装状态有浏览器回归；签名拒绝由原生插件验证。截图不作为安装器实际覆盖/重启的证明。
 
 0.1.6 侧栏一致性：此前通知、Token 消耗、通用缺少图标列，文字比其他入口偏左。7 个设置入口改为共用渲染结构，图标均采用单色 SVG；新增三项对应原版 bell/chart.bar/slider.horizontal.3，外观、圆环、位置也对应原版图标语义。图标列均为18px、间距10px；960px 窗口下文字左边界均为50px、行高均为33.5px。真实浏览器检查浅色/深色的图标颜色跟随文本和选中状态，720×480 无横向溢出，三项导航和搜索正常。截图：screenshots/sidebar-consistent-light.png、screenshots/sidebar-consistent-dark.png。
+
+0.1.7 滚动条：设置中的垂直/水平滚动区域统一为8px宽度、4px可见圆角滑块，轨道/角落透明，去掉上下箭头。侧栏和内容区固定窄滚动条空间，避免筛选或页面切换改变内容宽度；明暗配色、悬停、拖动和系统高对比度均使用对应颜色。浏览器专项检查明确禁用 Playwright 默认的 --hide-scrollbars 参数，以真实绘制和命中滚动条；侧栏及内容区滚轮、实际滑块拖动、720×480 布局均通过。截图使用隔离模拟账号：screenshots/scrollbars-light.png、screenshots/scrollbars-dark.png。
+
+0.1.7 发布版 WebView2 实测两处滚动条8px宽、透明轨道、无箭头；截图 screenshots/native-scrollbars.png 为隔离 APPDATA 的原生窗口，未启用账号采集。35项浏览器流程、原生助手、CLI、签名更新验收均通过；发布包哈希及检查边界在 release-0.1.7.json。

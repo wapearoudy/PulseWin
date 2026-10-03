@@ -1,0 +1,143 @@
+{
+  "version": "0.1.7",
+  "verifiedAt": "2026-10-03T08:44:55.2181941Z",
+  "repository": "wapearoudy/PulseWin",
+  "tests": {
+    "browser": 35
+  },
+  "changeScope": "CSS-only scrollbar styling; frontend and Rust logic unchanged.",
+  "nativeSmoke": {
+    "passed": true,
+    "checks": [
+      "native startup",
+      "no automatic collection",
+      "settings IPC permission",
+      "preferences persistence",
+      "shared panel preferences",
+      "floating rail restoration",
+      "native capsule geometry",
+      "floating stays expanded"
+    ],
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\native-profile-PY8ITt",
+    "testedAt": "2026-10-03T08:44:19.149Z"
+  },
+  "cliSmoke": {
+    "passed": true,
+    "testedAt": "2026-10-03T08:44:16.431Z",
+    "profile": "E:\\AI\\ai-usage\\PulseWin\\test-results\\cli-profile-PyLG2Z",
+    "checks": [
+      "release dispatch before GUI",
+      "enabled accounts only",
+      "actual window id pin",
+      "panel display rounding",
+      "dated observations",
+      "read-only files",
+      "no credential migration"
+    ]
+  },
+  "updateSmoke": {
+    "passed": true,
+    "testedAt": "2026-10-03T08:44:18.012Z",
+    "version": "0.1.7",
+    "checks": [
+      "isolated update configuration and default release source",
+      "signed local download with real Tauri plugin",
+      "tampered bytes rejected",
+      "forged version rejected",
+      "same version skipped",
+      "native test install blocked",
+      "account preferences unchanged",
+      "personal update settings unchanged"
+    ]
+  },
+  "scrollbars": {
+    "passed": true,
+    "light": [
+      {
+        "selector": ".settings-sidebar nav",
+        "width": "8px",
+        "arrows": "none",
+        "track": "rgba(0, 0, 0, 0)",
+        "thumb": "rgba(36, 36, 40, 0.42)",
+        "radius": "999px",
+        "gutter": 8,
+        "overflow": true
+      },
+      {
+        "selector": ".settings-content",
+        "width": "8px",
+        "arrows": "none",
+        "track": "rgba(0, 0, 0, 0)",
+        "thumb": "rgba(36, 36, 40, 0.25)",
+        "radius": "999px",
+        "gutter": 8,
+        "overflow": true
+      }
+    ],
+    "dark": [
+      {
+        "selector": ".settings-sidebar nav",
+        "width": "8px",
+        "arrows": "none",
+        "track": "rgba(0, 0, 0, 0)",
+        "thumb": "rgba(235, 235, 245, 0.25)",
+        "radius": "999px",
+        "gutter": 8,
+        "overflow": true
+      },
+      {
+        "selector": ".settings-content",
+        "width": "8px",
+        "arrows": "none",
+        "track": "rgba(0, 0, 0, 0)",
+        "thumb": "rgba(235, 235, 245, 0.42)",
+        "radius": "999px",
+        "gutter": 8,
+        "overflow": true
+      }
+    ],
+    "wheel": true,
+    "drag": true,
+    "narrow": true,
+    "highContrast": true
+  },
+  "nativeScrollbars": {
+    "passed": true,
+    "testedAt": "2026-10-03T08:44:17.964Z",
+    "native": [
+      {
+        "selector": ".settings-sidebar nav",
+        "width": "8px",
+        "arrows": "none",
+        "track": "rgba(0, 0, 0, 0)",
+        "overflow": true
+      },
+      {
+        "selector": ".settings-content",
+        "width": "8px",
+        "arrows": "none",
+        "track": "rgba(0, 0, 0, 0)",
+        "overflow": true
+      }
+    ],
+    "installationExecuted": false
+  },
+  "installationExecuted": false,
+  "artifacts": [
+    {
+      "sha256": "433EC84B33E5FF7762EC0C619726F5ADB82FFBC01DBF6CEB34977BA9AAFC1D78",
+      "bytes": 7408128,
+      "path": "src-tauri/target/release/pulsewin.exe"
+    },
+    {
+      "sha256": "C29E089DB495164E609B304212CBE854258F8763C4A41D01692C662E81E83EDB",
+      "bytes": 2876930,
+      "path": "src-tauri/target/release/bundle/nsis/PulseWin_0.1.7_x64-setup.exe"
+    },
+    {
+      "sha256": "94FC3A0926E25B60B18BEFE0CEEA2DD82B5FF2219A18827953783C980FFF4E0B",
+      "bytes": 4587520,
+      "path": "src-tauri/target/release/bundle/msi/PulseWin_0.1.7_x64_en-US.msi"
+    }
+  ]
+}
