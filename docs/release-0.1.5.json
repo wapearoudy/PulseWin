@@ -1,6 +1,6 @@
 {
   "version": "0.1.5",
-  "verifiedAt": "2026-10-03T08:12:34.7317792Z",
+  "verifiedAt": "2026-10-03T08:14:36.3122294Z",
   "repository": "wapearoudy/PulseWin",
   "defaultSource": "https://github.com/wapearoudy/PulseWin/releases/latest/download/latest.json",
   "tests": {
@@ -77,5 +77,51 @@
       "path": "src-tauri/target/release/bundle/msi/PulseWin_0.1.5_x64_en-US.msi"
     }
   ],
-  "frontendAndBrowser": "UI unchanged from 0.1.4 full regression; 0.1.5 native, CLI and update acceptance repeated."
+  "frontendAndBrowser": "UI unchanged from 0.1.4 full regression; 0.1.5 native, CLI and update acceptance repeated.",
+  "githubSmoke": {
+    "passed": true,
+    "testedAt": "2026-10-03T08:13:37.419Z",
+    "repository": "wapearoudy/PulseWin",
+    "release": "https://github.com/wapearoudy/PulseWin/releases/tag/v0.1.5",
+    "version": "0.1.5",
+    "anonymousAssets": [
+      {
+        "name": "latest.json",
+        "bytes": 2364,
+        "sha256": "12d38f82794d27419519ab2a70a7eb0d94bc3403a432cc43cf573a50a09bb3dc"
+      },
+      {
+        "name": "PulseWin_0.1.5_x64-setup.exe",
+        "bytes": 2875641,
+        "sha256": "50130fac4bac5c2421b415e7f2571013cc770d864e8cd688d8dc302c30d557e8"
+      },
+      {
+        "name": "PulseWin_0.1.5_x64-setup.exe.sig",
+        "bytes": 436,
+        "sha256": "0e68dbb35ab11e44e946fb7d4f6cafa6a0664a32a3681d9bfee80a8403ae46e3"
+      },
+      {
+        "name": "PulseWin_0.1.5_x64_en-US.msi",
+        "bytes": 4587520,
+        "sha256": "1765c72ba7eff90b180c2e31719d251cd572411ee1aa5f11d8a8a84c3b7a8f9e"
+      },
+      {
+        "name": "PulseWin_0.1.5_x64_en-US.msi.sig",
+        "bytes": 436,
+        "sha256": "2fce52e2041e4c6aeb73c1d3144336fada1a61cec19b0672221a9b5db8d14d30"
+      }
+    ],
+    "nativeCheck": {
+      "phase": "current",
+      "source": "https://github.com/wapearoudy/PulseWin/releases/latest/download/latest.json",
+      "currentVersion": "0.1.5"
+    },
+    "installationExecuted": false,
+    "signedUpgradeDownload": {
+      "from": "0.1.4",
+      "to": "0.1.5",
+      "passed": true,
+      "actualPublishedPackage": true
+    }
+  }
 }

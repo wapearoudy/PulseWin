@@ -141,3 +141,5 @@ Validation: 832 offline Rust regressions (one online test ignored), 181 frontend
 ### 0.1.5 maintenance release, 2026-10-03
 
 Online acceptance caught update configuration using the Windows Known Folder independently of the application's APPDATA profile. Updates now share the existing settings directory. Native regressions assert fresh default source, persisted isolated configuration and byte-for-byte unchanged personal update settings. The 0.1.4 signature checks remain valid, but configuration isolation was not established by those earlier tests. The current release evidence is release-0.1.5.json.
+
+Public release acceptance passed: five anonymous asset downloads match local SHA-256; the current native client checks its default GitHub feed, and a real 0.1.4 client detects, downloads and verifies the actual published 0.1.5 package without executing installation. Exit, overwrite and restart acceptance remains open.
