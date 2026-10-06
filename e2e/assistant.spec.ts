@@ -215,6 +215,31 @@ test('a failed reading keeps its message and connection action within the card',
   expect(await page.evaluate(()=>(window as any).testCommands.some((c:any)=>c.cmd==='show_settings'))).toBe(true)
 })
 
+test('cached Codex quota shows the failed refresh and retries only its account',async({page})=>{
+  await page.evaluate(()=>{
+    const w=window as any
+    Object.assign(w.testSnapshot.providers[1],{windows:[{id:'primary_window',label:'7d',percentUsed:37}],stale:true,error:'连接超时，请检查系统代理。',fetchedAt:new Date(Date.now()-9*3600000).toISOString()})
+    w.testEmit('usage-updated',w.testSnapshot);w.testEmit('hover-changed','entry:codex')
+  })
+  await expect(page.locator('.card__percent')).toContainText('37% 已用')
+  await expect(page.locator('.card__footnote')).toContainText('旧读数 · 截至')
+  await expect(page.locator('.card__refresh-error')).toContainText('连接超时，请检查系统代理。')
+  const retry=page.getByRole('button',{name:'重新检查',exact:true})
+  await expect(retry).toBeVisible()
+  const a=(await retry.boundingBox())!,b=(await page.locator('.card').boundingBox())!
+  expect(a.y+a.height).toBeLessThanOrEqual(b.y+b.height-10)
+  await retry.click()
+  expect(await page.evaluate(()=>(window as any).testCommands.filter((c:any)=>c.cmd==='refresh_provider').map((c:any)=>c.args.provider))).toEqual(['codex'])
+  await page.locator('.card').screenshot({path:'test-results/codex-cached-refresh-error.png'})
+  await page.evaluate(()=>{
+    const w=window as any;Object.assign(w.testSnapshot.providers[1],{windows:[{id:'primary_window',label:'7d',percentUsed:41}],stale:false,error:null,fetchedAt:new Date().toISOString()});w.testEmit('usage-updated',w.testSnapshot)
+  })
+  await expect(page.locator('.card__percent')).toContainText('41% 已用')
+  await expect(page.locator('.card__refresh-error')).toHaveCount(0)
+  await expect(page.locator('.card__footnote')).toHaveCount(0)
+  await expect(page.locator('.card__title')).not.toContainText('旧读数')
+})
+
 test('balance-only readings show real money without inventing a percentage or resizing',async({page})=>{
   await page.evaluate(()=>{
     const w=window as any;Object.assign(w.testSnapshot.providers[4],{windows:[],creditRemaining:{amount:999999,currency:'CNY'},error:null})

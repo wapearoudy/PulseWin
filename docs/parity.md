@@ -29,6 +29,13 @@ All unchecked items remain incomplete or unverified. No overall completion perce
 
 ## Verification baseline
 
+0.1.13 fixes Codex quota freshness after external system proxy changes, makes
+cached-reading failures and scoped retry visible in assistant cards, and fixes
+percentage-point parsing below 1%. Validation: 885 Rust tests plus two ignored,
+182 frontend and 60 browser tests. Real native isolated-profile recovery from
+37% cached to 41% live was verified with the same read-only CLI login. See
+`codex-quota-refresh.md` and `release-0.1.13.json`. This is not full parity.
+
 Current Token Spend readers: 12 of 54. DeepSeek Harness is implemented in
 0.1.12; 42 sources remain unsupported. Four implemented readers require prepared
 exports/captures. Historical milestone counts below describe their release date.

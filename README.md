@@ -26,9 +26,9 @@ Target platform: Windows 11 Pro (x64). The last release build in this tree produ
 
 | Artifact | Path | Size |
 | --- | --- | --- |
-| Application | `src-tauri/target/release/pulsewin.exe` | ~7.06 MiB |
-| Installer (MSI) | `src-tauri/target/release/bundle/msi/PulseWin_0.1.7_x64_en-US.msi` | ~4.38 MiB |
-| Installer (NSIS) | `src-tauri/target/release/bundle/nsis/PulseWin_0.1.7_x64-setup.exe` | ~2.74 MiB |
+| Application | `src-tauri/target/release/pulsewin.exe` | ~7.39 MiB |
+| Installer (MSI) | `src-tauri/target/release/bundle/msi/PulseWin_0.1.13_x64_en-US.msi` | ~4.60 MiB |
+| Installer (NSIS) | `src-tauri/target/release/bundle/nsis/PulseWin_0.1.13_x64-setup.exe` | ~2.86 MiB |
 
 What is covered by tests, and what is not, is set out under [Tests](#tests).
 

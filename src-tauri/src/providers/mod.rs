@@ -92,6 +92,7 @@ use crate::model::{ProviderUsage, UsageWindow};
 /// hard timeout, so a provider that never answers degrades to an error card
 /// instead of freezing the refresh loop.
 pub struct Ctx {
+    policy: crate::proxy::Policy,
     pub cancelled: tokio_util::sync::CancellationToken,
     pub client: reqwest::Client,
     /// The same client with redirects turned **off**, for the self-hosted
@@ -114,16 +115,32 @@ impl Ctx {
         Self::with_network(&network)
     }
     pub fn with_network(network:&crate::proxy::NetworkProxySettings)->anyhow::Result<Self>{
-        let client = configured_builder(network)?.build()?;
-        let gateway_client = configured_builder(network)?
+        Self::with_policy(crate::proxy::Policy::capture(network).map_err(anyhow::Error::msg)?)
+    }
+    pub(crate) fn with_policy(policy:crate::proxy::Policy)->anyhow::Result<Self>{
+        let client = configured_builder(&policy)?.build()?;
+        let gateway_client = configured_builder(&policy)?
             .redirect(reqwest::redirect::Policy::none())
             .build()?;
 
         Ok(Self {
+            policy,
             cancelled: tokio_util::sync::CancellationToken::new(),
             client,
             gateway_client,
         })
+    }
+    pub(crate) fn current(slot:&std::sync::RwLock<Arc<Self>>,network:&crate::proxy::NetworkProxySettings)->anyhow::Result<Arc<Self>>{
+        Self::current_with_policy(slot,crate::proxy::Policy::capture(network).map_err(anyhow::Error::msg)?)
+    }
+    pub(crate) fn current_with_policy(slot:&std::sync::RwLock<Arc<Self>>,policy:crate::proxy::Policy)->anyhow::Result<Arc<Self>>{
+        let mut current=slot.write().unwrap();
+        if current.policy != policy {
+            let next=Arc::new(Self::with_policy(policy)?);
+            let old=std::mem::replace(&mut *current,next);
+            old.cancelled.cancel();
+        }
+        Ok(Arc::clone(&current))
     }
 }
 
@@ -132,10 +149,10 @@ impl Ctx {
 ///
 /// Built twice because `ClientBuilder` is not `Clone`. Each client retains its
 /// own connection pool, and both receive the same current proxy policy.
-fn configured_builder(network:&crate::proxy::NetworkProxySettings)->anyhow::Result<reqwest::ClientBuilder>{
-    crate::proxy::configure(reqwest::Client::builder()
+fn configured_builder(policy:&crate::proxy::Policy)->anyhow::Result<reqwest::ClientBuilder>{
+    policy.configure(reqwest::Client::builder()
         .timeout(Duration::from_secs(20)).connect_timeout(Duration::from_secs(8))
-        .user_agent(concat!("PulseWin/", env!("CARGO_PKG_VERSION"))),network).map_err(anyhow::Error::msg)
+        .user_agent(concat!("PulseWin/", env!("CARGO_PKG_VERSION")))).map_err(anyhow::Error::msg)
 }
 
 pub type FetchFuture = BoxFuture<'static, ProviderUsage>;

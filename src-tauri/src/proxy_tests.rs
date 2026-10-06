@@ -5,6 +5,37 @@ use std::{ffi::OsString, time::Duration};
 fn manual(kind: &str, port: u16) -> NetworkProxySettings {
     NetworkProxySettings { mode: "manual".into(), kind: kind.into(), host: "127.0.0.1".into(), port: Some(port) }
 }
+
+#[tokio::test]
+async fn refresh_follows_system_proxy_changes_without_a_preference_save() {
+    use crate::providers::Ctx;
+    use std::sync::{Arc,RwLock};
+    let first=TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let second=TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let policy=|port|Policy{settings:Default::default(),system:Some(format!("http://127.0.0.1:{port}")),bypass:None,environment:vec![]};
+    let original=policy(first.local_addr().unwrap().port());
+    let changed=policy(second.local_addr().unwrap().port());
+    let slot=RwLock::new(Arc::new(Ctx::with_policy(original.clone()).unwrap()));
+    let old=Arc::clone(&slot.read().unwrap());
+    let respond=|listener:TcpListener,value:&'static str|tokio::spawn(async move{
+        let (mut stream,_)=listener.accept().await.unwrap();let headers=request_headers(&mut stream).await;
+        stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{value}",value.len()).as_bytes()).await.unwrap();headers
+    });
+    let first_server=respond(first,"37");
+    assert_eq!(old.client.get("http://codex-quota.invalid/usage").send().await.unwrap().text().await.unwrap(),"37");
+    assert!(first_server.await.unwrap().contains("http://codex-quota.invalid/usage"));
+    let second_server=respond(second,"41");
+    let current=Ctx::current_with_policy(&slot,changed.clone()).unwrap();
+    assert!(!Arc::ptr_eq(&old,&current),"The client must follow the changed system route even when preferences are unchanged");
+    assert!(old.cancelled.is_cancelled());
+    assert!(!current.cancelled.is_cancelled());
+    assert_eq!(current.client.get("http://codex-quota.invalid/usage").send().await.unwrap().text().await.unwrap(),"41");
+    assert!(second_server.await.unwrap().contains("http://codex-quota.invalid/usage"));
+    assert!(Arc::ptr_eq(&current,&Ctx::current_with_policy(&slot,changed.clone()).unwrap()),"Keep the connection pool when the effective policy is unchanged");
+    let mut bypass_changed=changed;bypass_changed.bypass=Some("localhost".into());
+    let next=Ctx::current_with_policy(&slot,bypass_changed).unwrap();
+    assert!(!Arc::ptr_eq(&current,&next));assert!(current.cancelled.is_cancelled());
+}
 async fn request_headers(stream: &mut TcpStream) -> String {
     let mut bytes = Vec::new();
     loop {

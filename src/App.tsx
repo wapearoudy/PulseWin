@@ -307,7 +307,7 @@ export default function App() {
     () => providers.reduce((most, p) => Math.max(most, p.windows.length), 6),
     [providers],
   )
-  const tallest = useMemo(() => cardBox(edge, maximumCardLayout, maxRows, false, true), [edge, maximumCardLayout, maxRows])
+  const tallest = useMemo(() => cardBox(edge, maximumCardLayout, maxRows, false, true, true), [edge, maximumCardLayout, maxRows])
 
   const isTop = edge === 'top'
   const gap = cardLayout.horizontalGap
@@ -336,7 +336,7 @@ export default function App() {
   )
 
   const cardSize = useMemo(
-    () => cardBox(edge, cardLayout, activeProvider?.windows.length ?? 0, balanceOnly(activeProvider),!!activeProvider?.stale),
+    () => cardBox(edge, cardLayout, activeProvider?.windows.length ?? 0, balanceOnly(activeProvider),!!activeProvider?.stale,!!activeProvider?.error),
     [edge, cardLayout, activeProvider],
   )
 
@@ -480,6 +480,8 @@ export default function App() {
             showsRemaining={preferences.showsRemaining}
             usesRoundEnds={preferences.roundEnds}
             tokenSpendEnabled={preferences.tokenSpendEnabled}
+            onRetry={handleRefresh}
+            refreshing={refreshingIds.has(activeProvider.id) || refreshingIds.has('*')}
           />
         </div>
       ) : null}

@@ -1,0 +1,189 @@
+{
+  "version": "0.1.13",
+  "verifiedAt": "2026-10-06T12:29:30.817101+00:00",
+  "repository": "wapearoudy/PulseWin",
+  "scope": "Codex quota freshness, dynamic system proxy refresh, visible cached-reading failures and percentage-point parsing",
+  "tests": {
+    "rust": 885,
+    "rustIgnored": 2,
+    "frontend": 182,
+    "browser": 60
+  },
+  "installationExecuted": false,
+  "limitations": [
+    "The exact old installed-process error was not recovered; stale cache and post-start WinINET mutation were observed",
+    "Authentication refusals still require repairing the login",
+    "Not full parity with original Pulse; 42 Token Spend sources remain unsupported",
+    "Physical pointer/mixed-DPI acceptance and installer overwrite/restart remain unverified"
+  ],
+  "artifacts": [
+    {
+      "file": "pulsewin.exe",
+      "bytes": 7750144,
+      "sha256": "29ce522c4aaa21fb0acd7251dae0453ece11ef106c32f1d69ece1534e9b17434",
+      "updaterSignature": false,
+      "mediumIntegrityRepaired": true
+    },
+    {
+      "file": "PulseWin_0.1.13_x64-setup.exe",
+      "bytes": 3000782,
+      "sha256": "b4e044cbb275576229fd0247662bd016a789b60e96c04596965a7dba807d1bb8",
+      "updaterSignature": true,
+      "mediumIntegrityRepaired": true
+    },
+    {
+      "file": "PulseWin_0.1.13_x64_en-US.msi",
+      "bytes": 4825088,
+      "sha256": "c7a33b5cd244cd705103f84863a1940fd3b718e273d55146251c8704ed9bc66a",
+      "updaterSignature": true,
+      "mediumIntegrityRepaired": true
+    }
+  ],
+  "nativeCodexRecovery": {
+    "passed": true,
+    "version": "0.1.13",
+    "testedAt": "2026-10-06T12:27:46.650Z",
+    "old": {
+      "percentUsed": 37,
+      "fetchedAt": "2026-10-06T03:15:37Z",
+      "stale": true
+    },
+    "fresh": {
+      "windows": [
+        {
+          "label": "7d",
+          "percentUsed": 41,
+          "windowSeconds": 604800
+        }
+      ],
+      "fetchedAt": "2026-10-06T12:27:44Z",
+      "stale": false
+    },
+    "checks": [
+      "real native Tauri IPC and retry button",
+      "isolated APPDATA",
+      "read-only actual CLI login",
+      "forced connection failure preserves prior observation",
+      "failure reason and retry visible in assistant",
+      "network recovery in the same process",
+      "fresh reading removes stale and failure UI",
+      "subsequent scoped refresh remains fresh"
+    ],
+    "credentialsUnchanged": true,
+    "personalPreferencesUnchanged": true
+  },
+  "nativeSmoke": {
+    "passed": true,
+    "checks": [
+      "native startup",
+      "no automatic collection",
+      "settings IPC permission",
+      "preferences persistence",
+      "shared panel preferences",
+      "floating rail restoration",
+      "native capsule geometry",
+      "floating stays expanded",
+      "disabled additional accounts never collect",
+      "per-account encrypted credentials",
+      "stale window preserves account metadata",
+      "account rename persists",
+      "removal preserves primary credentials"
+    ],
+    "testedAt": "2026-10-06T12:23:13.533Z"
+  },
+  "networkSmoke": {
+    "passed": true,
+    "version": "0.1.13",
+    "testedAt": "2026-10-06T12:23:54.673Z",
+    "cancellationMs": 19,
+    "requests": [
+      [
+        "api.deepseek.com:443"
+      ],
+      [
+        "api.deepseek.com:443"
+      ]
+    ],
+    "checks": [
+      "real native UI and IPC",
+      "atomic manual endpoint save",
+      "no provider collection on opening",
+      "pending CONNECT cancelled",
+      "immediate retry through new proxy",
+      "errors do not become zero quota",
+      "stale generic saves preserve network",
+      "invalid endpoints preserve valid proxy",
+      "SOCKS5 and cadence restart persistence",
+      "native metadata and bundled licenses",
+      "unknown link rejected",
+      "installed profile byte equality"
+    ]
+  },
+  "traySmoke": {
+    "passed": true,
+    "testedAt": "2026-10-06T12:24:14.606Z",
+    "checks": [
+      "native popup IPC and permissions",
+      "320 logical pixel width",
+      "content height adapts without resizing assistant",
+      "clamped to monitor work area",
+      "independent additional-account tabs",
+      "real settings style persistence",
+      "tray-only monitoring remains enabled",
+      "assistant visibility persists after process restart",
+      "Escape hides popup"
+    ],
+    "notTested": [
+      "physical taskbar mouse click",
+      "mixed-DPI displays",
+      "visual sharpness of OS-scaled tray icon"
+    ]
+  },
+  "cliSmoke": {
+    "passed": true,
+    "testedAt": "2026-10-06T12:23:10.686Z",
+    "checks": [
+      "release dispatch before GUI",
+      "enabled accounts only",
+      "actual window id pin",
+      "panel display rounding",
+      "dated observations",
+      "read-only files",
+      "no credential migration",
+      "same-service account identity and labels",
+      "separate account percentages and statusline"
+    ]
+  },
+  "signedUpdateSmoke": {
+    "passed": true,
+    "testedAt": "2026-10-06T12:24:14.063Z",
+    "version": "0.1.13",
+    "checks": [
+      "isolated update configuration and default release source",
+      "signed local download with real Tauri plugin",
+      "tampered bytes rejected",
+      "forged version rejected",
+      "same version skipped",
+      "native test install blocked",
+      "account preferences unchanged",
+      "personal update settings unchanged"
+    ]
+  },
+  "nativeHarnessSmoke": {
+    "passed": true,
+    "version": "0.1.13",
+    "testedAt": "2026-10-06T12:29:03.932Z",
+    "checks": [
+      "real native UI and IPC",
+      "default-off guard",
+      "concatenated zstd checkpoints",
+      "plain and migrated copy deduplication",
+      "inclusive reasoning and disjoint cache",
+      "cached reread",
+      "appended frame invalidation",
+      "read-only inputs",
+      "no transcript content retained",
+      "opt-out guard"
+    ]
+  }
+}

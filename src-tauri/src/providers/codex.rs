@@ -153,7 +153,8 @@ fn extract_windows(json: &Value) -> Vec<UsageWindow> {
         }
 
         out.push(
-            UsageWindow::new(label, used.map(super::normalize_percent))
+            // Codex reports percentage points, including values at or below 1.
+            UsageWindow::new(label, used.map(|value| value.clamp(0.0, 100.0)))
                 .with_id(Some(key.to_owned()))
                 .with_reset(resets_at)
                 .with_duration(credentials::dig_first_f64(node, &["limit_window_seconds"]))
@@ -189,6 +190,18 @@ fn humanize_seconds(seconds: f64) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn small_reported_percentages_are_not_fractions() {
+        for used in [0.0, 0.5, 1.0, 37.0, 41.0, 100.0] {
+            let windows = super::extract_windows(&serde_json::json!({"rate_limit": {
+                "primary_window": {"used_percent": used, "limit_window_seconds": 18000},
+                "secondary_window": {"used_percent": used, "limit_window_seconds": 604800}
+            }}));
+            assert_eq!(windows.len(), 2);
+            assert_eq!(windows[0].percent_used, Some(used));
+            assert_eq!(windows[1].percent_used, Some(used));
+        }
+    }
     #[test]
     fn retains_reported_window_duration_and_explicit_restriction() {
         let windows = super::extract_windows(&serde_json::json!({"rate_limit": {

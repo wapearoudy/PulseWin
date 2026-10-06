@@ -220,7 +220,13 @@ async fn refresh_pass(app:&AppHandle,state:&AppState,target:Option<&str>,due_onl
     if enabled.is_empty(){return state.snapshot.lock().await.clone();}
     let started=std::time::Instant::now();
     if !enabled.is_empty() { let _=app.emit("refresh-changed",serde_json::json!({"ids":enabled,"refreshing":true})); }
-    let ctx=Arc::clone(&state.ctx.read().unwrap());
+    let ctx={
+        // Read the current preferences while replacing the route, so a
+        // concurrent settings save cannot be overwritten with an older policy.
+        let current=state.preferences.lock().unwrap();
+        Ctx::current(&state.ctx,&current.network_proxy)
+            .unwrap_or_else(|_|Arc::clone(&state.ctx.read().unwrap()))
+    };
     let fetched=tokio::select!{
         result=providers::collect_accounts(Arc::clone(&ctx),&enabled,&prefs)=>result,
         _=ctx.cancelled.cancelled()=>{

@@ -66,17 +66,42 @@ pub fn is_loopback(host:&str)->bool{
 }
 /// Explicit manual proxy wins over inherited proxy and bypass lists. Loopback
 /// is always direct; it must not leave the machine through a remote proxy.
-pub fn configure(mut builder:reqwest::ClientBuilder,settings:&NetworkProxySettings)->Result<reqwest::ClientBuilder,String>{
-    let mut checked=settings.clone();checked.validate()?;
-    if let Some(endpoint)=checked.endpoint(){
+pub fn configure(builder:reqwest::ClientBuilder,settings:&NetworkProxySettings)->Result<reqwest::ClientBuilder,String>{
+    Policy::capture(settings)?.configure(builder)
+}
+
+// Keep the effective route with its client. WinINET changes independently of
+// application preferences (for example when a local proxy starts or stops).
+// Do not derive Debug: environment proxy URLs can contain credentials.
+#[derive(Clone, PartialEq)]
+pub(crate) struct Policy {
+    pub(crate) settings: NetworkProxySettings,
+    system: Option<String>,
+    bypass: Option<String>,
+    environment: Vec<(String, Option<std::ffi::OsString>)>,
+}
+impl Policy {
+    pub(crate) fn capture(settings:&NetworkProxySettings)->Result<Self,String>{
+        let mut checked=settings.clone();checked.validate()?;
+        let manual=checked.endpoint().is_some();
+        Ok(Self{
+            settings:checked,
+            system:if manual{None}else{system_proxy()},
+            bypass:if manual{None}else{system_no_proxy()},
+            environment:if manual{vec![]}else{["HTTP_PROXY","http_proxy","HTTPS_PROXY","https_proxy","ALL_PROXY","all_proxy","NO_PROXY","no_proxy"].iter().map(|key|(key.to_string(),std::env::var_os(key))).collect()},
+        })
+    }
+    pub(crate) fn configure(&self,mut builder:reqwest::ClientBuilder)->Result<reqwest::ClientBuilder,String>{
+    if let Some(endpoint)=self.settings.endpoint(){
         let url=reqwest::Url::parse(&endpoint).map_err(|_|"代理地址无效。")?;
         builder=builder.no_proxy().proxy(reqwest::Proxy::custom(move|target|{
             if target.host_str().is_some_and(is_loopback){None}else{Some(url.clone())}
         }));
-    }else if let Some(url)=system_proxy(){
-        builder=configure_system_proxy(builder,&url,system_no_proxy().as_deref());
+    }else if let Some(url)=&self.system{
+        builder=configure_system_proxy(builder,url,self.bypass.as_deref());
     }
     Ok(builder)
+    }
 }
 // External WinINET configuration is not validated by our settings command.
 // Preserve the old startup policy: malformed registry values must not prevent

@@ -87,12 +87,14 @@ export function cardBox(
   rows: number,
   hasBalance = false,
   footnote = false,
+  refreshError = false,
 ): { width: number; height: number } {
   // A refusal still needs a message and the connection-settings action.
   const content = rows>0 ? detailCardHeight(layout, rows) : hasBalance
     ? detailCardHeight(layout,0)+layout.contentSpacing+layout.rowTextLineHeight
     : detailCardHeight(layout,0)+layout.contentSpacing+layout.rowTextLineHeight*3+layout.rowInternalSpacing+24*layout.width/250
   const body = content + (footnote ? layout.contentSpacing + layout.footnoteHeight : 0)
+    + (refreshError && (rows>0 || hasBalance) ? layout.contentSpacing + layout.rowTextLineHeight*3 + layout.rowInternalSpacing + 24*layout.width/250 : 0)
   return edge === 'top'
     ? { width: layout.width, height: body + layout.pointerWidth }
     : { width: layout.width + layout.pointerWidth, height: body }

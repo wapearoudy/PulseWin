@@ -37,6 +37,8 @@ export interface UsageCardProps {
   usesRoundEnds?: boolean
   showsRemaining?: boolean
   tokenSpendEnabled?: boolean
+  onRetry: (provider: string) => Promise<void>
+  refreshing?: boolean
 }
 
 function UsageCardImpl({
@@ -49,6 +51,8 @@ function UsageCardImpl({
   showsRemaining = false,
   usesRoundEnds = false,
   tokenSpendEnabled = false,
+  onRetry,
+  refreshing = false,
 }: UsageCardProps) {
   const [now, setNow] = useState(Date.now)
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer) }, [])
@@ -60,7 +64,7 @@ function UsageCardImpl({
   // drawn in. For a top rail the outline is the same one turned a quarter turn,
   // so its viewBox is expressed in screen coordinates with the tail's band
   // sitting *above* the body rather than beside it.
-  const box = cardBox(edge, layout, rows.length, balanceOnly(provider),!!provider.stale)
+  const box = cardBox(edge, layout, rows.length, balanceOnly(provider),!!provider.stale,!!provider.error)
   const tail = layout.pointerWidth
   const viewBox =
     `0 0 ${box.width} ${box.height}`
@@ -208,6 +212,7 @@ function UsageCardImpl({
           })
         )}
         {provider.stale&&<div className="card__muted card__footnote" style={{height:layout.footnoteHeight,fontSize:layout.footnoteFontSize}}>旧读数 · 截至 {new Date(provider.fetchedAt).toLocaleString()}</div>}
+        {provider.error && (rows.length>0 || balanceOnly(provider)) && <WhyNoReading message={provider.error} provider={provider.id} layout={layout} onRetry={()=>onRetry(provider.id)} refreshing={refreshing}/>}
         {layout.detailed&&<CardActivity history={history} layout={layout} now={now}/>}
       </div></div>
     </div>
@@ -228,16 +233,22 @@ function WhyNoReading({
   message,
   provider,
   layout,
+  onRetry,
+  refreshing,
 }: {
   message: string
   provider: string
   layout: DetailCardLayout
+  onRetry?: () => Promise<void>
+  refreshing?: boolean
 }) {
   return (
-    <div className="card__why">
-      <p className="card__message" title={message} style={{ fontSize: layout.messageFontSize, lineHeight:`${layout.rowTextLineHeight}px`,height:layout.rowTextLineHeight*3,display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical',overflow:'hidden' }}>
+    <div className="card__why" style={{gap:layout.rowInternalSpacing}}>
+      <p className={`card__message${onRetry?' card__refresh-error':''}`} title={message} style={{ fontSize: layout.messageFontSize, lineHeight:`${layout.rowTextLineHeight}px`,height:layout.rowTextLineHeight*3,display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical',overflow:'hidden' }}>
         {message}
       </p>
+      <div style={{display:'flex',gap:layout.rowInternalSpacing}}>
+      {onRetry && <button type="button" className="card__action" disabled={refreshing} style={{fontSize:layout.footnoteFontSize}} onClick={()=>onRetry().catch(()=>undefined)}>{refreshing?'正在检查…':'重新检查'}</button>}
       <button
         type="button"
         className="card__action"
@@ -248,6 +259,7 @@ function WhyNoReading({
       >
         连接设置…
       </button>
+      </div>
     </div>
   )
 }
