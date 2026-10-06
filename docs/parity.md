@@ -193,3 +193,8 @@ Public 0.1.12 acceptance: all five anonymously downloaded release assets match
 local SHA-256; the current app checks the default GitHub feed, and a real 0.1.4
 client downloads and verifies the actual published signed 0.1.12 package. No
 installer was executed. Detailed evidence is in `release-0.1.12.json`.
+
+Public 0.1.13 acceptance: all five anonymous release downloads match local
+SHA-256. The default GitHub feed reports the current version and the real
+0.1.4 client downloads and verifies the published signed upgrade package.
+No installer was executed; evidence is in `release-0.1.13.json`.
