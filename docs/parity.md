@@ -207,3 +207,8 @@ Public 0.1.13 acceptance: all five anonymous release downloads match local
 SHA-256. The default GitHub feed reports the current version and the real
 0.1.4 client downloads and verifies the published signed upgrade package.
 No installer was executed; evidence is in `release-0.1.13.json`.
+
+Public 0.1.14 acceptance: all five anonymous release downloads match local
+SHA-256. The default GitHub feed reports the current version and the real
+0.1.4 client downloads and verifies the published signed upgrade package.
+No installer was executed; evidence is in `release-0.1.14.json`.

@@ -122,5 +122,51 @@
       "account preferences unchanged",
       "personal update settings unchanged"
     ]
+  },
+  "publicReleaseVerification": {
+    "passed": true,
+    "testedAt": "2026-10-07T08:19:31.710Z",
+    "repository": "wapearoudy/PulseWin",
+    "release": "https://github.com/wapearoudy/PulseWin/releases/tag/v0.1.14",
+    "version": "0.1.14",
+    "anonymousAssets": [
+      {
+        "name": "latest.json",
+        "bytes": 2672,
+        "sha256": "6b1100d6d1b9b2f6c927270a5620cad9117a32c0be707b626fd7750077b67746"
+      },
+      {
+        "name": "PulseWin_0.1.14_x64-setup.exe",
+        "bytes": 3001881,
+        "sha256": "b82fd69100a6387999a00e7b1dbc51f8591dc6d50178b8e27891c3027028829e"
+      },
+      {
+        "name": "PulseWin_0.1.14_x64-setup.exe.sig",
+        "bytes": 440,
+        "sha256": "54ca8ef500964115e1287bd5cd970698960c5a5fc3b6f767540de85e739163dd"
+      },
+      {
+        "name": "PulseWin_0.1.14_x64_en-US.msi",
+        "bytes": 4820992,
+        "sha256": "9d22096fe20b91d3292a9ca9a9b3d591fad0470bbea4bf24262571647ee4d4a8"
+      },
+      {
+        "name": "PulseWin_0.1.14_x64_en-US.msi.sig",
+        "bytes": 440,
+        "sha256": "d12637a7cb9e5745c5c8137f5e40c8f7345e3db3f0a195801f3a00beb2c705f8"
+      }
+    ],
+    "nativeCheck": {
+      "phase": "current",
+      "source": "https://github.com/wapearoudy/PulseWin/releases/latest/download/latest.json",
+      "currentVersion": "0.1.14"
+    },
+    "installationExecuted": false,
+    "signedUpgradeDownload": {
+      "from": "0.1.4",
+      "to": "0.1.14",
+      "passed": true,
+      "actualPublishedPackage": true
+    }
   }
 }
