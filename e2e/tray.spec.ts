@@ -61,6 +61,20 @@ test('remaining exhausted quota remains a full warning bar, stale readings are e
   await expect(page.getByText(/分钟前更新|刚刚更新/)).toContainText('旧读数')
   await expect(page.getByText('连接暂时失败，显示旧读数')).toBeVisible()
 })
+
+test('tray overview and account detail stay normal when quota matches time progress',async({page})=>{
+  await page.evaluate(()=>{
+    const w=window as any,p=w.traySnapshot.providers[0];Object.assign(p.windows[0],{percentUsed:75,windowSeconds:18000,resetsAt:new Date(Date.now()+4500000).toISOString()});w.trayPrefs.warningThreshold=.75;w.trayEmit('preferences-changed',w.trayPrefs);w.trayEmit('usage-updated',w.traySnapshot)
+  })
+  const overview=page.getByRole('button',{name:'查看Claude Code用量'})
+  await expect(overview.locator('.tray-warning')).toHaveCount(0)
+  await page.getByRole('tab',{name:'Claude Code',exact:true}).click()
+  await expect(page.getByRole('progressbar',{name:'5 小时'})).not.toHaveClass(/tray-warning/)
+  await page.evaluate(()=>{const w=window as any;w.traySnapshot.providers[0].windows[0].percentUsed=80;w.trayEmit('usage-updated',w.traySnapshot)})
+  await expect(page.getByRole('progressbar',{name:'5 小时'})).toHaveClass(/tray-warning/)
+  await page.getByRole('tab',{name:'概览',exact:true}).click()
+  await expect(overview.locator('.tray-warning')).toContainText('80%')
+})
 test('hide panel persists visibility without disabling accounts, failures retain the action',async({page})=>{
   await page.getByRole('button',{name:'隐藏桌面助手'}).click()
   await expect(page.getByRole('button',{name:'显示桌面助手'})).toBeVisible()

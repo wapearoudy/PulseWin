@@ -39,6 +39,21 @@ pub struct UsageWindow {
 }
 
 impl UsageWindow {
+    /// Compare only a real timed allowance, never a label or a cash balance.
+    pub fn time_progress_percent(&self, now: i64) -> Option<f64> {
+        if matches!(self.kind, WindowKind::Balance | WindowKind::TopUp) { return None; }
+        let seconds=self.window_seconds.filter(|v|v.is_finite() && *v>0.0)?;
+        let reset=chrono::DateTime::parse_from_rfc3339(self.resets_at.as_deref()?).ok()?.timestamp();
+        let remaining=reset.checked_sub(now)? as f64;
+        if remaining<=0.0 || remaining>seconds {return None;}
+        Some((1.0-remaining/seconds)*100.0)
+    }
+    pub fn quota_warning(&self, threshold: f64, now: i64) -> bool {
+        if self.is_exhausted {return true;}
+        if matches!(self.kind, WindowKind::Balance | WindowKind::TopUp) {return false;}
+        let Some(used)=self.percent_used.filter(|v|v.is_finite()) else {return false;};
+        used>=100.0 || used>=threshold && self.time_progress_percent(now).is_some_and(|elapsed|used>elapsed+1e-7)
+    }
     pub fn new(label: impl Into<String>, percent_used: Option<f64>) -> Self {
         Self {
             id: None, scope: None,

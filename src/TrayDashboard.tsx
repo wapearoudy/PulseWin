@@ -5,6 +5,7 @@ import { getSnapshot, onUsageUpdated, openSettings, refreshNow, refreshProvider 
 import { usePreferences } from './preferences'
 import { ProviderIcon } from './panel/ProviderIcon'
 import { headlineWindow, percentFigure } from './usagePresentation'
+import { quotaWarning } from './quotaPacing'
 import { creditText } from './creditAmount'
 import type { ProviderUsage, Snapshot, UsageWindow } from './types'
 import { amounts, dayKey, formatCost, shortTokens } from './token-spend/summary'
@@ -36,7 +37,7 @@ export default function TrayDashboard(){
     let live=true;const stops:(()=>void)[]=[]
     const run=async()=>{
       try{
-        const off=await onUsageUpdated(value=>{snapshotRevision.current++;if(live)setSnapshot(value)});if(!live){off();return}stops.push(off)
+        const off=await onUsageUpdated(value=>{snapshotRevision.current++;if(live){setNow(Date.now());setSnapshot(value)}});if(!live){off();return}stops.push(off)
         const version=snapshotRevision.current,value=await getSnapshot();if(live&&version===snapshotRevision.current)setSnapshot(value)
       }catch(e){if(live)setError(String(e))}
     }
@@ -89,7 +90,7 @@ export default function TrayDashboard(){
       {!loaded||!snapshot?<p className="tray-muted" role="status">正在读取用量…</p>:account?<AccountDetail key={account.id} account={account} remaining={prefs.showsRemaining} warningAt={prefs.warningThreshold} now={now} readsSpend={prefs.tokenSpendEnabled}/>:accounts.length?<div className="tray-overview">{accounts.map(p=>{
         const w=headlineWindow(p,prefs.pinnedWindows[p.id]);return <button key={p.id} onClick={()=>setSelected(p.id)} aria-label={`查看${p.name}用量`}>
           <span className="tray-provider-icon"><ProviderIcon provider={p.id}/></span><span className="tray-row-name"><strong>{p.name}</strong><small>{p.stale?'旧读数 · ':''}{w?`${w.label} · ${resetText(w,now)}`:p.error||'暂无用量数字'}</small></span>
-          <span className={w?.isExhausted||(w?.percentUsed??0)>=prefs.warningThreshold*100?'tray-warning':''}>{w?.percentUsed!=null?quotaFigure(w,prefs.showsRemaining):creditText(p.creditRemaining)??'—'}</span>
+          <span className={quotaWarning(w,prefs.warningThreshold,Date.now())?'tray-warning':''}>{w?.percentUsed!=null?quotaFigure(w,prefs.showsRemaining):creditText(p.creditRemaining)??'—'}</span>
         </button>
       })}<p className="tray-muted tray-reading-label">{prefs.showsRemaining?'显示剩余额度':'显示已用额度'}</p></div>:<p className="tray-muted">尚未选择监控账号。请在设置中添加。</p>}
     </div></main>
@@ -111,7 +112,7 @@ function AccountDetail({account:p,remaining,warningAt,now,readsSpend}:{account:P
     {p.error&&<p className="tray-error">{p.error}</p>}
     {!p.windows.length&&!credit&&<p className="tray-muted">服务商尚未提供用量数字。</p>}
     {p.windows.map((w,i)=>{
-      const used=w.percentUsed,known=used!=null&&Number.isFinite(used),spent=w.isExhausted,warning=spent||(used??0)>=warningAt*100
+      const used=w.percentUsed,known=used!=null&&Number.isFinite(used),spent=w.isExhausted,warning=quotaWarning(w,warningAt,Date.now())
       const value=known?Math.max(0,Math.min(100,remaining&&!spent?100-used!:used!)):null
       return <section className="tray-quota" key={`${w.id??w.label}-${i}`}>
         <div><strong>{w.label}</strong><small>{resetText(w,now)}</small></div>

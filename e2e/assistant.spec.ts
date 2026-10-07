@@ -280,6 +280,36 @@ test('remaining mode leaves unknown quotas empty and colors both rings by accoun
   expect(painted/rest).toBeCloseTo(.6,4)
 })
 
+test('quota warnings compare time progress on both rings, cards and the collapsed rail',async({page})=>{
+  await page.evaluate(()=>{
+    const w=window as any,now=Date.now(),quota=(id:string,used:number,elapsed:number,duration:number)=>({id,label:id,percentUsed:used,windowSeconds:duration,resetsAt:new Date(now+duration*(1-elapsed)*1000).toISOString()})
+    w.testPrefs.enabledProviders=['codex'];w.testPrefs.showSecondRing=true;w.testPrefs.warningThreshold=.75;w.testPrefs.accountAppearance.codex.ringColour=null
+    w.testSnapshot.providers[1].windows=[quota('5h',75,.75,18000),quota('7d',75,.75,604800)]
+    w.testEmit('preferences-changed',w.testPrefs);w.testEmit('usage-updated',w.testSnapshot);w.testEmit('hover-changed','entry:codex')
+  })
+  const arcs=page.locator('.rail__item .ring > circle[stroke-dasharray]')
+  await expect(arcs).toHaveCount(2)
+  expect(await arcs.evaluateAll(nodes=>nodes.map(n=>n.getAttribute('stroke')))).toEqual(['#00E68C','#00E68C'])
+  await expect(page.locator('.card__bar-fill').first()).toHaveCSS('background-color','rgb(0, 230, 140)')
+  await page.locator('.card').screenshot({path:'test-results/quota-on-schedule.png'})
+  await page.evaluate(()=>{
+    const w=window as any;w.testSnapshot.providers[1].windows[0].percentUsed=80
+    Object.assign(w.testSnapshot.providers[1].windows[1],{percentUsed:95,resetsAt:new Date(Date.now()+604800*.04*1000).toISOString()})
+    w.testEmit('usage-updated',w.testSnapshot)
+  })
+  await expect.poll(()=>arcs.evaluateAll(nodes=>nodes.map(n=>n.getAttribute('stroke')))).toEqual(['#00E68C','#FF4F42'])
+  await expect(page.locator('.card__bar-fill').first()).toHaveCSS('background-color','rgb(255, 79, 66)')
+  await expect(page.locator('.card__bar-fill').nth(1)).toHaveCSS('background-color','rgb(0, 230, 140)')
+  await page.locator('.card').screenshot({path:'test-results/quota-ahead-of-schedule.png'})
+  await page.evaluate(()=>{const w=window as any;w.testEmit('hover-changed',null);w.testEmit('placement-changed',{dockEdge:'right',railPosition:[1000,0]})})
+  await expect(page.locator('.rail__items')).toHaveCSS('opacity','0')
+  await expect(page.locator('.rail__surface')).toHaveCSS('fill','rgb(255, 79, 66)')
+  await page.evaluate(()=>{
+    const w=window as any;w.testSnapshot.providers[1].windows.forEach((q:any)=>{q.percentUsed=75;q.resetsAt=new Date(Date.now()+q.windowSeconds*.25*1000).toISOString()});w.testEmit('usage-updated',w.testSnapshot)
+  })
+  await expect(page.locator('.rail__surface')).toHaveCSS('fill','rgb(0, 0, 0)')
+})
+
 test('two Codex accounts keep separate rings, cards and refresh targets',async({page})=>{
   await page.evaluate(()=>{const w=window as any,id='codex--account-ab';
     const base=w.testSnapshot.providers.find((p:any)=>p.id==='codex');

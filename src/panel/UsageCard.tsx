@@ -6,6 +6,7 @@ import { USAGE_TINT, usageTint } from './tint'
 import { openSettings } from '../api'
 import type { ProviderUsage } from '../types'
 import { percentFigure } from '../usagePresentation'
+import { quotaTimeFraction } from '../quotaPacing'
 import { forecastText } from '../burnRate'
 import { ProviderIcon } from './ProviderIcon'
 import { formatReset } from '../types'
@@ -161,7 +162,7 @@ function UsageCardImpl({
             const fraction =
               w.percentUsed === null || w.percentUsed === undefined ? null : w.percentUsed / 100
             const spent = !!w.isExhausted || (w.percentUsed !== null && w.percentUsed !== undefined && w.percentUsed >= 100)
-            const tint = USAGE_TINT[usageTint({ usedFraction: fraction, isExhausted: spent, warningAt })]
+            const tint = USAGE_TINT[usageTint({ usedFraction: fraction, isExhausted: spent, warningAt,elapsedFraction:provider.stale || provider.error?null:quotaTimeFraction(w,Date.now()) })]
             const reset = formatReset(w.resetsAt, new Date(now))
             const displayed = fraction === null ? null : showsRemaining ? Math.max(0, 1 - fraction) : fraction
 

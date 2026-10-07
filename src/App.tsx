@@ -33,6 +33,7 @@ import { ProviderIcon } from './panel/ProviderIcon'
 import { personaAt } from './panel/botmark/programme'
 import { defaultAccountAppearance, usePreferences } from './preferences'
 import { clockFraction, headlineWindow, secondWindow } from './usagePresentation'
+import { quotaTimeFraction, quotaWarning } from './quotaPacing'
 import { UsageCard } from './panel/UsageCard'
 import type { Snapshot } from './types'
 import { balanceOnly, creditRailText } from './creditAmount'
@@ -157,6 +158,7 @@ export default function App() {
 
     onUsageUpdated((s) => {
       if (mounted.current) {
+        setNow(Date.now())
         setSnapshot(s)
 
       }
@@ -240,11 +242,15 @@ export default function App() {
         const headline = headlineWindow(p, preferences.pinnedWindows[p.id])
         const second = secondWindow(p, preferences.pinnedWindows[p.id])
         const used = headline?.percentUsed
+        const paceNow=Date.now()
         const hasReading = p.windows.length > 0 || (balanceOnly(p) && !p.error)
         return ({
         id: p.id,
         title: p.error ? `${p.name} — ${p.error}` : p.name,
         usedFraction: used === null || used === undefined ? null : used / 100,
+        elapsedFraction: p.stale || p.error ? null : quotaTimeFraction(headline,paceNow),
+        secondElapsedFraction: p.stale || p.error ? null : quotaTimeFraction(second,paceNow),
+        hasWarning: !p.stale && !p.error && p.windows.some(w=>quotaWarning(w,preferences.warningThreshold,paceNow)),
         figure: !headline && !p.error ? creditRailText(p.creditRemaining) : null,
         isSpent: headline?.isExhausted ?? false,
         windowClockFraction: preferences.showResetClock ? clockFraction(headline, now, preferences.clockRemaining) : null,
@@ -278,7 +284,7 @@ export default function App() {
           />
         ) : <ProviderIcon provider={p.id} />,
       })}),
-    [providers, refreshingIds, activity, resets, markColours, preferences.accountAppearance, preferences.showSecondRing, preferences.resetCelebration, edge, cardId, region, preferences.pinnedWindows, preferences.showResetClock, preferences.clockRemaining, now],
+    [providers, refreshingIds, activity, resets, markColours, preferences.accountAppearance, preferences.warningThreshold, preferences.showSecondRing, preferences.resetCelebration, edge, cardId, region, preferences.pinnedWindows, preferences.showResetClock, preferences.clockRemaining, now],
   )
 
   // ---- geometry -----------------------------------------------------------

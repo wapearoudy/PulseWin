@@ -25,12 +25,13 @@ export function NotificationsPane({ alerts, disabled, onChange }: {
   return <>
     <h1>通知</h1><p className="page-description">在 Windows 通知中心提醒额度状态。所有提醒默认关闭。</p>
     <section className="group-wrap"><h2>额度提醒</h2><div className="settings-group">
-      <div className="setting-row"><strong>使用量达到</strong><div className="setting-control"><select aria-label="额度提醒阈值" value={alerts.threshold ?? ''} disabled={disabled} onChange={e=>onChange({ threshold: e.target.value ? Number(e.target.value) : null })}>
+      <div className="setting-row"><div><strong>用量提醒最低门槛</strong><small>达到门槛且用量进度高于时间进度时提醒。</small></div><div className="setting-control"><select aria-label="额度提醒阈值" value={alerts.threshold ?? ''} disabled={disabled} onChange={e=>onChange({ threshold: e.target.value ? Number(e.target.value) : null })}>
         <option value="">关闭</option>{[60,70,75,80,85,90,95].map(v=><option value={v} key={v}>{v}%</option>)}
       </select></div></div>
       <label className="setting-row"><div><strong>额度重置时通知</strong><small>仅提醒此前已发出警告的窗口。</small></div><input type="checkbox" role="switch" aria-label="额度重置时通知" checked={alerts.onReset} disabled={disabled || alerts.threshold === null} onChange={e=>onChange({onReset:e.target.checked})}/></label>
       <label className="setting-row"><div><strong>连续检查失败时通知</strong><small>连续三次失败才提醒；有效旧读数在前 30 分钟受到保护。</small></div><input type="checkbox" role="switch" aria-label="连续检查失败时通知" checked={alerts.onFailure} disabled={disabled} onChange={e=>onChange({onFailure:e.target.checked})}/></label>
     </div></section>
+    <p className="group-copy">例如门槛为 75%：时间已过 75%、额度已用 75% 不提醒；额度已用 80% 才提醒。周期进度由窗口时长和重置时间计算，缺少信息时不发送超前提醒；额度确实用尽仍会提醒。</p>
     <p className="group-copy">开启时也会检查当前有效读数，同一窗口不会反复提醒。声音和通知显示方式由 Windows 的应用通知设置控制。</p>
   </>
 }

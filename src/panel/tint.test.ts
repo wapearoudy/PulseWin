@@ -16,14 +16,14 @@ describe('usageTint', () => {
 
   it('turns amber exactly at the caution threshold', () => {
     // `case ..<cautionThreshold` — so 0.5 itself is already caution.
-    expect(usageTint({ usedFraction: CAUTION_THRESHOLD })).toBe('caution')
-    expect(usageTint({ usedFraction: 0.74 })).toBe('caution')
+    expect(usageTint({ usedFraction: CAUTION_THRESHOLD, elapsedFraction: .2 })).toBe('caution')
+    expect(usageTint({ usedFraction: 0.74, elapsedFraction: .2 })).toBe('caution')
   })
 
   it('turns red exactly at the warning threshold', () => {
     // `default: return .pulseWarning` — 0.75 itself is red, not 0.76.
-    expect(usageTint({ usedFraction: DEFAULT_WARNING_THRESHOLD })).toBe('warning')
-    expect(usageTint({ usedFraction: 0.99 })).toBe('warning')
+    expect(usageTint({ usedFraction: DEFAULT_WARNING_THRESHOLD, elapsedFraction: .2 })).toBe('warning')
+    expect(usageTint({ usedFraction: 0.99, elapsedFraction: .2 })).toBe('warning')
   })
 
   it('gives spent its own colour, not a redder red', () => {
@@ -48,14 +48,24 @@ describe('usageTint', () => {
   it('honours every offered threshold, and they all clear caution', () => {
     for (const t of WARNING_THRESHOLDS) {
       expect(t, 'every option sits above caution').toBeGreaterThan(CAUTION_THRESHOLD)
-      expect(usageTint({ usedFraction: t, warningAt: t })).toBe('warning')
-      expect(usageTint({ usedFraction: t - 0.01, warningAt: t })).toBe('caution')
+      expect(usageTint({ usedFraction: t, warningAt: t, elapsedFraction: .2 })).toBe('warning')
+      expect(usageTint({ usedFraction: t - 0.01, warningAt: t, elapsedFraction: .2 })).toBe('caution')
     }
   })
 
   it('ships 75% as the default', () => {
     expect(DEFAULT_WARNING_THRESHOLD).toBe(0.75)
     expect(WARNING_THRESHOLDS).toContain(0.75)
+  })
+
+  it('keeps an on-schedule 75% quota normal, even with a red threshold of 75%',()=>{
+    expect(usageTint({usedFraction:.75,elapsedFraction:.75,warningAt:.75})).toBe('good')
+    expect(usageTint({usedFraction:.8,elapsedFraction:.9,warningAt:.75})).toBe('good')
+    expect(usageTint({usedFraction:.8,elapsedFraction:.75,warningAt:.75})).toBe('warning')
+    expect(usageTint({usedFraction:.74,elapsedFraction:.1,warningAt:.75})).toBe('caution')
+  })
+  it('does not manufacture pace from missing or invalid time evidence',()=>{
+    for(const elapsedFraction of [undefined,null,NaN,-.1,1])expect(usageTint({usedFraction:.95,elapsedFraction})).toBe('good')
   })
 })
 

@@ -25,6 +25,9 @@ export interface RailEntry {
   id: string
   title: string
   usedFraction: number | null
+  elapsedFraction?: number | null
+  secondElapsedFraction?: number | null
+  hasWarning?: boolean
   /** Reported credit when the account deliberately has no quota window. */
   figure?: string | null
   isSpent?: boolean
@@ -180,7 +183,7 @@ function RailImpl({
         aria-hidden="true"
         style={{ position: 'absolute', ...berthInset }}
       >
-        <path d={d} transform={transform} className="rail__surface" style={{fill: dockAlertColour && openness < .5 && entries.some(e=>e.isSpent || (e.usedFraction??0)>=warningAt) ? '#FF4F42' : undefined}} />
+        <path d={d} transform={transform} className="rail__surface" style={{fill: dockAlertColour && openness < .5 && entries.some(e=>e.hasWarning || e.isSpent || (e.usedFraction??0)>=1) ? '#FF4F42' : undefined}} />
       </svg>
 
       <div
@@ -208,6 +211,8 @@ function RailImpl({
             <UsageRing
               key="ring"
               usedFraction={entry.usedFraction}
+              elapsedFraction={entry.elapsedFraction}
+              secondElapsedFraction={entry.secondElapsedFraction}
               showsRemaining={showsRemaining}
               isSpent={entry.isSpent}
               diameter={layout.ringDiameter}

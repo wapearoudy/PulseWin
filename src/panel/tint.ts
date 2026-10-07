@@ -1,7 +1,8 @@
 /**
  * Port of Pulse's `UsageTint` / `WarningThreshold` (Sources/Pulse/Panel/UsageTint.swift).
  *
- * Colour here means ONE thing only — how close this limit is to running out.
+ * Default colours compare consumption with the reported cycle's time progress.
+ * An on-schedule allowance stays normal; genuine exhaustion always wins.
  * The original used to draw rings in each provider's brand colour, "which read
  * as a status even though it never was one: Claude Code's orange-red looked
  * like a warning at 3% used."
@@ -27,7 +28,7 @@ export const USAGE_TINT: Record<UsageTintName, string> = {
   exhausted: '#D91721',
 }
 
-/** Comfortable below this. */
+/** Earlier visual caution for above-pace consumption; not a notification. */
 export const CAUTION_THRESHOLD = 0.5
 
 /**
@@ -52,6 +53,8 @@ export interface TintInput {
    */
   isExhausted?: boolean
   warningAt?: number
+  /** Time elapsed in the same reported cycle; null means no pace evidence. */
+  elapsedFraction?: number | null
 }
 
 /**
@@ -67,6 +70,7 @@ export function usageTint({
   usedFraction,
   isExhausted = false,
   warningAt = DEFAULT_WARNING_THRESHOLD,
+  elapsedFraction = null,
 }: TintInput): UsageTintName {
   // A locked limit is a different state, not "more red".
   if (isExhausted || (usedFraction !== null && usedFraction !== undefined && usedFraction >= 1)) {
@@ -80,6 +84,7 @@ export function usageTint({
   }
 
   if (usedFraction < CAUTION_THRESHOLD) return 'good'
+  if (elapsedFraction===null || !Number.isFinite(elapsedFraction) || elapsedFraction<0 || elapsedFraction>=1 || usedFraction<=elapsedFraction+1e-9) return 'good'
   if (usedFraction < warningAt) return 'caution'
   return 'warning'
 }

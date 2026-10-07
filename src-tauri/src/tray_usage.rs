@@ -51,7 +51,8 @@ pub fn tooltip(snapshot:&Snapshot,prefs:&Preferences)->String {
 pub fn icon(p:&ProviderUsage,prefs:&Preferences)->Vec<u8> {
     let mut image=vec![0u8;64*64*4];
     let windows=if prefs.tray_style=="split"{split(p)}else{vec![]};
-    let tint=|w:&UsageWindow| if w.is_exhausted||w.percent_used.unwrap_or(0.0)>=prefs.warning_threshold*100.0 {[255,69,58,255]}else{[64,163,255,255]};
+    let now=chrono::Utc::now().timestamp();
+    let tint=|w:&UsageWindow| if w.quota_warning(prefs.warning_threshold*100.0,now) {[255,69,58,255]}else{[64,163,255,255]};
     if windows.len()==2 {
         for (i,w) in windows.iter().enumerate(){digits(&mut image,&figure(w.percent_used.unwrap(),prefs.shows_remaining).to_string(),(i*30+4) as i32,3,tint(w));}
     }else if let Some(w)=headline(p,prefs) {
@@ -110,6 +111,18 @@ pub fn popup_position(anchor:(i32,i32),size:(i32,i32),work:crate::desktop::Rect)
     #[test]fn percentage_never_rounds_to_a_false_endpoint(){assert_eq!(figure(0.01,false),1);assert_eq!(figure(99.99,false),99);assert_eq!(figure(100.0,true),0);}
     #[test]fn split_needs_two_distinct_evidenced_account_wide_windows(){let mut p=snapshot().providers.remove(0);p.windows=vec![UsageWindow::new("5h",Some(10.0)).with_duration(Some(18000.0)),UsageWindow::new("model",Some(90.0)).with_duration(Some(604800.0)).with_scope(Some("model".into()))];assert!(split(&p).is_empty());p.windows.push(UsageWindow::new("week",Some(20.0)).with_duration(Some(604800.0)));assert_eq!(split(&p).len(),2);}
     #[test]fn all_styles_produce_transparent_nonempty_icons(){let s=snapshot();let mut p=prefs();for style in ["figure","ring","split"]{p.tray_style=style.into();let i=icon(&s.providers[0],&p);assert_eq!(i.len(),4096);assert!(i.chunks(4).any(|c|c[3]>0));assert_eq!(i[3],0);}}
+    #[test]fn tray_icon_only_turns_red_when_usage_is_ahead_or_exhausted(){
+        let now=chrono::Utc::now().timestamp();
+        let mut provider=ProviderUsage::ok("a","A",vec![UsageWindow::new("5h",Some(75.0)).with_duration(Some(18000.)).with_reset(Some(chrono::DateTime::from_timestamp(now+4500,0).unwrap().to_rfc3339()))]);
+        let red=|image:Vec<u8>|image.chunks_exact(4).any(|c|c[3]>0 && c[0]>200 && c[1]<100 && c[2]<100);
+        for style in ["figure","ring"] {
+            let mut preferences=prefs();preferences.tray_style=style.into();
+            provider.windows[0].percent_used=Some(75.);assert!(!red(icon(&provider,&preferences)));
+            provider.windows[0].percent_used=Some(80.);assert!(red(icon(&provider,&preferences)));
+            provider.windows[0].percent_used=Some(74.);assert!(!red(icon(&provider,&preferences)));
+            provider.windows[0].is_exhausted=true;assert!(red(icon(&provider,&preferences)));provider.windows[0].is_exhausted=false;
+        }
+    }
     #[test]fn popup_stays_inside_negative_work_area_and_top_taskbar(){let r=crate::desktop::Rect{left:-1920,top:40,right:0,bottom:1080};assert_eq!(popup_position((-5,1079),(480,840),r),(-480,231));assert_eq!(popup_position((-1919,41),(480,840),r),(-1920,49));assert_eq!(popup_position((0,0),(3000,2000),r),(-1920,40));}
     #[test]fn tooltip_fits_windows_utf16_limit(){let mut s=snapshot();s.providers[0].name="😀".repeat(150);assert!(tooltip(&s,&prefs()).encode_utf16().count()<=127);}
 }

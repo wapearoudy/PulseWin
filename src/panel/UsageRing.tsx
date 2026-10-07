@@ -53,6 +53,8 @@ export interface UsageRingProps {
    * end. So a ring with a sliver left is a small red arc, not a large one.
    */
   usedFraction: number | null | undefined
+  elapsedFraction?: number | null
+  secondElapsedFraction?: number | null
   /** Whether the provider itself says this limit is spent. Not derived from the fraction. */
   isSpent?: boolean
   /** Draw the arc as what is **left** rather than what is gone. Only the arc. */
@@ -92,6 +94,8 @@ export interface UsageRingProps {
 
 function UsageRingImpl({
   usedFraction,
+  elapsedFraction = null,
+  secondElapsedFraction = null,
   isSpent = false,
   showsRemaining = false,
   diameter,
@@ -124,7 +128,7 @@ function UsageRingImpl({
 
   // Colour says how full the limit is, not which provider this is.
   const tintName: UsageTintName | null =
-    chosenTint && !spent ? null : usageTint({ usedFraction, isExhausted: isSpent, warningAt })
+    chosenTint && !spent ? null : usageTint({ usedFraction, isExhausted: isSpent, warningAt, elapsedFraction })
   const arcColour = chosenTint && !spent ? chosenTint : USAGE_TINT[tintName ?? 'good']
 
   // Full when spent, whichever way it counts — the most urgent state must not
@@ -139,7 +143,7 @@ function UsageRingImpl({
   // Same colour language as the outer ring, deliberately: two arcs measuring
   // the same kind of thing must be read the same way.
   const secondColour = chosenTint && !secondSpent ? chosenTint : USAGE_TINT[
-    usageTint({ usedFraction: secondUsed, isExhausted: secondSpent, warningAt })
+    usageTint({ usedFraction: secondUsed, isExhausted: secondSpent, warningAt, elapsedFraction:secondElapsedFraction })
   ]
 
   const half = inkHalf

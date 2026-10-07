@@ -29,6 +29,15 @@ All unchecked items remain incomplete or unverified. No overall completion perce
 
 ## Verification baseline
 
+0.1.14 compares approaching quota warnings with cycle time while preserving the
+configured minimum. At a 75% minimum, 75% used / 75% elapsed stays normal and
+80% used / 75% elapsed warns. Rings, hover cards, collapsed rail, tray dashboard
+and native tray colours share this condition. Missing cycle evidence does not
+guess duration. Validation: 893 Rust tests plus two ignored, 188 frontend and
+62 browser tests; native settings persistence, isolated UI pacing, assistant,
+tray, CLI and signed update checks pass. No actual toast or installer execution
+is claimed. See `quota-pacing-alerts.md` and `release-0.1.14.json`.
+
 0.1.13 fixes Codex quota freshness after external system proxy changes, makes
 cached-reading failures and scoped retry visible in assistant cards, and fixes
 percentage-point parsing below 1%. Validation: 885 Rust tests plus two ignored,

@@ -119,6 +119,8 @@ test('reordering moves only the enabled accounts with arrows and drag',async({pa
 test('notifications are opt-in and reset warnings depend on the threshold',async({page})=>{
   await page.getByRole('button',{name:'暂不设置'}).click()
   await page.getByRole('button',{name:'通知',exact:true}).click()
+  await expect(page.getByText('达到门槛且用量进度高于时间进度时提醒。')).toBeVisible()
+  await expect(page.getByText('例如门槛为 75%',{exact:false})).toBeVisible()
   await expect(page.getByLabel('额度提醒阈值')).toHaveValue('')
   await expect(page.getByRole('switch',{name:'额度重置时通知'})).toBeDisabled()
   await expect(page.getByRole('switch',{name:'连续检查失败时通知'})).not.toBeChecked()

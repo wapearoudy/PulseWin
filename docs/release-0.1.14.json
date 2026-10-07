@@ -1,0 +1,126 @@
+{
+  "version": "0.1.14",
+  "verifiedAt": "2026-10-07T08:17:59.234390+00:00",
+  "repository": "wapearoudy/PulseWin",
+  "scope": "Time-paced quota alerts with retained minimum threshold and consistent warning colours",
+  "tests": {
+    "rust": 893,
+    "rustIgnored": 2,
+    "frontend": 188,
+    "browser": 62
+  },
+  "installationExecuted": false,
+  "limitations": [
+    "Native pacing uses explicitly synthetic UI-only snapshots; actual Windows toast delivery was not exercised",
+    "Not full parity with original Pulse; 42 Token Spend sources remain unsupported",
+    "Physical pointer/mixed-DPI acceptance and installer overwrite/restart remain unverified"
+  ],
+  "artifacts": [
+    {
+      "file": "pulsewin.exe",
+      "bytes": 7751680,
+      "sha256": "babbfd41754f6102495b42db3d3ce3dc7e41b172f65a09f38370a22938d2eeea",
+      "updaterSignature": false,
+      "mediumIntegrityRepaired": true
+    },
+    {
+      "file": "PulseWin_0.1.14_x64-setup.exe",
+      "bytes": 3001881,
+      "sha256": "b82fd69100a6387999a00e7b1dbc51f8591dc6d50178b8e27891c3027028829e",
+      "updaterSignature": true,
+      "mediumIntegrityRepaired": true
+    },
+    {
+      "file": "PulseWin_0.1.14_x64_en-US.msi",
+      "bytes": 4820992,
+      "sha256": "9d22096fe20b91d3292a9ca9a9b3d591fad0470bbea4bf24262571647ee4d4a8",
+      "updaterSignature": true,
+      "mediumIntegrityRepaired": true
+    }
+  ],
+  "nativePacing": {
+    "passed": true,
+    "version": "0.1.14",
+    "testedAt": "2026-10-07T08:16:01.302Z",
+    "readings": "synthetic UI-only snapshots",
+    "actualNotificationsDelivered": false,
+    "checks": [
+      "native settings copy and minimum threshold persistence",
+      "real WebView2 and event IPC",
+      "75% usage / 75% elapsed remains normal",
+      "80% usage / 75% elapsed warns",
+      "five-hour and weekly ring colours stay independent",
+      "UI fixture never enables backend collection",
+      "personal preferences unchanged"
+    ]
+  },
+  "nativeSmoke": {
+    "passed": true,
+    "checks": [
+      "native startup",
+      "no automatic collection",
+      "settings IPC permission",
+      "preferences persistence",
+      "shared panel preferences",
+      "floating rail restoration",
+      "native capsule geometry",
+      "floating stays expanded",
+      "disabled additional accounts never collect",
+      "per-account encrypted credentials",
+      "stale window preserves account metadata",
+      "account rename persists",
+      "removal preserves primary credentials"
+    ],
+    "testedAt": "2026-10-07T08:16:16.534Z"
+  },
+  "traySmoke": {
+    "passed": true,
+    "testedAt": "2026-10-07T08:16:37.299Z",
+    "checks": [
+      "native popup IPC and permissions",
+      "320 logical pixel width",
+      "content height adapts without resizing assistant",
+      "clamped to monitor work area",
+      "independent additional-account tabs",
+      "real settings style persistence",
+      "tray-only monitoring remains enabled",
+      "assistant visibility persists after process restart",
+      "Escape hides popup"
+    ],
+    "notTested": [
+      "physical taskbar mouse click",
+      "mixed-DPI displays",
+      "visual sharpness of OS-scaled tray icon"
+    ]
+  },
+  "cliSmoke": {
+    "passed": true,
+    "testedAt": "2026-10-07T08:16:13.001Z",
+    "checks": [
+      "release dispatch before GUI",
+      "enabled accounts only",
+      "actual window id pin",
+      "panel display rounding",
+      "dated observations",
+      "read-only files",
+      "no credential migration",
+      "same-service account identity and labels",
+      "separate account percentages and statusline"
+    ]
+  },
+  "signedUpdateSmoke": {
+    "passed": true,
+    "testedAt": "2026-10-07T08:16:15.102Z",
+    "version": "0.1.14",
+    "checks": [
+      "isolated update configuration and default release source",
+      "signed local download with real Tauri plugin",
+      "tampered bytes rejected",
+      "forged version rejected",
+      "same version skipped",
+      "native test install blocked",
+      "account preferences unchanged",
+      "personal update settings unchanged"
+    ]
+  }
+}
