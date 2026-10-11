@@ -1,0 +1,68 @@
+{
+  "checkedOn": "2026-10-11",
+  "timezone": "Asia/Shanghai",
+  "repository": "qunqin24/Pulse",
+  "latestStable": "1.9.0",
+  "windowsVersion": "0.1.14",
+  "scope": "Release note summaries and follow-up inventory only",
+  "referenceCheckoutCommit": "397c8fc4f1bd52180a452d2f3f0c099def97cf69",
+  "referenceChangelogLatest": "1.6.1",
+  "notesSource": "https://github.com/qunqin24/Pulse/blob/cf08e42fcf6168c9f3c1c15902ce326eb6aa2507/CHANGELOG.md",
+  "notesSha256": "d130b1c2a143c56db8067ba251cd8a426bbfaf0081287fc6f09dc583f7a00583",
+  "releases": [
+    {
+      "version": "1.9.0",
+      "publishedAtUTC": "2026-10-09T05:31:01Z",
+      "commit": "cf08e42fcf6168c9f3c1c15902ce326eb6aa2507",
+      "url": "https://github.com/qunqin24/Pulse/releases/tag/v1.9.0"
+    },
+    {
+      "version": "1.8.3",
+      "publishedAtUTC": "2026-10-08T07:55:02Z",
+      "commit": "fd61c5659afeb6c4bd388f4342dbb2269bfe7638",
+      "url": "https://github.com/qunqin24/Pulse/releases/tag/v1.8.3"
+    },
+    {
+      "version": "1.8.2",
+      "publishedAtUTC": "2026-10-07T06:35:01Z",
+      "commit": "662c7b8cc72af2c85b31b3e8378b9c26959f1c14",
+      "url": "https://github.com/qunqin24/Pulse/releases/tag/v1.8.2"
+    },
+    {
+      "version": "1.8.1",
+      "publishedAtUTC": "2026-10-06T06:14:30Z",
+      "commit": "cb3960133450c790b16c3662ba41e22e04578a7d",
+      "url": "https://github.com/qunqin24/Pulse/releases/tag/v1.8.1"
+    },
+    {
+      "version": "1.8.0",
+      "publishedAtUTC": "2026-10-05T11:15:47Z",
+      "commit": "eedd610d1da235d8929dd6104c3c55065540ca04",
+      "url": "https://github.com/qunqin24/Pulse/releases/tag/v1.8.0"
+    },
+    {
+      "version": "1.7.3",
+      "publishedAtUTC": "2026-10-05T06:52:14Z",
+      "commit": "ebe6f8ed376280f8a438e0d29f43186a72ad972c",
+      "url": "https://github.com/qunqin24/Pulse/releases/tag/v1.7.3"
+    },
+    {
+      "version": "1.7.2",
+      "publishedAtUTC": "2026-10-04T12:08:20Z",
+      "commit": "ff67235f5f314429504c31a074ed67045588e697",
+      "url": "https://github.com/qunqin24/Pulse/releases/tag/v1.7.2"
+    },
+    {
+      "version": "1.7.1",
+      "publishedAtUTC": "2026-10-03T08:27:14Z",
+      "commit": "cf258d92c5087ccbe74a872fa847690bdd0c0559",
+      "url": "https://github.com/qunqin24/Pulse/releases/tag/v1.7.1"
+    },
+    {
+      "version": "1.7.0",
+      "publishedAtUTC": "2026-10-02T16:40:11Z",
+      "commit": "9ebe3d52bc9087f202f7be58f2f0a27f3b0d170a",
+      "url": "https://github.com/qunqin24/Pulse/releases/tag/v1.7.0"
+    }
+  ]
+}

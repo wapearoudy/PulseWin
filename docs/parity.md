@@ -3,6 +3,11 @@
 Reference: the checked-in `../../Pulse-original` source and its authoritative `Docs/` topics.
 Target: equivalent product behavior on Windows, and faithful layout and interaction. A registered provider, passing parser fixture, or successful build is not proof of product parity.
 
+Upstream release-note sync (2026-10-11): latest stable Pulse is 1.9.0.
+[Summaries and Windows follow-up inventory](upstream-release-notes.md) cover
+1.7.0 through 1.9.0. The reference source checkout remains at its earlier
+commit; this documentation sync does not establish parity with the new release.
+
 ## Acceptance inventory
 
 All unchecked items remain incomplete or unverified. No overall completion percentage is claimed.
