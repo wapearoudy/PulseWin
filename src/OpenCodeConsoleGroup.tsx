@@ -1,0 +1,23 @@
+import {useCallback,useEffect,useRef,useState} from 'react'
+import {invoke} from '@tauri-apps/api/core'
+import {listen} from '@tauri-apps/api/event'
+interface Connection{connected:boolean}
+interface Day{date:string;input:string;output:string;cacheRead:string;cacheWrite:string;tokens:string;cost:number|null;unpricedTokens:string;models:Record<string,string>}
+interface History{workspace:string;workspaceName:string|null;days:Day[];checkedAt:string|null;partial:boolean;notes:string[]}
+const counter=(raw:string)=>BigInt(raw).toLocaleString('zh-CN')
+export function OpenCodeConsoleGroup({enabled,onChanged}:{enabled:boolean;onChanged:()=>void}){
+ const [connection,setConnection]=useState<Connection|null>(null),[history,setHistory]=useState<History|null>(null),[error,setError]=useState<string|null>(null),[busy,setBusy]=useState(false),[opened,setOpened]=useState(false),[all,setAll]=useState(false)
+ const revision=useRef(0)
+ const read=useCallback(async(force=false)=>{if(!enabled||!connection?.connected)return;const turn=++revision.current;setBusy(true);setError(null);let off:(()=>void)|undefined;try{off=await listen<History>('opencode-console-history',event=>{if(revision.current===turn)setHistory(event.payload)});if(revision.current!==turn)return;const value=await invoke<History>('get_opencode_console_history',{force});if(revision.current===turn)setHistory(value)}catch(e){if(revision.current===turn){setHistory(null);setError(String(e))}}finally{off?.();if(revision.current===turn)setBusy(false)}},[enabled,connection?.connected])
+ useEffect(()=>{let live=true;void invoke<Connection>('get_opencode_console_connection').then(v=>{if(live)setConnection(v??{connected:false})}).catch(e=>{if(live)setError(String(e))});return()=>{live=false}},[])
+ useEffect(()=>{if(enabled&&connection?.connected)void read();else{setHistory(null);setBusy(false)}return()=>{revision.current++}},[enabled,connection?.connected,read])
+ const action=async(command:string)=>{const turn=++revision.current;setBusy(true);setError(null);try{const result=await invoke<Connection|void>(command);if(revision.current!==turn)return;if(result){setConnection(result);setOpened(false);setHistory(null);onChanged()}else setOpened(true)}catch(e){if(revision.current===turn)setError(String(e))}finally{if(revision.current===turn)setBusy(false)}}
+ const days=history?(all?history.days:history.days.slice(-7)):[]
+ return <section className="group-wrap" aria-label="OpenCode Go 控制台账单"><h2>控制台账单</h2><div className="settings-group"><div className="setting-row"><div><strong>{connection?.connected?'已连接控制台':'连接 OpenCode 控制台'}</strong><small>读取当前工作区的 Go 请求记录与实际扣费。网页登录独立于 Go API Key。</small></div><button disabled={busy} onClick={()=>{void action('begin_opencode_console_login')}}>{connection?.connected?'重新登录':'登录控制台'}</button></div>
+ {opened&&<><p className="group-copy">在新窗口中完成 OpenCode 登录，再返回这里连接。登录会话会加密保存。</p><div className="group-actions"><button disabled={busy} onClick={()=>{void action('finish_opencode_console_login')}}>已登录，连接控制台</button></div></>}
+ {connection?.connected&&<div className="group-actions"><button disabled={busy} onClick={()=>{void action('remove_opencode_console_login')}}>断开控制台</button><button disabled={busy||!enabled} onClick={()=>{void read(true)}}>刷新账单</button></div>}
+ {error&&<p className="group-copy" role="alert">{error}</p>}{busy&&<p className="group-copy" role="status">正在读取控制台…</p>}
+ {!enabled&&connection?.connected&&<p className="group-copy">启用 OpenCode Go 后读取账单。</p>}
+ {history&&<><p className="group-copy">工作区：{history.workspaceName??history.workspace} · {history.checkedAt?new Date(history.checkedAt).toLocaleString():'尚未完成读取'}</p>{history.partial&&<p className="group-copy" role="status">读取尚未完整，未读区间会在下次继续。</p>}<div className="group-copy console-billing-table"><table className="spend-table"><thead><tr><th>日期</th><th>输入</th><th>缓存读取</th><th>缓存写入</th><th>输出</th><th>Token</th><th>实际扣费</th></tr></thead><tbody>{days.map(d=><tr key={d.date}><th>{d.date}</th><td>{counter(d.input)}</td><td>{counter(d.cacheRead)}</td><td>{counter(d.cacheWrite)}</td><td>{counter(d.output)}</td><td title={d.tokens}>{counter(d.tokens)}</td><td title={BigInt(d.unpricedTokens)>0n?`${counter(d.unpricedTokens)} Token 无实际扣费记录`:undefined}>{d.cost===null?'—':`US$ ${d.cost.toFixed(4)}${BigInt(d.unpricedTokens)>0n?' *':''}`}</td></tr>)}</tbody></table><button onClick={()=>setAll(!all)}>{all?'收起到 7 天':'查看全部日期'}</button></div>{history.notes.length>0&&<p className="group-copy" role="alert">{history.notes.join(' ')}</p>}</>}
+ <p className="group-copy">只统计 Go 请求，按请求 ID 去重。实际扣费缺失时显示 —，不按 Token 推算。Go Key 和已有额度读数保持独立。</p></div></section>
+}

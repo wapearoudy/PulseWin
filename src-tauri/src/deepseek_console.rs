@@ -6,13 +6,17 @@ use serde_json::{json, Value};
 use std::{
     collections::{BTreeMap, HashMap},
     sync::Mutex,
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tauri::{Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 const ORIGIN: &str = "https://platform.deepseek.com";
 const SLOT: &str = "deepseek-console";
 const LABEL: &str = "deepseek-console-login";
 static LOGIN: Mutex<u64> = Mutex::new(0);
+static READ: crate::console_reads::ReadGate = crate::console_reads::ReadGate::new();
+pub(crate) fn cancel_read() {
+    READ.cancel()
+}
 fn path() -> Option<std::path::PathBuf> {
     crate::settings::directory().map(|p| p.join(format!("{SLOT}.json")))
 }
@@ -98,6 +102,7 @@ pub async fn finish_deepseek_console_login(
     crate::credential_store::write_document(&path, SLOT, &json!({"token":token}))
         .map_err(|_| "无法加密保存控制台登录。")?;
     *current += 1;
+    cancel_read();
     let _ = login.close();
     Ok(Connection { connected: true })
 }
@@ -106,6 +111,7 @@ pub fn remove_deepseek_console_login(window: WebviewWindow) -> Result<Connection
     local(&window)?;
     let mut generation = LOGIN.lock().unwrap();
     *generation += 1;
+    cancel_read();
     if let Some(path) = path() {
         match std::fs::remove_file(path) {
             Ok(()) => {}
@@ -221,7 +227,7 @@ fn range(now: chrono::DateTime<chrono::Local>) -> Option<Vec<(String, String)>> 
         ("tz".into(), whole.to_string()),
     ])
 }
-#[derive(Default, Serialize)]
+#[derive(Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Day {
     date: String,
@@ -232,7 +238,7 @@ pub struct Day {
     cost: Option<f64>,
     models: BTreeMap<String, u64>,
 }
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct History {
     days: Vec<Day>,
@@ -364,9 +370,44 @@ fn ledger(
         notes,
     }
 }
+#[derive(Clone, PartialEq, Eq)]
+struct CacheKey {
+    login: u64,
+    context: usize,
+    day: String,
+    currency: Option<String>,
+}
+struct CachedHistory {
+    key: CacheKey,
+    saved: Instant,
+    value: History,
+}
+impl CachedHistory {
+    fn fresh(&self, key: &CacheKey, now: Instant) -> bool {
+        &self.key == key
+            && now
+                .checked_duration_since(self.saved)
+                .is_some_and(|age| age < Duration::from_secs(60))
+    }
+}
+static HISTORY: tokio::sync::Mutex<Option<CachedHistory>> = tokio::sync::Mutex::const_new(None);
+fn complete_shapes(amount: &Value, cost: &Value) -> Result<(), String> {
+    if !amount["series"].is_array() || !cost["data"].is_array() {
+        return Err("控制台账单格式无法识别，未推断为零用量。".into());
+    }
+    Ok(())
+}
 #[tauri::command]
 pub async fn get_deepseek_console_history(
     state: State<'_, crate::AppState>,
+    force: Option<bool>,
+) -> Result<History, String> {
+    let cancel = READ.request();
+    tokio::select! {r=read_deepseek_history(state,force)=>r,_=cancel.cancelled()=>Err("控制台读取已取消。".into())}
+}
+async fn read_deepseek_history(
+    state: State<'_, crate::AppState>,
+    force: Option<bool>,
 ) -> Result<History, String> {
     if !state
         .preferences
@@ -381,17 +422,39 @@ pub async fn get_deepseek_console_history(
     let token = token().ok_or("请先连接 DeepSeek 控制台。")?;
     let ctx = state.ctx.read().unwrap().clone();
     let now = chrono::Local::now();
+    let key = CacheKey {
+        login: *LOGIN.lock().unwrap(),
+        context: std::sync::Arc::as_ptr(&ctx) as usize,
+        day: now.date_naive().to_string(),
+        currency: crate::credentials::env_override("deepseek", "currency"),
+    };
+    // Serialize concurrent consumers; only complete successful reads get freshness.
+    let mut cache = HISTORY.lock().await;
+    if self::token().as_deref() != Some(&token)
+        || !state
+            .preferences
+            .lock()
+            .unwrap()
+            .enabled_providers
+            .iter()
+            .any(|p| p == "deepseek")
+    {
+        return Err("控制台读取已取消。".into());
+    }
+    if !force.unwrap_or(false) {
+        if let Some(value) = cache.as_ref().filter(|c| c.fresh(&key, Instant::now())) {
+            return Ok(value.value.clone());
+        }
+    }
     let query = range(now).ok_or("无法计算控制台日期范围。")?;
     let (amount, cost) = tokio::join!(
         get(&ctx, "/api/v0/usage/by_api_key/amount", &query, &token),
         get(&ctx, "/api/v0/usage/by_api_key/cost", &query, &token)
     );
-    let result = ledger(
-        &amount?,
-        &cost?,
-        crate::credentials::env_override("deepseek", "currency").as_deref(),
-        now,
-    );
+    let amount = amount?;
+    let cost = cost?;
+    complete_shapes(&amount, &cost)?;
+    let result = ledger(&amount, &cost, key.currency.as_deref(), now);
     if !state
         .preferences
         .lock()
@@ -403,11 +466,61 @@ pub async fn get_deepseek_console_history(
     {
         return Err("控制台读取已取消。".into());
     }
+    *cache = Some(CachedHistory {
+        key,
+        saved: Instant::now(),
+        value: result.clone(),
+    });
     Ok(result)
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn complete_empty_bill_is_distinct_from_missing_bill_and_cache_never_crosses_accounts() {
+        assert!(complete_shapes(&json!({"series":[]}), &json!({"data":[]})).is_ok());
+        assert!(complete_shapes(&json!({}), &json!({"data":[]})).is_err());
+        assert!(complete_shapes(&json!({"series":[]}), &json!({})).is_err());
+        let saved = Instant::now();
+        let key = CacheKey {
+            login: 1,
+            context: 10,
+            day: "2026-10-11".into(),
+            currency: Some("USD".into()),
+        };
+        let cached = CachedHistory {
+            key: key.clone(),
+            saved,
+            value: ledger(
+                &json!({"series":[]}),
+                &json!({"data":[]}),
+                None,
+                chrono::Local::now(),
+            ),
+        };
+        assert!(cached.fresh(&key, saved + Duration::from_secs(59)));
+        assert!(!cached.fresh(&key, saved + Duration::from_secs(60)));
+        for other in [
+            CacheKey {
+                login: 2,
+                ..key.clone()
+            },
+            CacheKey {
+                context: 11,
+                ..key.clone()
+            },
+            CacheKey {
+                day: "2026-10-12".into(),
+                ..key.clone()
+            },
+            CacheKey {
+                currency: Some("CNY".into()),
+                ..key.clone()
+            },
+        ] {
+            assert!(!cached.fresh(&other, saved));
+        }
+    }
     #[test]
     fn invalid_login_and_business_errors_are_not_balances() {
         assert!(valid_token(Value::Null).is_none());

@@ -23,12 +23,17 @@ test.beforeEach(async ({ page }) => {
         if(cmd === 'finish_deepseek_console_login') {w.testConsoleConnected=true;return {connected:true}}
         if(cmd === 'remove_deepseek_console_login') {w.testConsoleConnected=false;return {connected:false}}
         if(cmd === 'get_deepseek_console_history') {if(w.testConsoleError)throw new Error(w.testConsoleError);return structuredClone(w.testConsoleHistory)}
+        if(cmd === 'get_opencode_console_connection') return {connected:!!w.testOpenCodeConnected}
+        if(cmd === 'begin_opencode_console_login') return
+        if(cmd === 'finish_opencode_console_login') {w.testOpenCodeConnected=true;return {connected:true}}
+        if(cmd === 'remove_opencode_console_login') {w.testOpenCodeConnected=false;return {connected:false}}
+        if(cmd === 'get_opencode_console_history') {if(w.testOpenCodeError)throw new Error(w.testOpenCodeError);if(w.testOpenCodeHold)return await new Promise(resolve=>w.resolveOpenCode=resolve);return structuredClone(w.testOpenCodeHistory)}
         if(cmd === 'get_service_status') { if(w.testStatusError) throw new Error(w.testStatusError); return structuredClone(w.testStatus ?? null) }
         if(cmd === 'get_codex_signals') { if(w.testSignalsError) throw new Error(w.testSignalsError); return structuredClone(w.testSignals ?? {models:[],changes:[],sessions:0,judgedSessions:0,notes:[]}) }
         if(cmd === 'get_prompt_cache') { if(w.testCacheError) throw new Error(w.testCacheError); return structuredClone(w.testCache ?? {live:[],lastLapsed:null,notes:[]}) }
         if(cmd === 'get_preferences') return structuredClone(prefs)
         if(cmd === 'save_preferences') { Object.assign(prefs,args.value); emit('preferences-changed',structuredClone(prefs)); return }
-        if(cmd === 'provider_settings') return structuredClone(providers)
+        if(cmd === 'provider_settings') return structuredClone([...providers,...(w.testOpenCodeProvider?[{id:'opencode-go',providerId:'opencode-go',name:'OpenCode Go',configured:true,stored:false,hints:[],credentialPath:null}]:[])])
         if(cmd === 'add_account') {
           const id=args.provider+'--account-ab';prefs.accounts.push({id,provider:args.provider});prefs.accountLabels[id]=args.label;
           if(args.enabled!==false)prefs.enabledProviders.push(id);prefs.providerOrder.push(id);
@@ -250,4 +255,29 @@ test('DeepSeek console login is independent of API keys and never reads disabled
  await page.evaluate(()=>{(window as any).testConsoleError='控制台登录已失效'});await group.getByRole('button',{name:'刷新账单'}).click();await expect(group.getByRole('alert')).toContainText('登录已失效');await expect(group.getByRole('cell',{name:'150',exact:true})).toHaveCount(0)
  await group.getByRole('button',{name:'断开控制台'}).click();await expect(group.getByText('连接 DeepSeek 控制台',{exact:true})).toBeVisible()
  expect(await page.evaluate(()=>(window as any).testCommands.filter((c:any)=>c.cmd==='save_provider_credential'))).toHaveLength(0)
+})
+
+
+test('OpenCode console remains separate from the Go key, preserves exact counters and clears signed-out bills',async({page})=>{
+ await page.getByRole('button',{name:'暂不设置'}).click()
+ await page.evaluate(()=>{const w=window as any;w.testOpenCodeProvider=true;return w.__TAURI_INTERNALS__.invoke('save_preferences',{value:{...w.testPrefs,accounts:[]}})})
+ await page.getByRole('button',{name:'OpenCode Go',exact:true}).click();const group=page.getByRole('region',{name:'OpenCode Go 控制台账单'})
+ await group.getByRole('button',{name:'登录控制台',exact:true}).click();await group.getByRole('button',{name:'已登录，连接控制台'}).click();await expect(group.getByRole('button',{name:'刷新账单'})).toBeDisabled()
+ expect(await page.evaluate(()=>(window as any).testCommands.filter((c:any)=>c.cmd==='get_opencode_console_history'))).toHaveLength(0)
+ await page.evaluate(()=>{const w=window as any;w.testOpenCodeHistory={workspace:'org',workspaceName:'测试工作区',days:[{date:'2026-10-11',input:'9007199254740993',output:'20',cacheRead:'30',cacheWrite:'5',tokens:'9007199254741048',cost:null,unpricedTokens:'9007199254741048',models:{m:'9007199254741048'}}],checkedAt:new Date().toISOString(),partial:true,notes:['未读区间已保留']};return w.__TAURI_INTERNALS__.invoke('save_preferences',{value:{...w.testPrefs,enabledProviders:['opencode-go']}})})
+ await expect(group.getByRole('cell',{name:'9,007,199,254,741,048',exact:true})).toBeVisible();await expect(group.getByRole('cell',{name:'—',exact:true})).toBeVisible();await expect(group.getByRole('status')).toContainText('未读区间')
+ await page.evaluate(()=>{(window as any).testOpenCodeError='控制台登录已失效'});await group.getByRole('button',{name:'刷新账单'}).click();await expect(group.getByRole('alert')).toContainText('登录已失效');await expect(group.getByRole('cell',{name:'9,007,199,254,741,048',exact:true})).toHaveCount(0)
+ await group.getByRole('button',{name:'断开控制台'}).click();await expect(group.getByText('连接 OpenCode 控制台',{exact:true})).toBeVisible()
+ expect(await page.evaluate(()=>(window as any).testCommands.filter((c:any)=>c.cmd==='save_provider_credential'))).toHaveLength(0)
+})
+
+test('arriving console rows stay visible during paging and disabled panes ignore late progress',async({page})=>{
+ await page.getByRole('button',{name:'暂不设置'}).click()
+ await page.evaluate(()=>{const w=window as any;w.testOpenCodeProvider=true;w.testOpenCodeConnected=true;w.testOpenCodeHold=true;return w.__TAURI_INTERNALS__.invoke('save_preferences',{value:{...w.testPrefs,accounts:[],enabledProviders:['opencode-go']}})})
+ await page.getByRole('button',{name:'OpenCode Go',exact:true}).click();const group=page.getByRole('region',{name:'OpenCode Go 控制台账单'});await expect.poll(()=>page.evaluate(()=>(window as any).testCommands.filter((c:any)=>c.cmd==='get_opencode_console_history').length)).toBe(1)
+ const result={workspace:'org',workspaceName:null,days:[{date:'2026-10-11',input:'100',output:'20',cacheRead:'30',cacheWrite:'5',tokens:'155',cost:.01,unpricedTokens:'0',models:{m:'155'}}],checkedAt:null,partial:true,notes:[]}
+ await page.evaluate(value=>(window as any).testEmit('opencode-console-history',value),result);await expect(group.getByRole('cell',{name:'155',exact:true})).toBeVisible();await expect(group.getByRole('button',{name:'刷新账单'})).toBeDisabled()
+ await page.evaluate(()=>{const w=window as any;return w.__TAURI_INTERNALS__.invoke('save_preferences',{value:{...w.testPrefs,enabledProviders:[]}})})
+ await expect(group.getByRole('cell',{name:'155',exact:true})).toHaveCount(0)
+ await page.evaluate(value=>{const w=window as any;w.testEmit('opencode-console-history',value);w.resolveOpenCode(value)},result);await expect(group.getByRole('cell',{name:'155',exact:true})).toHaveCount(0);await expect(group.getByRole('button',{name:'刷新账单'})).toBeDisabled()
 })

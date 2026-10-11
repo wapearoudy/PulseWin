@@ -1,3 +1,4 @@
+import { OpenCodeConsoleGroup } from './OpenCodeConsoleGroup'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { getSnapshot, onUsageUpdated, onSettingsAccount, panelPlacement, onPlacementChanged, setPanelPosition, providerSettings, addAccount, removeAccount, importAccountLogin, refreshProvider, saveProviderCredential, type ProviderSetting } from './api'
 import { usePreferences, savePreferences, defaultAccountAppearance, type Preferences } from './preferences'
@@ -143,7 +144,8 @@ export default function Settings() {
         <Row title="形状"><select aria-label="机器人形状" disabled={busy} value={appearance.body} onChange={e=>setAppearance({body:e.target.value})}>{SHAPE_ORDER.map(id=><option key={id} value={id}>{SHAPE_LABELS[id]?.zh??id}</option>)}</select></Row>
         <Row title="机器人颜色"><div className="toolbar"><input type="color" aria-label="机器人颜色" value={appearance.markColour??'#8e9dff'} disabled={busy} onChange={e=>setAppearance({markColour:e.target.value})}/><button disabled={busy||!appearance.markColour} onClick={()=>setAppearance({markColour:null})}>自动</button></div></Row></>}</Group>
         <Group title="圆环颜色"><Row title="高亮色" subtitle="自动随用量变化；用尽时仍显示深红。"><div className="toolbar"><input type="color" aria-label="圆环高亮色" value={appearance.ringColour??'#00e68c'} disabled={busy} onChange={e=>setAppearance({ringColour:e.target.value})}/><button disabled={busy||!appearance.ringColour} onClick={()=>setAppearance({ringColour:null})}>自动</button></div></Row></Group><AccountDetails key={provider.id} provider={provider} usage={snapshot?.providers.find(p => p.id === pane)} onError={setError} onChanged={reload} /></> : <Group title="当前用量"><p className="group-copy">未显示。启用后配置连接并检查用量。</p></Group>}
-        {(provider.providerId??provider.id)==='deepseek'&&<DeepSeekConsoleGroup enabled={enabled} onChanged={reload}/>}
+        {provider.id==='deepseek'&&<DeepSeekConsoleGroup enabled={enabled} onChanged={reload}/>}
+    {provider.id==='opencode-go'&&<OpenCodeConsoleGroup enabled={enabled} onChanged={reload}/>}
         {['codex','claude-code','deepseek'].includes(provider.providerId??provider.id)&&<ServiceStatusGroup key={provider.id} provider={provider.id} base={provider.providerId??provider.id}/>}
         {['codex','claude-code'].includes(provider.providerId??provider.id)&&<PromptCacheGroup provider={provider.providerId??provider.id} enabled={prefs.tokenSpendEnabled}/>}
         {(provider.providerId??provider.id)==='codex'&&<CodexSignalsGroup enabled={prefs.tokenSpendEnabled}/>}

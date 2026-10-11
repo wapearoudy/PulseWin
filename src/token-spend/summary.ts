@@ -52,7 +52,7 @@ function groups(records: SpendRecord[], key: (record: SpendRecord) => string | n
   }
   return [...buckets].map(([id, bucket]) => ({ id, ...bucket, ...amounts(bucket.records) })).sort((a, b) => compareTokens(b,a) || a.name.localeCompare(b.name))
 }
-const agentNames: Record<string, string> = { claude: 'Claude Code', codex: 'Codex', qwen: 'Qwen Code', gemini: 'Gemini CLI', cursor: 'Cursor', antigravity: 'Antigravity', hindsight: 'Hindsight', mcode: 'MCode', opencode: 'OpenCode', kilo: 'Kilo CLI', micode: 'MiMo Code', dsh: 'DeepSeek Harness',pi:'Pi',omp:'Oh My Pi',kimchi:'Kimchi',amp:'Amp',droid:'Droid',openclaw:'OpenClaw',goose:'Goose',hermes:'Hermes',zed:'Zed',crush:'Crush' }
+const agentNames: Record<string, string> = { claude: 'Claude Code', codex: 'Codex', qwen: 'Qwen Code', gemini: 'Gemini CLI', cursor: 'Cursor', antigravity: 'Antigravity', hindsight: 'Hindsight', mcode: 'MCode', opencode: 'OpenCode', kilo: 'Kilo CLI', micode: 'MiMo Code', dsh: 'DeepSeek Harness',pi:'Pi',omp:'Oh My Pi',kimchi:'Kimchi',amp:'Amp',droid:'Droid',openclaw:'OpenClaw',goose:'Goose',hermes:'Hermes',zed:'Zed',crush:'Crush',kiro:'Kiro',kimi:'Kimi CLI' }
 export const agentName = (id: string) => agentNames[id] ?? id
 export const modelKey = (record: SpendRecord) => record.modelName ?? record.model
 function projectKey(record: SpendRecord): string | null {

@@ -19,9 +19,9 @@ const TRANSCRIPT_VERSION: u32 = 9;
 const MAX_LINE: usize = 8 * 1024 * 1024;
 const MAX_FILES: usize = 50_000;
 const MAX_RECORDS: usize = 1_000_000;
-const AGENTS: [(&str, &str); 22] = [("claude", "Claude Code"), ("codex", "Codex"), ("qwen", "Qwen Code"),
+const AGENTS: [(&str, &str); 24] = [("claude", "Claude Code"), ("codex", "Codex"), ("qwen", "Qwen Code"),
     ("gemini", "Gemini CLI"), ("cursor", "Cursor"), ("antigravity", "Antigravity"), ("hindsight", "Hindsight"), ("mcode", "MCode"),
-    ("opencode", "OpenCode"), ("kilo", "Kilo CLI"), ("micode", "MiMo Code"), ("dsh", "DeepSeek Harness"),("pi","Pi"),("omp","Oh My Pi"),("kimchi","Kimchi"),("amp","Amp"),("droid","Droid"),("openclaw","OpenClaw"),("goose","Goose"),("hermes","Hermes"),("zed","Zed"),("crush","Crush")];
+    ("opencode", "OpenCode"), ("kilo", "Kilo CLI"), ("micode", "MiMo Code"), ("dsh", "DeepSeek Harness"),("pi","Pi"),("omp","Oh My Pi"),("kimchi","Kimchi"),("amp","Amp"),("droid","Droid"),("openclaw","OpenClaw"),("goose","Goose"),("hermes","Hermes"),("zed","Zed"),("crush","Crush"),("kiro","Kiro"),("kimi","Kimi CLI")];
 #[path = "token_spend/dsh_reader.rs"]
 mod dsh_reader;
 #[path = "token_spend/measured_readers.rs"]
@@ -38,6 +38,8 @@ mod openclaw_reader;
 mod aggregate_databases;
 mod zed_reader;
 mod crush_reader;
+mod kiro_reader;
+mod kimi_reader;
 pub fn watch(app:tauri::AppHandle){warmer::watch(app)}
 pub fn reading_changed(){warmer::changed()}
 pub fn forget_kept(){warmer::forget()}
@@ -285,6 +287,7 @@ fn price_for<'a>(model: &str, prices: &'a Prices) -> Option<&'a Price> {
     None
 }
 fn price_for_agent<'a>(model: &str, agent: &str, prices: &'a Prices) -> Option<&'a Price> {
+    if agent=="kimi" {return None;}
     price_for(model, prices).or_else(|| {
         let vendor=match agent { "opencode"=>"opencode-go", "kilo"=>"kilo", _=>return None };
         price_for(&format!("{vendor}|{model}"), prices)
@@ -325,7 +328,7 @@ async fn fetch_prices(cache: &Path, cancel: &AtomicBool) -> (Prices, Option<Stri
 #[derive(Serialize, Deserialize)]
 struct FileCache { version: u32, agent: String, fingerprint: u64, records: Vec<SpendRecord> }
 fn hash(value: impl Hash) -> u64 { let mut h = std::collections::hash_map::DefaultHasher::new(); value.hash(&mut h); h.finish() }
-fn stamp(path: &Path) -> std::io::Result<u64> {
+fn stamp(path: &Path, agent: &str) -> std::io::Result<u64> {
     let meta = fs::metadata(path)?;
     let main=(meta.len(), meta.modified()?.duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos());
     // A running SQLite writer can append records without changing the main
@@ -337,6 +340,7 @@ fn stamp(path: &Path) -> std::io::Result<u64> {
             Err(e) if e.kind()==std::io::ErrorKind::NotFound=>Ok(None),Err(e)=>Err(e)
         }
     }).collect::<std::io::Result<Vec<_>>>()? } else { Vec::new() };
+    let kiro_sidecar=if agent=="kiro" {match fs::metadata(path.with_extension("jsonl")){Ok(m)=>Some((m.len(),m.modified()?.duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos())),Err(e)if e.kind()==std::io::ErrorKind::NotFound=>None,Err(e)=>return Err(e)}}else{None};
     let dependency=path.file_name().and_then(|n|n.to_str()).and_then(|n|n.strip_suffix(".settings.json")).map(|stem|{
         match fs::metadata(path.with_file_name(format!("{stem}.jsonl"))){Ok(m)=>Ok(Some((m.len(),m.modified()?.duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos()))),Err(e)if e.kind()==std::io::ErrorKind::NotFound=>Ok(None),Err(e)=>Err(e)}
     }).transpose()?;
@@ -347,7 +351,7 @@ fn stamp(path: &Path) -> std::io::Result<u64> {
             Err(e) => return Err(e)
         }
     } else { None };
-    Ok(hash((path.to_string_lossy().to_string(), main, sidecars,dependency,registry)))
+    Ok(hash((path.to_string_lossy().to_string(), main, sidecars,dependency,registry,kiro_sidecar)))
 }
 fn write_cache(dir: &Path, name: &str, value: &impl Serialize, cancel: &AtomicBool) -> Result<(), String> {
     check(cancel)?; let bytes = serde_json::to_vec(value).map_err(|e| e.to_string())?; check(cancel)?;
@@ -368,6 +372,8 @@ fn roots(home: &Path, agent: &str, environment: impl Fn(&str) -> Option<String>)
         "claude" => vec![environment("CLAUDE_CONFIG_DIR").filter(|v| !v.trim().is_empty()).map(PathBuf::from).unwrap_or_else(|| home.join(".claude")).join("projects")],
         "codex" => { let root = environment("CODEX_HOME").filter(|v| !v.trim().is_empty()).map(PathBuf::from).unwrap_or_else(|| home.join(".codex")); vec![root.join("sessions"), root.join("archived_sessions")] }
         "qwen" => vec![home.join(".qwen/projects")],
+        "kiro" => vec![home.join(".kiro/sessions/cli")],
+        "kimi" => vec![home.join(".kimi/sessions")],
         "gemini" => vec![environment("GEMINI_CLI_HOME").filter(|v| !v.trim().is_empty()).map(|v| {
             let v = v.trim(); if v == "~" { home.to_path_buf() } else if let Some(rest) = v.strip_prefix("~/").or_else(|| v.strip_prefix("~\\")) { home.join(rest) } else { PathBuf::from(v) }
         }).unwrap_or_else(|| home.join(".gemini")).join("tmp")],
@@ -383,7 +389,9 @@ fn roots(home: &Path, agent: &str, environment: impl Fn(&str) -> Option<String>)
     }
 }
 fn candidate(path: &Path, agent: &str) -> bool {
-    if agent=="crush" { false }
+    if agent=="kimi" { kimi_reader::candidate(path) }
+    else if agent=="kiro" { kiro_reader::candidate(path) }
+    else if agent=="crush" { false }
     else if agent=="zed" { zed_reader::candidate(path) }
     else if aggregate_databases::agent(agent) { aggregate_databases::candidate(path,agent) }
     else if agent == "openclaw" { openclaw_reader::candidate(path) }
@@ -447,7 +455,7 @@ fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl
         for file in files {
             check(cancel)?;
             if snapshot.records.len() + raw_count >= MAX_RECORDS { snapshot.notes.push("记录超过读取上限，计数可能不完整".into()); break; }
-            let before = match stamp(&file) { Ok(s) => s, Err(e) => { snapshot.notes.push(format!("读取文件元信息失败 {}：{e}", file.display())); continue; } };
+            let before = match stamp(&file, agent) { Ok(s) => s, Err(e) => { snapshot.notes.push(format!("读取文件元信息失败 {}：{e}", file.display())); continue; } };
             let cache_name = format!("transcript-{TRANSCRIPT_VERSION}-{}-{:016x}.json", agent, hash(file.to_string_lossy().to_string()));
             let cached = fs::read(cache.join(&cache_name)).ok().and_then(|b| serde_json::from_slice::<FileCache>(&b).ok()).filter(|c|
                 c.version == TRANSCRIPT_VERSION && c.agent == *agent && c.fingerprint == before && c.records.iter().all(|record|
@@ -463,8 +471,8 @@ fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl
                     Err(error) if check(cancel).is_err() => return Err(error),
                     Err(error) => { snapshot.notes.push(error); continue; }
                 };
-                if notes.is_empty() && stamp(&file).ok() == Some(before) { let _ = write_cache(cache, &cache_name, &FileCache { version: TRANSCRIPT_VERSION, agent: (*agent).into(), fingerprint: before, records: records.clone() }, cancel); }
-                else if stamp(&file).ok() != Some(before) { snapshot.notes.push(format!("扫描期间文件发生变化：{}；本次结果未缓存", file.display())); }
+                if notes.is_empty() && stamp(&file, agent).ok() == Some(before) { let _ = write_cache(cache, &cache_name, &FileCache { version: TRANSCRIPT_VERSION, agent: (*agent).into(), fingerprint: before, records: records.clone() }, cancel); }
+                else if stamp(&file, agent).ok() != Some(before) { snapshot.notes.push(format!("扫描期间文件发生变化：{}；本次结果未缓存", file.display())); }
                 snapshot.notes.extend(notes); records
             };
             check(cancel)?;
@@ -476,7 +484,7 @@ fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl
         }
         let stable=snapshot.notes.len()==note_start && snapshot.records.len()+raw_count<=MAX_RECORDS;
         history::order_live(&mut per_file);
-        let mut records=if !inputs.is_empty() && matches!(*agent,"claude"|"codex"|"qwen"|"gemini"|"pi"|"omp"|"kimchi"|"amp"|"droid") {
+        let mut records=if !inputs.is_empty() && matches!(*agent,"claude"|"codex"|"qwen"|"gemini"|"pi"|"omp"|"kimchi"|"amp"|"droid"|"kiro"|"kimi") {
             if let Some(mut journal)=history::History::load(cache,agent,&mut snapshot.notes) {
                 let (records,retained)=journal.reconcile(per_file,stable,&mut identities,cancel)?;
                 source.retained_records=retained;
@@ -484,7 +492,7 @@ fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl
                 records
             } else {per_file.into_iter().flat_map(|(_,r)|r).filter(|r|history::claim(r,&mut identities)).collect()}
         } else {per_file.into_iter().flat_map(|(_,r)|r).filter(|r|history::claim(r,&mut identities)).collect()};
-        if !inputs.is_empty() && !matches!(*agent,"claude"|"codex"|"qwen"|"gemini"|"pi"|"omp"|"kimchi"|"amp"|"droid") {
+        if !inputs.is_empty() && !matches!(*agent,"claude"|"codex"|"qwen"|"gemini"|"pi"|"omp"|"kimchi"|"amp"|"droid"|"kiro"|"kimi") {
             if let Some(mut journal)=history::StoreHistory::load(cache,agent,&mut snapshot.notes){
                 source.retained_records=journal.reconcile(&mut records,stable,cancel)?;
                 if stable {store_journals.push(journal)}
@@ -519,6 +527,8 @@ fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl
 
 fn counter(value: &Value) -> u64 { value.as_u64().or_else(|| value.as_f64().filter(|x| x.is_finite() && *x >= 0.).map(|x| x as u64)).unwrap_or(0) }
 fn parse_file(path: &Path, agent: &str, cancel: &AtomicBool) -> Result<(Vec<SpendRecord>, Vec<String>), String> {
+    if agent=="kiro"{return kiro_reader::read(path,cancel)}
+    if agent=="kimi"{return kimi_reader::read(path,cancel)}
     if agent=="zed"{return zed_reader::read(path,cancel)}
     if aggregate_databases::agent(agent){return aggregate_databases::read(path,agent,cancel)}
     if agent=="openclaw"{return openclaw_reader::parse(path,cancel)}
@@ -775,6 +785,36 @@ mod tests {
         let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../test-results").canonicalize();
         if let (Ok(base), Ok(target)) = (base, self.dir.canonicalize()) { if target.starts_with(base) { let _ = fs::remove_dir_all(target); } }
     } }
+    #[test] fn kimi_wire_counts_fresh_input_separately_without_model_or_price_guess(){
+        let f=Fixture::new();let file=f.dir.join("logs/wire.jsonl");let row=json!({"timestamp":1791705600000i64,"message":{"payload":{"token_usage":{"input_other":100,"output":20,"input_cache_read":30,"input_cache_creation":5},"body":"KIMI_PRIVATE_SENTINEL"}}});
+        fs::write(&file,format!("{}\n{}",row,json!({"timestamp":0,"message":{"payload":{"token_usage":{"input_other":999}}}}))).unwrap();
+        let mut prices=Prices::new();prices.insert("kimi (unnamed)".into(),Price{input:1.,output:1.,cache_read:None,cache_write:None,name:None,tiers:vec![]});
+        let scan=||scan_roots(&f.dir.join("cache"),&prices,&AtomicBool::new(false),|_,_|{},|id|if id=="kimi"{vec![f.dir.join("logs")]}else{vec![]}).unwrap();
+        let first=scan();assert!(first.notes.is_empty());assert_eq!(first.records.len(),1);let r=&first.records[0];assert_eq!(r.tally.total(),155);assert_eq!(r.tally.input,100);assert_eq!(r.source_timestamp,Some(1791705600));assert!(r.cost.is_none());assert!(r.project.is_none());assert_eq!(r.model,"kimi (unnamed)");
+        assert_eq!(scan().sources.iter().find(|s|s.id=="kimi").unwrap().cached_files,1);fs::remove_file(&file).unwrap();assert_eq!(scan().records[0].tally.total(),155);
+        for entry in fs::read_dir(f.dir.join("cache")).unwrap(){assert!(!fs::read_to_string(entry.unwrap().path()).unwrap().contains("KIMI_PRIVATE_SENTINEL"));}
+        assert_eq!(roots(&f.dir,"kimi",|_|None),vec![f.dir.join(".kimi/sessions")]);assert!(!candidate(&file.with_file_name("state.json"),"kimi"));
+        assert_eq!(parse_file(&file,"kimi",&AtomicBool::new(true)).unwrap_err(),"cancelled");
+    }
+    #[test] fn kiro_explicit_turns_sidecar_changes_and_deleted_history(){
+        let f=Fixture::new();let file=f.dir.join("logs/session.json");let sidecar=file.with_extension("jsonl");
+        let header=json!({"session_id":"ks","cwd":"C:/project","private_body":"KIRO_PRIVATE_SENTINEL","session_state":{"rts_model_state":{"model_info":{"model_id":"claude-test"}},"conversation_metadata":{"user_turn_metadatas":[{"input_token_count":100,"output_token_count":20,"message_ids":["p"],"end_timestamp":1791705600},{"context_percentage":80,"character_count":999,"end_timestamp":1791705600}]}}});
+        fs::write(&file,header.to_string()).unwrap();
+        let scan=||scan_roots(&f.dir.join("cache"),&Prices::new(),&AtomicBool::new(false),|_,_|{},|id|if id=="kiro"{vec![f.dir.join("logs")]}else{vec![]}).unwrap();
+        let first=scan();assert!(first.notes.is_empty());assert_eq!(first.records.len(),1);assert_eq!(first.records[0].tally.total(),120);assert_eq!(first.records[0].source_timestamp,Some(1791705600));assert_eq!(scan().sources.iter().find(|s|s.id=="kiro").unwrap().cached_files,1);
+        fs::write(&sidecar,json!({"kind":"Prompt","data":{"message_id":"p","meta":{"timestamp":1791698400000i64},"body":"KIRO_PRIVATE_SENTINEL"}}).to_string()).unwrap();
+        let moved=scan();assert_eq!(moved.records.len(),1);assert_eq!(moved.records[0].source_timestamp,Some(1791698400));assert_eq!(moved.sources.iter().find(|s|s.id=="kiro").unwrap().cached_files,0);
+        fs::remove_file(&file).unwrap();let kept=scan();assert_eq!(kept.records.len(),1);assert_eq!(kept.records[0].tally.total(),120);assert_eq!(kept.records[0].source_timestamp,Some(1791698400));
+        for entry in fs::read_dir(f.dir.join("cache")).unwrap(){assert!(!fs::read_to_string(entry.unwrap().path()).unwrap().contains("KIRO_PRIVATE_SENTINEL"));}
+        assert_eq!(parse_file(&sidecar,"kiro",&AtomicBool::new(true)).unwrap_err(),"cancelled");
+    }
+    #[test] fn kiro_missing_count_time_and_malformed_header_are_not_zero_estimates(){
+        let f=Fixture::new();let file=f.dir.join("logs/session.json");
+        fs::write(&file,json!({"session_state":{"conversation_metadata":{"user_turn_metadatas":[{"input_token_count":3},{"character_count":999,"end_timestamp":1791705600}]}}}).to_string()).unwrap();
+        let (records,notes)=parse_file(&file,"kiro",&AtomicBool::new(false)).unwrap();assert!(records.is_empty());assert_eq!(notes.len(),1);
+        fs::write(&file,"{").unwrap();assert!(parse_file(&file,"kiro",&AtomicBool::new(false)).is_err());
+        assert_eq!(roots(&f.dir,"kiro",|_|None),vec![f.dir.join(".kiro/sessions/cli")]);assert!(!candidate(&file.with_extension("jsonl"),"kiro"));
+    }
     #[test] fn aggregate_databases_track_growth_wal_and_pruning_without_reading_bodies(){
         for agent in ["goose","hermes"] {
             let f=Fixture::new();let database=f.dir.join("logs").join(if agent=="goose"{"sessions.db"}else{"state.db"});

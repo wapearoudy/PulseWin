@@ -12,16 +12,20 @@ commit; this documentation sync does not establish parity with the new release.
 [release-progress.json](release-progress.json). Light assistant surfaces,
 horizontal floating/bottom docking and durable counter history are now implemented.
 The continuing checkpoint is recorded in [release-progress.json](release-progress.json):
-972 Rust checks passed, 2 real-account checks explicitly ignored; 205 frontend
-unit checks and 78 synthetic browser checks passed. Status history, activity,
+984 Rust checks passed, 2 real-account checks explicitly ignored; 205 frontend
+unit checks and 80 synthetic browser checks passed; latest Token/settings changes passed 26 targeted flows. Status history, activity,
 recap logic, local Codex evidence, cache timing, accurate pricing/counters and
 additional native readers have running implementations. DeepSeek console,
 recap visual/native flow, detailed-card integration and authenticated billing
-remain partial. The latest Windows binary passed both isolated native suites, including eleven
+remain partial. The latest Windows binary passed both isolated native suites, including thirteen
 synthetic source fixtures and native PNG export. Interactive clipboard/dialogs
-and real-account acceptance remain unrun.
-The Token source catalog now declares 22 integrations (Crush recognizes a
-cost-only store and intentionally emits no token records); 32 source entries
+remain unrun. DeepSeek interactive login and 30-day real billing read passed;
+OpenCode interactive login and resume completed: 20,364 unique Go request IDs,
+no pending ranges. Restart recovery and account-disable cancellation passed. Original detailed-card acceptance remains pending.
+The explicit live Go quota GET passed; the live Harness integrity test failed
+because source logs changed during scanning and is not counted as accepted.
+The Token source catalog now declares 24 integrations (Crush recognizes a
+cost-only store and intentionally emits no token records); 30 source entries
 remain unported. This is a source inventory, not an overall parity percentage.
 No update feed promotion or release is authorized until the remaining work is
 implemented and acceptance succeeds.

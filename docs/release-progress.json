@@ -19,38 +19,42 @@
     "Goose and Hermes cumulative SQLite counters, WAL invalidation and pruning retention",
     "Zed native/plain/zstd SQLite thread counts; imported and external ACP threads excluded",
     "Crush source recognition without deriving token counts from dollars",
-    "Updater proxy policy, same-repository fallback validation and supplied release-note language selection"
+    "Updater proxy policy, same-repository fallback validation and supplied release-note language selection",
+    "Kiro explicit per-turn counters with sidecar timestamp invalidation and Kimi CLI wire counters; no guessed model prices or conversation persistence"
   ],
   "verification": {
-    "rust": "972 passed, 0 failed, 2 explicitly ignored real-account checks (974 total)",
+    "rust": "984 passed, 0 failed, 2 explicitly ignored real-account checks (986 total)",
     "frontendUnit": "205 passed in 20 files",
-    "browser": "78 passed full suite with 2 workers; all IPC test replies are synthetic",
-    "native": "PASS on latest 0.1.15 Windows/WebView2 build: eleven synthetic native sources, kept-snapshot reuse and opt-out, Codex evidence/cache TTL/speed/TTFT, full-size native PNG decode/export and preference persistence; light appearance, bottom docking, horizontal restoration and obsolete-metrics rejection. No real account or clipboard/file-dialog acceptance.",
+    "browser": "80 passed full suite with 2 workers; all IPC replies are synthetic",
+    "native": "PASS on latest rebuilt 0.1.15 Windows/WebView2 binary: 13 synthetic native sources including Kiro/Kimi, kept reuse/opt-out, Codex evidence/cache/speed/TTFT, full-size PNG and preferences; light/bottom/horizontal suites. No interactive clipboard/file-dialog acceptance.",
     "localUpdateFeed": "0.1.14 remains unchanged; build explicitly holds promotion",
     "externalLimitations": [
       "Anonymous GitHub backup API rate limited; live fallback not accepted",
       "DeepSeek official status network/TLS request failed",
-      "DeepSeek/OpenCode authenticated billing and account credentials not accepted"
-    ]
+      "Real Harness read-only integrity check failed because source logs changed during its 57.8-second scan; no stable live-source acceptance. Full offline fixture regression remains passing."
+    ],
+    "authenticatedConsole": "DeepSeek official interactive login and actual 30-day billing read passed. OpenCode official interactive login and resume passed: 20,364 Go request IDs, all unique, pending ranges 0, complete=true. Private credentials/ledger are ignored; this validates live reads, not full original card/renewal parity. Both encrypted connections and complete OpenCode ledger restored after restart. Live OpenCode forced read cancelled on account disable, disabled read rejected, DeepSeek unaffected. OpenCode Go explicit live quota GET passed."
   },
   "pending": [
-    "32 sources still listed as unported in Token pane; four existing export/capture sources still require supplied exports",
-    "DeepSeek real console login, renewal/import, short-lived billing cache and detailed-card integration",
-    "OpenCode Go separate browser session, workspace resolution, bounded resumable request-log pager and detailed-card integration",
+    "30 sources still listed as unported in Token pane; four existing export/capture sources still require supplied exports",
+    "DeepSeek console renewal/import and detailed-card integration; complete login-to-bill comparison still needs documented acceptance",
+    "OpenCode Go session renewal and detailed-card integration; authenticated read/resume/restart/account-scope cancellation now passed",
     "Original recap visual parity, native recap flow, notification click navigation, interactive clipboard/file-dialog acceptance",
     "Prompt-cache hover-card integration and complete per-model output/TTFT rows",
     "Background warming timer/cancellation acceptance",
     "Remaining provider authentication/diagnostics, stable quota identities and full 77-route audit",
     "Extensions, complete JSON/integration fields and account deep links remain listed in README coverage",
     "Windows multi-DPI/multi-monitor, full-screen and live-account regression acceptance",
-    "Live official outage notification and backup update acceptance"
+    "Live official outage notification and backup update acceptance",
+    "Stable real Harness source integrity acceptance; initial read-before/read-after verification failed on changing source logs"
   ],
   "checkpointDate": "2026-10-11",
   "reference": "Pulse v1.9.0 tag objects, alongside the unchanged old checkout",
   "implementedPartial": [
-    "DeepSeek encrypted independent console login and 30-day billing parser/UI; real login and billing not accepted",
+    "DeepSeek independent encrypted console login, 30-day actual billing and 60-second cache; interactive live read passed, renewal/import and detailed-card acceptance pending",
     "Background opt-in spend warmer and native kept-snapshot reuse; timer acceptance pending",
     "Recap posters, export/copy and monthly notice; full original visuals, notification click and interactive exports not accepted",
-    "Prompt-cache and console billing currently settings-only; full detailed-card integration pending"
+    "Prompt-cache and console billing currently settings-only; full detailed-card integration pending",
+    "OpenCode encrypted independent login, workspace resolution and adaptive pager; 20,364 unique live Go IDs, zero pending ranges, restart recovery and account disable cancellation passed. Renewal and detailed-card acceptance pending."
   ]
 }

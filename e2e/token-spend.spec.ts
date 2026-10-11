@@ -90,7 +90,7 @@ test('default off reads nothing; model navigation, range changes and sidebar reu
   await page.getByRole('switch',{name:'读取本机 Token 用量记录'}).check()
   await expect(page.getByRole('heading',{name:'每日 Token',exact:true})).toBeVisible()
   await expect(page.locator('.spend-sources>div')).toHaveCount(8)
-  await expect(page.getByText('其他 32 个原版来源尚未移植')).toBeVisible()
+  await expect(page.getByText('其他 30 个原版来源尚未移植')).toBeVisible()
   await page.getByText('支持格式与读取位置 · 8 个实际 reader').click()
   await expect(page.getByText('需要事先导出 Cursor', { exact: false })).toBeVisible()
   expect(await page.evaluate(() => (window as any).spendTestPrefs.tokenSpendEnabled)).toBe(true)

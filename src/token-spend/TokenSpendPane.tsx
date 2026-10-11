@@ -32,7 +32,7 @@ export interface TokenSpendPaneProps {
 const spans: [SpendSpan, string][] = [['today', '今天'], ['week', '最近 7 天'], ['month', '最近 30 天']]
 // This list is about actual readers, not provider registrations. Antigravity's
 // original catalog uses separate labels for CLI/IDE native stores and capture.
-const pendingSources = ['Grok Build','Kimi CLI','Devin','OmO Native','Prime Agent','Roo Code','Kilo Code','Cline','CodeBuddy','WorkBuddy','Cherry Studio','Command Code','OpenCodeReview','ZCode','Kiro','Unsloth','Antigravity CLI','Antigravity IDE','Devin Desktop','Mux','Codebuff','Freebuff','JCode','Augment','Gajae Code','Junie','Fx','LM Studio','Reasonix','Trae','Warp','Copilot']
+const pendingSources = ['Grok Build','Devin','OmO Native','Prime Agent','Roo Code','Kilo Code','Cline','CodeBuddy','WorkBuddy','Cherry Studio','Command Code','OpenCodeReview','ZCode','Unsloth','Antigravity CLI','Antigravity IDE','Devin Desktop','Mux','Codebuff','Freebuff','JCode','Augment','Gajae Code','Junie','Fx','LM Studio','Reasonix','Trae','Warp','Copilot']
 const exportHelp: Record<string, string> = {
   dsh: '自动读取 DeepSeek Harness 的 sessions 会话目录（默认 ~/.dsh，可通过 DSH_HOME 指定）。支持普通、版本化及 Zstandard 压缩 JSONL，分别统计输入、输出和缓存；分叉历史与迁移副本去重。CLI 与当前桌面版共享此目录。',
   cursor: '需要事先导出 Cursor usageEventsDisplay JSON 或带四类计数列的 CSV。不会读取 Cursor 原生日志或自动登录；CSV 只用于日统计。',

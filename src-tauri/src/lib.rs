@@ -29,6 +29,9 @@ pub mod service_status;
 pub mod recap_export;
 pub mod recap_notice;
 pub mod deepseek_console;
+mod console_pager;
+mod console_reads;
+pub mod opencode_console;
 pub mod codex_signals;
 pub mod prompt_cache;
 
@@ -464,6 +467,8 @@ async fn apply_preferences(app: AppHandle, state: &AppState, mut value: preferen
         let old=std::mem::replace(&mut *state.ctx.write().unwrap(),next);old.cancelled.cancel();
         token_spend::spend_clear_snapshot();
     }
+    if network_changed || !value.enabled_providers.iter().any(|p|p=="deepseek") {deepseek_console::cancel_read();}
+    if network_changed || !value.enabled_providers.iter().any(|p|p=="opencode-go") {opencode_console::cancel_read();}
     let _ = app.emit("preferences-changed", &value);
     if value.alerts.on_service_outage!=previous.alerts.on_service_outage || value.enabled_providers!=previous.enabled_providers || value.accounts!=previous.accounts {service_status::preferences_changed(&app);}
     if previous.token_spend_enabled && !value.token_spend_enabled { token_spend::spend_clear_snapshot(); token_spend::cancel_card_reads(); }
@@ -1441,6 +1446,11 @@ pub fn run() {
         .manage(service_status::StatusState::default())
         .invoke_handler(tauri::generate_handler![
             get_snapshot,
+            opencode_console::get_opencode_console_connection,
+            opencode_console::begin_opencode_console_login,
+            opencode_console::finish_opencode_console_login,
+            opencode_console::remove_opencode_console_login,
+            opencode_console::get_opencode_console_history,
             deepseek_console::get_deepseek_console_connection,
             deepseek_console::begin_deepseek_console_login,
             deepseek_console::finish_deepseek_console_login,
@@ -1536,8 +1546,9 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if window.label()=="usage" && matches!(event,tauri::WindowEvent::Focused(false)){let _=window.hide();}
-            // Closing the panel hides it; the tray keeps the app alive.
+            // Preserve only tray-owned local windows; destroy temporary login webviews.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if !matches!(window.label(),"main"|"settings"|"usage"){return;}
                 api.prevent_close();
                 if window.label()=="settings" {token_spend::spend_clear_snapshot();}
                 if window.label()=="main" {

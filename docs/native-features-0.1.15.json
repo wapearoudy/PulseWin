@@ -1,6 +1,6 @@
 {
   "passed": true,
-  "testedAt": "2026-10-11T09:36:15.848Z",
+  "testedAt": "2026-10-11T10:20:56.605Z",
   "sources": [
     {
       "id": "claude",
@@ -89,12 +89,20 @@
     {
       "id": "crush",
       "records": 0
+    },
+    {
+      "id": "kiro",
+      "records": 1
+    },
+    {
+      "id": "kimi",
+      "records": 1
     }
   ],
   "checks": [
     "isolated fixture-only home and cache",
     "opt-in and opt-out native guards",
-    "eleven native token sources including four SQLite/legacy stores",
+    "thirteen native token sources including Kiro/Kimi and four SQLite/legacy stores",
     "counter timestamps in seconds",
     "Codex measured speed and TTFT",
     "Codex evidence and insufficient-sample threshold",
@@ -109,6 +117,5 @@
     "official status outage delivery",
     "full original recap visual parity",
     "online backup assets blocked by public API rate limit"
-  ],
-  "fixtureDataOnly": true
+  ]
 }
