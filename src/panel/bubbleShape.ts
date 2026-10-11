@@ -154,7 +154,7 @@ export function bubblePath(options: BubblePathOptions): string {
     return facingSideways({
       width: height,
       height: width,
-      pointerCenter,
+      pointerCenter: edge === 'bottom' ? width-pointerCenter : pointerCenter,
       cornerRadius,
       pointerWidth,
       pointerHeight,
@@ -261,7 +261,8 @@ function pointerPath(o: SidewaysOptions, bodyX: number, bodyW: number): string {
  * follows, and for the same reason: a reflection reverses the winding and the
  * body and tail would cancel where they overlap.
  */
-export function bubbleTransform(edge: PanelEdge, height: number): string | undefined {
+export function bubbleTransform(edge: PanelEdge, height: number, width=0): string | undefined {
+  if (edge === 'bottom') return `matrix(0,1,-1,0,${n(width)},0)`
   if (isVertical(edge)) return undefined
   return `matrix(0,-1,1,0,0,${n(height)})`
 }

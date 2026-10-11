@@ -12,7 +12,7 @@ import { C, clamp, cubicInOut, range, smoothstep, type Random } from './math'
 
 export interface EngineInput {
   mood:BotMarkMood; body?:string; pointer?:Point|null; animated?:boolean
-  persona?:Persona; gaze?:'left'|'right'|'top'; isPointedAt?:boolean
+  persona?:Persona; gaze?:'left'|'right'|'top'|'bottom'; isPointedAt?:boolean
   isQuiet?:boolean; finishedAt?:number; resetAt?:number; resetCelebrationAllowed?:boolean
 }
 export interface MarkFrame {
@@ -127,7 +127,7 @@ export class BotMarkEngine {
     this.eyelid.target=(moving?this.blinks.update(now):null)??gesture.eyeOpen??target.open
     if(!moving){this.gazeX.target=this.gazeY.target=0}
     else if(now>=this.gazeAt){
-      const aim=aimForState(this.active,this.random),bias=input.gaze==='top'?0:7
+      const aim=aimForState(this.active,this.random),bias=input.gaze==='top'||input.gaze==='bottom'?0:7
       this.gazeX.target=(bias&&this.random()<.8?Math.abs(aim.x):aim.x)*character.gaze;this.gazeY.target=aim.y*character.gaze;this.gazeAt=now+this.rand(aim.lo,aim.hi)*tempo
     }
     this.humming.target=moving&&this.active==='humming'?1:0;this.notification.target=this.active==='notifying'?1:0
@@ -155,7 +155,7 @@ export class BotMarkEngine {
       const centre=centres[i];let localCentre=C+face.x,offset=(centre.x-C)*face.sx,perspective=1,visible=true,fade=1
       if(Math.abs(position.turn)>.001){const scanY=clamp(C+face.y+(centre.y-C)*face.sy,top+2,bottom-2),[left,right]=spanAt(bodyRing,scanY),radius=Math.max((right-left)/2,12),initial=Math.asin(clamp(offset/radius,-1,1)),angle=initial+position.turn,cosine=Math.cos(angle);localCentre=(left+right)/2;visible=cosine>.02;perspective=Math.max(cosine,.02)/Math.max(Math.cos(initial),.02);offset=radius*Math.sin(angle);fade=smoothstep(clamp(cosine/.5))}
       const scaled=Math.min(clamp(this.eyeSize.value,.2,2)*face.eye,fit/pulse),sx=clamp(perspective*scaled*pulse,.02,2.4),sy=clamp(Math.max(this.eyelid.value*(moving?this.gestures.wink(now,i):1),.04)*scaled*pulse,.02,2.4)
-      let drift=(1.4*Math.sin(.00042*now+i)+.5*Math.sin(.001*now+2*i)+this.gazeX.value*weight+gesture.gazeX+(input.gaze==='top'?0:7)*weight)*this.facing.value-pair*(1-weight)+this.attention.x*focus-10*clamp(this.notification.value)
+      let drift=(1.4*Math.sin(.00042*now+i)+.5*Math.sin(.001*now+2*i)+this.gazeX.value*weight+gesture.gazeX+(input.gaze==='top'||input.gaze==='bottom'?0:7)*weight)*this.facing.value-pair*(1-weight)+this.attention.x*focus-10*clamp(this.notification.value)
       const dy=.9*Math.sin(.00058*now+i)+this.attention.y*focus+this.gazeY.value*weight+gesture.gazeY+7*clamp(this.notification.value),halfHeight=EYE_HALF*sy+2,yy=clamp(C+face.y+(centre.y+dy-C)*face.sy,top+halfHeight,bottom-halfHeight)
       let left=-Infinity,right=Infinity
       for(let j=0;j<ring.length;j+=2){const sampleY=yy+(ring[j].y-centre.y)*sy,at=transitioning||turned?spanAt(bodyRing,sampleY):shapeSpanAt(body,sampleY);left=Math.max(left,at[0]-(ring[j].x-centre.x)*sx);right=Math.min(right,at[1]-(ring[j].x-centre.x)*sx)}

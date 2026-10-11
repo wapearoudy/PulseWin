@@ -315,7 +315,7 @@ export default function App() {
   )
   const tallest = useMemo(() => cardBox(edge, maximumCardLayout, maxRows, false, true, true), [edge, maximumCardLayout, maxRows])
 
-  const isTop = edge === 'top'
+  const isTop = edge === 'top' || edge === 'bottom'
   const gap = cardLayout.horizontalGap
 
   // The frame has to hold the rail plus an open card, on whichever axis the
@@ -326,11 +326,11 @@ export default function App() {
   const frameH = isTop ? railW + gap + tallest.height : Math.max(railLength, tallest.height)
 
   const railLeft = isTop ? (frameW - railLength) / 2 : edge === 'right' ? frameW - railW : 0
-  const railTop = isTop ? 0 : (frameH - railLength) / 2
+  const railTop = isTop ? edge==='bottom' ? frameH-railW : 0 : (frameH - railLength) / 2
   useEffect(() => {
     if (frameW <= 0 || frameH <= 0) return
-    setPanelMetrics(frameW, frameH, railLeft, railTop, isTop ? railLength : railW, isTop ? railW : railLength).catch(() => undefined)
-  }, [frameW, frameH, railLeft, railTop, railLength, railW, isTop, isDocked])
+    setPanelMetrics(frameW, frameH, railLeft, railTop, isTop ? railLength : railW, isTop ? railW : railLength,edge).catch(() => undefined)
+  }, [frameW, frameH, railLeft, railTop, railLength, railW, isTop, isDocked,edge])
 
   /** The `index`-th slot's offset *along* the rail, in frame coordinates. */
   const slotStart = useCallback(
@@ -352,7 +352,7 @@ export default function App() {
   // Along the rail the card is centred on its ring; across it the card sits
   // just off the rail, on the side away from the edge.
   const cardTop = isTop
-    ? railW + gap
+    ? edge==='bottom' ? railTop-gap-cardSize.height : railW + gap
     : clamp(anchor - cardSize.height / 2, 0, Math.max(0, frameH - cardSize.height))
   const cardLeft = isTop
     ? clamp(anchor - cardSize.width / 2, 0, Math.max(0, frameW - cardSize.width))
@@ -433,7 +433,7 @@ export default function App() {
   }, [])
 
   return (
-    <div className="panel-root" style={{ position: 'relative' }}>
+    <div className="panel-root" data-colour={preferences.panelColour} style={{ position: 'relative' }}>
       <div
         className="panel__dock"
         style={{
@@ -445,6 +445,7 @@ export default function App() {
         }}
       >
         <Rail
+          light={preferences.panelColour==='light'}
           entries={entries}
           edge={edge}
           isDocked={isDocked}
@@ -452,7 +453,7 @@ export default function App() {
           spacing={RAIL_SPACING}
           usesRoundEnds={preferences.roundEnds}
           showsRemaining={preferences.showsRemaining}
-          showPercentages={edge==='top' ? preferences.topShowPercentages : preferences.showPercentages}
+          showPercentages={isTop ? preferences.topShowPercentages : preferences.showPercentages}
           animateActivity={preferences.animateActivity}
           dockAlertColour={preferences.dockAlertColour}
           onContextMenu={() => { void showPanelMenu().catch(() => undefined) }}
@@ -477,6 +478,7 @@ export default function App() {
           }}
         >
           <UsageCard
+            light={preferences.panelColour==='light'}
             provider={activeProvider}
             layout={cardLayout}
             edge={edge}

@@ -30,7 +30,7 @@
    which is why the original calls it a shadow rather than a surface — the ring
    is the edge a reader actually sees. */
 .ring__disc {
-  fill: #0b0d12;
+  fill: var(--panel-disc);
 }
 
 .ring__icon {
@@ -38,7 +38,7 @@
   height: 100%;
   display: grid;
   place-items: center;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--panel-text);
   font-size: 10px;
   font-weight: 600;
   line-height: 1;
@@ -77,7 +77,7 @@
   means how much of a limit is gone, so the surface itself carries none.
 */
 .rail__surface {
-  fill: #000;
+  fill: var(--panel-surface);
 }
 
 .rail__item {
@@ -103,7 +103,7 @@
     system-ui, sans-serif;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--panel-text);
   line-height: 1;
   white-space: nowrap;
 }
@@ -139,7 +139,7 @@
 }
 
 .card__surface {
-  fill: #000;
+  fill: var(--panel-surface);
 }
 
 .card__content {
@@ -148,7 +148,7 @@
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--panel-text);
 }
 
 .card__header {
@@ -160,7 +160,7 @@
   display: grid;
   place-items: center;
   border-radius: 50%;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--panel-text);
   font-size: 10px;
   font-weight: 600;
   line-height: 1;
@@ -182,12 +182,12 @@
 .card__plan {
   margin-left: auto;
   flex: none;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--panel-muted);
 }
 
 .card__message {
   margin: 0;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--panel-muted);
 }
 
 .card__why {
@@ -201,7 +201,7 @@
   margin: 0;
   font-family: 'Cascadia Mono', Consolas, monospace;
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.38);
+  color: var(--panel-muted);
   direction: rtl;
   text-align: left;
   white-space: nowrap;
@@ -213,15 +213,15 @@
   align-self: flex-start;
   padding: 3px 10px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.07);
-  color: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--panel-divider);
+  background: var(--panel-button);
+  color: var(--panel-text);
   font: inherit;
   cursor: pointer;
 }
 
 .card__action:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--panel-hover);
 }
 
 .card__row {
@@ -236,7 +236,7 @@
 }
 
 .card__row-label {
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--panel-text);
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
@@ -244,7 +244,7 @@
 
 /* The bar's ends are rounder than its height, the way the original's are. */
 .card__bar {
-  background: rgba(255, 255, 255, 0.13);
+  background: var(--panel-track);
   overflow: hidden;
 }
 
@@ -258,23 +258,27 @@
 }
 
 .card__detail {
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--panel-muted);
 }
 
 .card__reset {
   margin-left: auto;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--panel-muted);
   font-variant-numeric: tabular-nums;
   white-space:nowrap;
 }
 
 .card__activity { display:flex; flex-direction:column; flex-shrink:0; }
-.card__divider { background:rgba(255,255,255,.12); flex-shrink:0; }
-.card__muted { color:rgba(255,255,255,.45); }
+.card__divider { background:var(--panel-divider); flex-shrink:0; }
+.card__muted { color:var(--panel-muted); }
 .card__figures {display:flex; flex-shrink:0;}
 .card__figures>div {display:flex; flex-direction:column; flex:1; min-width:0; white-space:nowrap; font-variant-numeric:tabular-nums;}
 .card__chart {display:flex; align-items:flex-end; flex-shrink:0;}
-.card__chart>span {flex:1; min-width:0; background:rgba(255,255,255,.7); border-radius:2px;}
+.card__chart>span {flex:1; min-width:0; background:var(--panel-chart); border-radius:2px;}
 .card__model {margin-left:auto; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .card__footnote,.card__estimate {white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 
+
+.panel-root {--panel-surface:#000;--panel-disc:#0b0d12;--panel-text:rgba(255,255,255,.92);--panel-muted:rgba(255,255,255,.45);--panel-chart:rgba(255,255,255,.7);--panel-divider:rgba(255,255,255,.12);--panel-track:rgba(255,255,255,.13);--panel-button:rgba(255,255,255,.07);--panel-hover:rgba(255,255,255,.12)}
+.panel-root[data-colour="light"] {--panel-surface:#f7f7f7;--panel-disc:#ededed;--panel-text:rgba(0,0,0,.88);--panel-muted:rgba(0,0,0,.55);--panel-chart:rgba(0,0,0,.6);--panel-divider:rgba(0,0,0,.12);--panel-track:rgba(0,0,0,.13);--panel-button:rgba(0,0,0,.05);--panel-hover:rgba(0,0,0,.1)}
+.panel-root[data-colour="light"] .rail__item:focus-visible .rail__percent {color:#000}

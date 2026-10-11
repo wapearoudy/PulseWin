@@ -12,7 +12,7 @@ const EVENT_HOVER_CHANGED = 'hover-changed'
 const EVENT_EDGE_CHANGED = 'edge-changed'
 
 /** Which screen edge the rail is fused to. Mirrors `PanelEdge` in lib.rs. */
-export type PanelEdgeName = 'left' | 'right' | 'top'
+export type PanelEdgeName = 'left' | 'right' | 'top' | 'bottom'
 
 /** One row of the settings list. Mirrors `ProviderSetting` in lib.rs. */
 export interface ProviderSetting {
@@ -83,8 +83,8 @@ export function setHitRegions(regions: HitRegion[]): Promise<void> {
 }
 
 /** Ask for a frame big enough to hold the rail plus an open card, and re-dock. */
-export function setPanelMetrics(width: number, height: number, railX: number, railY: number, railWidth: number, railHeight: number): Promise<void> {
-  return invoke('set_panel_metrics', { width, height, railX, railY, railWidth, railHeight })
+export function setPanelMetrics(width: number, height: number, railX: number, railY: number, railWidth: number, railHeight: number, expectedEdge?:PanelEdgeName): Promise<void> {
+  return invoke('set_panel_metrics', { width, height, railX, railY, railWidth, railHeight,expectedEdge })
 }
 
 export function onHoverChanged(handler: (id: string | null) => void): Promise<UnlistenFn> {
@@ -150,7 +150,7 @@ export const onMenuChanged = (handler:(open:boolean)=>void) => listen<boolean>('
 
 export const onRefreshChanged = (handler:(event:{ids:string[];refreshing:boolean})=>void) => listen<{ids:string[];refreshing:boolean}>('refresh-changed',e=>handler(e.payload))
 
-export const setPanelPosition = (position:'left'|'right'|'top'|'free') => invoke<PanelPlacement>('set_panel_position',{position})
+export const setPanelPosition = (position:'left'|'right'|'top'|'bottom'|'free'|'free-horizontal') => invoke<PanelPlacement>('set_panel_position',{position})
 
 export const addAccount = (provider:string,label:string,credential:string|null,importLocal:boolean,enabled=true) => invoke<string>('add_account',{provider,label,credential,importLocal,enabled})
 export const removeAccount = (account:string) => invoke<void>('remove_account',{account})

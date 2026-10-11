@@ -28,6 +28,9 @@ export const USAGE_TINT: Record<UsageTintName, string> = {
   exhausted: '#D91721',
 }
 
+export const LIGHT_USAGE_TINT: Record<UsageTintName,string> = {good:'#009459',caution:'#C27D00',warning:'#DE382B',exhausted:'#AD0F1A'}
+export const tintColour=(name:UsageTintName,light=false)=>(light?LIGHT_USAGE_TINT:USAGE_TINT)[name]
+
 /** Earlier visual caution for above-pace consumption; not a notification. */
 export const CAUTION_THRESHOLD = 0.5
 

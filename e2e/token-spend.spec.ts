@@ -75,6 +75,16 @@ test('default off reads nothing; model navigation, range changes and sidebar reu
   expect(await page.evaluate(() => (window as any).spendTestCommands.some((c:any)=>c.command === 'spend_clear_snapshot'))).toBe(true)
 })
 
+test('retained history stays visible after source files disappear',async({page})=>{
+  await page.evaluate(()=>{
+    const source=(window as any).spendTestData.sources[0]
+    source.files=0;source.cachedFiles=0;source.retainedRecords=6
+  })
+  await page.getByRole('switch',{name:'读取本机 Token 用量记录'}).click()
+  await expect(page.getByText('0 个记录文件 · 0 个缓存命中 · 保留 6 条历史计数',{exact:true})).toBeVisible()
+  await expect(page.getByRole('heading',{name:'每日明细',exact:true})).toBeVisible()
+})
+
 test('Harness source, cache buckets, model drilldown and unpriced amounts appear together', async ({page}) => {
   await page.evaluate(() => {
     const w = window as any, day = w.spendTestData.records[0].day

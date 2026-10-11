@@ -15,7 +15,7 @@ use std::sync::{atomic::{AtomicBool, AtomicU64, Ordering}, Arc, Mutex, OnceLock}
 use std::time::{Duration, UNIX_EPOCH};
 
 const CACHE_VERSION: u32 = 2;
-const TRANSCRIPT_VERSION: u32 = 5;
+const TRANSCRIPT_VERSION: u32 = 6;
 const MAX_LINE: usize = 8 * 1024 * 1024;
 const MAX_FILES: usize = 50_000;
 const MAX_RECORDS: usize = 1_000_000;
@@ -28,6 +28,8 @@ mod dsh_reader;
 mod measured_readers;
 #[path = "token_spend/opencode_store.rs"]
 mod opencode_store;
+#[path = "token_spend/history.rs"]
+mod history;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -55,6 +57,7 @@ pub struct SpendRecord {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SpendSource { pub id: String, pub name: String, pub status: String, pub files: usize, pub cached_files: usize, pub records: usize,
+    #[serde(default)] pub retained_records:usize,
     pub origin: String, pub roots: Vec<String> }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -71,6 +74,7 @@ pub struct SpendScan {
 struct Run { scan: SpendScan, cancel: Arc<AtomicBool> }
 static RUN: OnceLock<Mutex<Option<Run>>> = OnceLock::new();
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+static SCAN_LOCK: Mutex<()> = Mutex::new(());
 fn state() -> &'static Mutex<Option<Run>> { RUN.get_or_init(|| Mutex::new(None)) }
 fn check(cancel: &AtomicBool) -> Result<(), String> { if cancel.load(Ordering::Acquire) { Err("cancelled".into()) } else { Ok(()) } }
 fn ensure_opt_in(requested: bool, persisted: bool) -> Result<(), String> {
@@ -318,15 +322,22 @@ fn scan_sources(home: &Path, cache: &Path, prices: &Prices, _force: bool, cancel
 }
 // Explicit roots are the test seam: fixtures never discover the machine's stores.
 fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl Fn(&str, usize), inputs_for: impl Fn(&str) -> Vec<PathBuf>) -> Result<SpendSnapshot, String> {
+    // Card/background/manual readers share one durable journal. A cancelled
+    // predecessor cannot overwrite a successor's stable counters.
+    let _guard=SCAN_LOCK.lock().map_err(|e|e.to_string())?;
+    check(cancel)?;
+    let mut journals=Vec::new();
+    let mut store_journals=Vec::new();
     let mut identities = HashSet::new();
     let mut snapshot = SpendSnapshot { scanned_at: Utc::now().to_rfc3339(), records: Vec::new(), sources: Vec::new(), notes: Vec::new(), prices_at: None, pricing_status: "unavailable".into() };
     for (index, (agent, name)) in AGENTS.iter().enumerate() {
         check(cancel)?; progress(name, index + 1);
         let inputs = inputs_for(agent);
+        let note_start=snapshot.notes.len();
         let detected = inputs.iter().any(|p| p.exists());
         let mut files = Vec::new(); for root in &inputs { enumerate(root, agent, &mut files, cancel, &mut snapshot.notes)?; }
         files.sort(); files.dedup();
-        let mut source = SpendSource { id: (*agent).into(), name: (*name).into(), status: if detected { "no-data" } else { "not-detected" }.into(), files: files.len(), cached_files: 0, records: 0,
+        let mut source = SpendSource { id: (*agent).into(), name: (*name).into(), status: if detected { "no-data" } else { "not-detected" }.into(), files: files.len(), cached_files: 0, records: 0, retained_records:0,
             origin: if measured_readers::captured(agent) { "export" } else { "native" }.into(), roots: inputs.iter().map(|p| p.to_string_lossy().into_owned()).collect() };
         let mut per_file = Vec::new(); let mut raw_count = 0;
         for file in files {
@@ -353,12 +364,29 @@ fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl
                 snapshot.notes.extend(notes); records
             };
             check(cancel)?;
-            raw_count += records.len(); per_file.push(records);
+            raw_count += records.len(); per_file.push((history::file_key(&file),records));
         }
-        let mut records = if *agent == "cursor" { measured_readers::reconcile_cursor(per_file, &mut snapshot.notes, cancel)? } else { per_file.into_iter().flatten().collect() };
+        if *agent=="cursor" {
+            let records=measured_readers::reconcile_cursor(per_file.into_iter().map(|(_,r)|r).collect(),&mut snapshot.notes,cancel)?;
+            per_file=vec![("reconciled-cursor-store".into(),records)];
+        }
+        let stable=snapshot.notes.len()==note_start && snapshot.records.len()+raw_count<=MAX_RECORDS;
+        let mut records=if !inputs.is_empty() && matches!(*agent,"claude"|"codex"|"qwen"|"gemini") {
+            if let Some(mut journal)=history::History::load(cache,agent,&mut snapshot.notes) {
+                let (records,retained)=journal.reconcile(per_file,stable,&mut identities,cancel)?;
+                source.retained_records=retained;
+                if stable {journals.push(journal)}
+                records
+            } else {per_file.into_iter().flat_map(|(_,r)|r).filter(|r|history::claim(r,&mut identities)).collect()}
+        } else {per_file.into_iter().flat_map(|(_,r)|r).filter(|r|history::claim(r,&mut identities)).collect()};
+        if !inputs.is_empty() && !matches!(*agent,"claude"|"codex"|"qwen"|"gemini") {
+            if let Some(mut journal)=history::StoreHistory::load(cache,agent,&mut snapshot.notes){
+                source.retained_records=journal.reconcile(&mut records,stable,cancel)?;
+                if stable {store_journals.push(journal)}
+            }
+        }
         let remaining = MAX_RECORDS.saturating_sub(snapshot.records.len());
         if records.len() > remaining { snapshot.notes.push("记录超过读取上限，计数可能不完整".into()); records.truncate(remaining); }
-        records.retain(|record| record.deduplication_id.as_ref().map(|id| identities.insert(id.clone())).unwrap_or(true));
         for record in &mut records { check(cancel)?; record.cost = None; record.cost_breakdown = None; record.model_name = None;
                 if let Some(price) = price_for_agent(&record.model, agent, prices) {
                     let tally = &record.tally;
@@ -372,7 +400,16 @@ fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl
         if source.records > 0 { source.status = "counted".into(); }
         snapshot.sources.push(source);
     }
-    check(cancel)?; snapshot.notes.sort(); snapshot.notes.dedup(); Ok(snapshot)
+    check(cancel)?;
+    for journal in journals {
+        if let Err(error)=journal.save(cancel) {
+            check(cancel)?;snapshot.notes.push(format!("历史记录保存失败，原文件保留：{error}"));
+        }
+    }
+    for journal in store_journals {
+        if let Err(error)=journal.save(cancel){check(cancel)?;snapshot.notes.push(format!("历史记录保存失败，原文件保留：{error}"));}
+    }
+    snapshot.notes.sort(); snapshot.notes.dedup(); Ok(snapshot)
 }
 
 fn counter(value: &Value) -> u64 { value.as_u64().or_else(|| value.as_f64().filter(|x| x.is_finite() && *x >= 0.).map(|x| x as u64)).unwrap_or(0) }
@@ -396,6 +433,7 @@ fn parse_reader(reader: &mut impl BufRead, agent: &str, session: &str, cancel: &
     let mut notes = Vec::new(); let mut seen = HashSet::new(); let mut model = None::<String>; let mut previous = None::<[u64; 4]>;
     let mut project = None; let mut grouped: HashMap<(String, u32, String, i64), Tally> = HashMap::new();
     let mut normalized = Vec::new(); let mut digest = std::collections::hash_map::DefaultHasher::new(); let mut emitted = 0usize;
+    let mut claude_replies=HashMap::<String,usize>::new();
     loop {
         check(cancel)?;
         // fill_buf gives a bounded IO chunk. Oversize message bodies are skipped,
@@ -442,7 +480,6 @@ fn parse_reader(reader: &mut impl BufRead, agent: &str, session: &str, cancel: &
             let Some(named) = message["model"].as_str().filter(|m| *m != "<synthetic>") else { if eof { break; } continue; };
             model = Some(named.to_owned());
             if timestamp.is_none() { notes.push("Claude Code：缺少有效用量时间，计数可能不完整".into()); if eof { break; } continue; }
-            if let Some(id) = message["id"].as_str() { if !seen.insert(id.to_owned()) { if eof { break; } continue; } }
             Tally { input: counter(&usage["input_tokens"]), output: counter(&usage["output_tokens"]), cache_write: counter(&usage["cache_creation_input_tokens"]), cache_read: counter(&usage["cache_read_input_tokens"]) }
         } else {
             if let Some(named) = payload["model"].as_str() { model = Some(named.to_owned()); }
@@ -459,16 +496,31 @@ fn parse_reader(reader: &mut impl BufRead, agent: &str, session: &str, cancel: &
         if tally.total() == 0 { if eof { break; } continue; }
         if let (Some(timestamp), Some(model)) = (timestamp, model.as_ref()) {
             let local = timestamp.with_timezone(&Local);
-            let key = (local.format("%Y-%m-%d").to_string(), chrono::Timelike::hour(&local), model.clone(), timestamp.timestamp().div_euclid(900)*900);
-            grouped.entry(key).or_default().add(&tally);
+            if agent=="claude" {
+                let id=root["message"]["id"].as_str().map(|id|format!("claude:{id}"));
+                // Streaming transcript fragments repeat a reply ID while its
+                // output counter grows. Keep the fullest reported counters;
+                // a first-fragment-only dedupe silently loses output tokens.
+                if let Some(index)=id.as_ref().and_then(|id|claude_replies.get(id)).copied() {
+                    let old:&mut SpendRecord=&mut normalized[index];
+                    old.tally.input=old.tally.input.max(tally.input);old.tally.output=old.tally.output.max(tally.output);
+                    old.tally.cache_write=old.tally.cache_write.max(tally.cache_write);old.tally.cache_read=old.tally.cache_read.max(tally.cache_read);
+                } else {
+                    if let Some(id)=&id {claude_replies.insert(id.clone(),normalized.len());}
+                    normalized.push(SpendRecord{agent:agent.into(),model:model.clone(),day:local.format("%Y-%m-%d").to_string(),hour:chrono::Timelike::hour(&local),session:session.into(),project:project.clone(),tally,unclassified_tokens:0,deduplication_id:id,aggregate_timing:false,source_timestamp:Some(timestamp.timestamp()),source_scope:None,cost:None,cost_breakdown:None,model_name:None});
+                }
+            } else {
+                let key = (local.format("%Y-%m-%d").to_string(), chrono::Timelike::hour(&local), model.clone(), timestamp.timestamp().div_euclid(900)*900);
+                grouped.entry(key).or_default().add(&tally);
+            }
         } else { notes.push(format!("{agent}：缺少有效用量时间，计数可能不完整")); }
-        if grouped.len() >= MAX_RECORDS { notes.push(format!("{agent}：达到记录上限，计数可能不完整")); break; }
+        if grouped.len()+normalized.len() >= MAX_RECORDS { notes.push(format!("{agent}：达到记录上限，计数可能不完整")); break; }
         if eof { break; }
     }
     check(cancel)?; notes.sort(); notes.dedup();
     let mut records: Vec<_> = grouped.into_iter().map(|((day, hour, model, timestamp), tally)| SpendRecord { agent: agent.into(), model, day, hour, session: session.into(), project: project.clone(), tally, unclassified_tokens: 0, deduplication_id: None, aggregate_timing: false, source_timestamp: Some(timestamp), source_scope: None, cost: None, cost_breakdown: None, model_name: None }).collect();
     let fragment = digest.finish();
-    for (index, record) in normalized.iter_mut().enumerate() { if record.deduplication_id.is_none() { record.deduplication_id = Some(format!("qwen:{}:{fragment:016x}:{index}", record.session)); } }
+    if agent=="qwen" {for (index, record) in normalized.iter_mut().enumerate() { if record.deduplication_id.is_none() { record.deduplication_id = Some(format!("qwen:{}:{fragment:016x}:{index}", record.session)); } }}
     records.extend(normalized);
     records.sort_by(|a, b| (&a.day, a.hour, &a.model).cmp(&(&b.day, b.hour, &b.model)));
     Ok((records, notes))
@@ -586,6 +638,84 @@ mod tests {
         assert_eq!(result.records[0].tally.total(), 125); assert!(!result.notes.is_empty());
         assert!(!fixture.dir.join("cache").exists());
     }
+    #[test] fn deleted_transcript_survives_repeated_scans_and_is_repriced(){
+        let f=Fixture::new();let path=f.dir.join("logs/session.jsonl");
+        fs::write(&path,claude("history-one","2026-10-02T12:00:00Z","history-model",100,20).to_string()).unwrap();
+        let first=f.scan(&Prices::new(),&AtomicBool::new(false)).unwrap();
+        fs::remove_file(path).unwrap();
+        for _ in 0..2 {
+            let kept=f.scan(&Prices::new(),&AtomicBool::new(false)).unwrap();
+            assert_eq!(kept.records.len(),1);assert_eq!(kept.records[0].tally,first.records[0].tally);
+            assert!(kept.records[0].cost.is_none());assert_eq!(kept.sources[0].files,0);
+        }
+        let prices=parse_prices(&json!({"anthropic":{"models":{"history-model":{"cost":{"input":2,"output":8,"cache_read":0.2,"cache_write":2.5}}}}}));
+        let kept=f.scan(&prices,&AtomicBool::new(false)).unwrap();
+        assert!((kept.records[0].cost.unwrap()-0.0003656).abs()<1e-10);
+        assert_eq!(kept.records[0].session,first.records[0].session);
+        assert!(!fs::read_to_string(f.dir.join("cache/history-claude.json")).unwrap().contains("SENSITIVE"));
+    }
+    #[test]fn streaming_claude_replies_keep_final_output_and_do_not_add_fragments(){
+        let lines=[claude("stream","2026-10-02T12:00:00Z","measured",100,1),claude("stream","2026-10-02T12:00:01Z","measured",100,75),claude("stream","2026-10-02T12:00:02Z","measured",100,70)].map(|v|v.to_string()).join("\n");
+        let (records,notes)=parse_reader(&mut Cursor::new(lines),"claude","session",&AtomicBool::new(false)).unwrap();
+        assert!(notes.is_empty());assert_eq!(records.len(),1);assert_eq!(records[0].tally.output,75);
+        assert_eq!(records[0].tally.total(),180);assert_eq!(records[0].deduplication_id.as_deref(),Some("claude:stream"));
+    }
+    #[test]fn large_history_can_be_atomically_replaced_after_it_exceeds_one_mib(){
+        let f=Fixture::new();let path=f.dir.join("logs/a.jsonl");
+        let lines=(0..3000).map(|i|claude(&format!("large-{i}"),"2026-10-02T12:00:00Z","measured",100,20).to_string()).collect::<Vec<_>>().join("\n");
+        fs::write(&path,&lines).unwrap();let first=f.scan(&Prices::new(),&AtomicBool::new(false)).unwrap();assert_eq!(first.records.len(),3000);
+        let journal=f.dir.join("cache/history-claude.json");assert!(fs::metadata(&journal).unwrap().len()>1024*1024);
+        fs::write(&path,format!("{}\n{}",lines,claude("added","2026-10-02T13:00:00Z","measured",10,20))).unwrap();
+        let next=f.scan(&Prices::new(),&AtomicBool::new(false)).unwrap();assert!(next.notes.is_empty());
+        fs::remove_file(path).unwrap();let kept=f.scan(&Prices::new(),&AtomicBool::new(false)).unwrap();assert_eq!(kept.records.len(),3001);
+    }
+    #[test] fn live_transcript_growth_replaces_its_previous_counters(){
+        let f=Fixture::new();let path=f.dir.join("logs/session.jsonl");
+        let one=claude("history-one","2026-10-02T12:00:00Z","measured",100,20);
+        fs::write(&path,one.to_string()).unwrap();f.scan(&Prices::new(),&AtomicBool::new(false)).unwrap();
+        fs::write(&path,format!("{}\n{}",one,claude("history-two","2026-10-02T13:00:00Z","measured",50,10))).unwrap();
+        let grown=f.scan(&Prices::new(),&AtomicBool::new(false)).unwrap();
+        assert_eq!(grown.records.iter().map(|r|r.tally.total()).sum::<u64>(),190);
+        fs::remove_file(path).unwrap();let kept=f.scan(&Prices::new(),&AtomicBool::new(false)).unwrap();
+        assert_eq!(kept.records.iter().map(|r|r.tally.total()).sum::<u64>(),190);
+    }
+    #[test] fn archived_reply_claims_prevent_resume_and_backup_double_count(){
+        let f=Fixture::new();let original=f.dir.join("logs/a.jsonl");let copy=f.dir.join("logs/b.jsonl");
+        let one=claude("copied-history","2026-10-02T12:00:00Z","measured",100,20);
+        fs::write(&original,one.to_string()).unwrap();f.scan(&Prices::new(),&AtomicBool::new(false)).unwrap();
+        fs::remove_file(&original).unwrap();
+        fs::write(&copy,format!("{}\n{}",one,claude("new-reply","2026-10-02T13:00:00Z","measured",50,10))).unwrap();
+        let resumed=f.scan(&Prices::new(),&AtomicBool::new(false)).unwrap();
+        assert_eq!(resumed.records.iter().map(|r|r.tally.total()).sum::<u64>(),190);
+        fs::write(&original,one.to_string()).unwrap();
+        let restored=f.scan(&Prices::new(),&AtomicBool::new(false)).unwrap();
+        assert_eq!(restored.records.iter().map(|r|r.tally.total()).sum::<u64>(),190);
+        fs::remove_file(&original).unwrap();fs::remove_file(&copy).unwrap();
+        let gone=f.scan(&Prices::new(),&AtomicBool::new(false)).unwrap();
+        assert_eq!(gone.records.iter().map(|r|r.tally.total()).sum::<u64>(),190);
+    }
+    #[test] fn partial_and_cancelled_reads_cannot_replace_durable_history(){
+        let f=Fixture::new();let path=f.dir.join("logs/a.jsonl");
+        fs::write(&path,claude("one","2026-10-02T12:00:00Z","measured",100,20).to_string()).unwrap();
+        f.scan(&Prices::new(),&AtomicBool::new(false)).unwrap();
+        let journal=f.dir.join("cache/history-claude.json");let before=fs::read(&journal).unwrap();
+        fs::write(&path,format!("{}\n{{\"usage\":broken}}",claude("two","2026-10-02T12:00:00Z","measured",500,20))).unwrap();
+        let partial=f.scan(&Prices::new(),&AtomicBool::new(false)).unwrap();assert!(!partial.notes.is_empty());
+        assert_eq!(fs::read(&journal).unwrap(),before);
+        assert!(f.scan(&Prices::new(),&AtomicBool::new(true)).is_err());assert_eq!(fs::read(&journal).unwrap(),before);
+        fs::remove_file(path).unwrap();let kept=f.scan(&Prices::new(),&AtomicBool::new(false)).unwrap();
+        assert_eq!(kept.records[0].tally.total(),125);
+    }
+    #[test] fn damaged_or_newer_history_is_never_overwritten(){
+        let f=Fixture::new();let path=f.dir.join("logs/a.jsonl");
+        fs::write(path,claude("one","2026-10-02T12:00:00Z","measured",1,2).to_string()).unwrap();
+        fs::create_dir_all(f.dir.join("cache")).unwrap();let journal=f.dir.join("cache/history-claude.json");
+        for bytes in ["broken","{\"format\":999,\"files\":{}}"] {
+            fs::write(&journal,bytes).unwrap();let live=f.scan(&Prices::new(),&AtomicBool::new(false)).unwrap();
+            assert_eq!(live.records[0].tally.total(),8);assert!(live.notes.iter().any(|n|n.contains("历史文件损坏")));
+            assert_eq!(fs::read_to_string(&journal).unwrap(),bytes);
+        }
+    }
     #[test] fn cancelled_scan_writes_no_complete_cache() {
         let fixture = Fixture::new(); fs::write(fixture.dir.join("logs/test.jsonl"), claude("one", "2026-10-02T12:00:00Z", "test", 1, 2).to_string()).unwrap();
         assert!(fixture.scan(&Prices::new(), &AtomicBool::new(true)).is_err()); assert!(!fixture.dir.join("cache").exists());
@@ -648,7 +778,7 @@ mod tests {
     #[test] fn invalid_cache_metadata_is_rebuilt_from_the_real_fixture() {
         let fixture = Fixture::new(); fs::write(fixture.dir.join("logs/session.jsonl"), claude("one", "2026-10-02T12:00:00Z", "test", 100, 20).to_string()).unwrap();
         fixture.scan(&Prices::new(),&AtomicBool::new(false)).unwrap();
-        let file = fs::read_dir(fixture.dir.join("cache")).unwrap().next().unwrap().unwrap().path();
+        let file = fs::read_dir(fixture.dir.join("cache")).unwrap().map(|e|e.unwrap().path()).find(|p|p.file_name().unwrap().to_string_lossy().starts_with("transcript-")).unwrap();
         let mut value: Value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap(); value["records"][0]["hour"] = json!(99);
         fs::write(&file,value.to_string()).unwrap();
         let rebuilt = fixture.scan(&Prices::new(),&AtomicBool::new(false)).unwrap(); assert_eq!(rebuilt.sources[0].cached_files,0); assert!(rebuilt.records[0].hour < 24); assert_eq!(rebuilt.records[0].tally.total(),125);

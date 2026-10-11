@@ -1,8 +1,10 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { releaseHeld } from './release-gate.mjs'
 
 export function publishLocalUpdates(root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')) {
+  if(releaseHeld(root)){console.log('Local update feed unchanged: implementation is still in progress.');return}
   const config = JSON.parse(readFileSync(path.join(root, 'src-tauri/tauri.conf.json'), 'utf8'))
   const { version } = config
   if (!/^\d+\.\d+\.\d+(?:-[\da-z.-]+)?$/i.test(version)) throw new Error('Invalid update version')

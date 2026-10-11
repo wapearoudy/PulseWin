@@ -8,7 +8,7 @@ export interface SpendRecord {
   aggregateTiming?: boolean
   cost: number | null; costBreakdown: [number, number, number, number] | null
 }
-export interface SpendSource { id: string; name: string; status: 'counted' | 'no-data' | 'not-detected'; files: number; cachedFiles: number; records: number; origin?: 'native' | 'export'; roots?: string[] }
+export interface SpendSource { id: string; name: string; status: 'counted' | 'no-data' | 'not-detected'; files: number; cachedFiles: number; records: number; retainedRecords?:number; origin?: 'native' | 'export'; roots?: string[] }
 export interface SpendSnapshot {
   scannedAt: string; records: SpendRecord[]; sources: SpendSource[]; notes: string[]
   pricesAt: string | null; pricingStatus: 'cached' | 'fresh' | 'stale' | 'unavailable'

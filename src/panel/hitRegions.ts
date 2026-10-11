@@ -75,13 +75,14 @@ export interface RailHitGeometry {
 }
 export function railSurfaceRegion(o:RailHitGeometry,id='rail'):ShapeHitRegion {
   const width=o.layout.collapsedWidth+(o.width-o.layout.collapsedWidth)*o.openness,height=o.layout.collapsedHeight+(o.length-o.layout.collapsedHeight)*o.openness
-  const canvasWidth=o.edge==='top'?height:width,canvasHeight=o.edge==='top'?width:height
-  const x=o.left+(o.edge==='top'?(o.length-height)/2:o.edge==='right'?o.width-width:0),y=o.top+(o.edge==='top'?0:(o.length-height)/2)
-  const outline=pathOutline(berthPath({width,height,openness:o.openness,isDocked:o.isDocked,layout:o.layout})).map(contour=>contour.map(([a,b]):HitPoint=>o.edge==='top'?[x+b,y+width-a]:o.edge==='left'?[x+width-a,y+b]:[x+a,y+b]))
+  const horizontal=o.edge==='top'||o.edge==='bottom'
+  const canvasWidth=horizontal?height:width,canvasHeight=horizontal?width:height
+  const x=o.left+(horizontal?(o.length-height)/2:o.edge==='right'?o.width-width:0),y=o.top+(horizontal?(o.edge==='bottom'?o.width-width:0):(o.length-height)/2)
+  const outline=pathOutline(berthPath({width,height,openness:o.openness,isDocked:o.isDocked,layout:o.layout})).map(contour=>contour.map(([a,b]):HitPoint=>o.edge==='top'?[x+b,y+width-a]:o.edge==='bottom'?[x+height-b,y+a]:o.edge==='left'?[x+width-a,y+b]:[x+a,y+b]))
   return {id,x,y,w:canvasWidth,h:canvasHeight,outline}
 }
 export function cardSurfaceRegion(o:{edge:PanelEdge;left:number;top:number;width:number;height:number;pointerCentre:number;layout:DetailCardLayout;usesRoundEnds:boolean}):ShapeHitRegion {
-  const outline=pathOutline(bubblePath({width:o.width,height:o.height,edge:o.edge,pointerCenter:o.pointerCentre,cornerRadius:o.layout.cornerRadius,pointerWidth:o.layout.pointerWidth,pointerHeight:o.layout.pointerHeight,usesRoundEnds:o.usesRoundEnds})).map(contour=>contour.map(([x,y]):HitPoint=>o.edge==='top'?[o.left+y,o.top+o.height-x]:[o.left+x,o.top+y]))
+  const outline=pathOutline(bubblePath({width:o.width,height:o.height,edge:o.edge,pointerCenter:o.pointerCentre,cornerRadius:o.layout.cornerRadius,pointerWidth:o.layout.pointerWidth,pointerHeight:o.layout.pointerHeight,usesRoundEnds:o.usesRoundEnds})).map(contour=>contour.map(([x,y]):HitPoint=>o.edge==='top'?[o.left+y,o.top+o.height-x]:o.edge==='bottom'?[o.left+o.width-y,o.top+x]:[o.left+x,o.top+y]))
   return {id:'card',x:o.left,y:o.top,w:o.width,h:o.height,outline}
 }
 
@@ -89,11 +90,11 @@ export function cardSurfaceRegion(o:{edge:PanelEdge;left:number;top:number;width
 export const POINTER_SLACK=8
 export function sliverTrackingRegion(o:RailHitGeometry):ShapeHitRegion {
   const width=o.layout.collapsedHitWidth,height=o.layout.collapsedHeight+POINTER_SLACK*2
-  return o.edge==='top'?{id:'sliver',hoverOnly:true,x:o.left+(o.length-height)/2,y:o.top,w:height,h:width}
+  return o.edge==='top'||o.edge==='bottom'?{id:'sliver',hoverOnly:true,x:o.left+(o.length-height)/2,y:o.top+(o.edge==='bottom'?o.width-width:0),w:height,h:width}
     :{id:'sliver',hoverOnly:true,x:o.left+(o.edge==='right'?o.width-width:0),y:o.top+(o.length-height)/2,w:width,h:height}
 }
 export function cardTrackingRegion(edge:PanelEdge,frameWidth:number,frameHeight:number,card:HitRegion):ShapeHitRegion {
-  return edge==='top'?{id:'card',hoverOnly:true,x:card.x-POINTER_SLACK,y:0,w:card.w+POINTER_SLACK*2,h:frameHeight}
+  return edge==='top'||edge==='bottom'?{id:'card',hoverOnly:true,x:card.x-POINTER_SLACK,y:0,w:card.w+POINTER_SLACK*2,h:frameHeight}
     :{id:'card',hoverOnly:true,x:0,y:card.y-POINTER_SLACK,w:frameWidth,h:card.h+POINTER_SLACK*2}
 }
 

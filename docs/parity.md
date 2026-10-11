@@ -8,6 +8,17 @@ Upstream release-note sync (2026-10-11): latest stable Pulse is 1.9.0.
 1.7.0 through 1.9.0. The reference source checkout remains at its earlier
 commit; this documentation sync does not establish parity with the new release.
 
+0.1.15 implementation is in progress and publication is explicitly held by
+[release-progress.json](release-progress.json). Light assistant surfaces,
+horizontal floating/bottom docking and durable counter history are now implemented.
+Rust: 906 passed, 2 explicitly ignored real-account checks. Frontend: 190 passed.
+Browser: 64 full-suite checks plus a subsequent affected-pane run (24 passed,
+including a new history-retention UI check). The isolated native WebView2 smoke
+verified saved light appearance, bottom work-area geometry, obsolete-layout
+rejection and horizontal facing after reload using synthetic display figures.
+See the updated upstream inventory for remaining gaps; these checks do not
+establish complete parity or live-account acceptance.
+
 ## Acceptance inventory
 
 All unchecked items remain incomplete or unverified. No overall completion percentage is claimed.

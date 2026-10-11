@@ -19,6 +19,7 @@ pub struct Preferences {
     pub reset_celebration: bool,
     pub enabled_providers: Vec<String>,
     pub provider_order: Vec<String>,
+    pub panel_colour: String,
     pub panel_size: f64,
     pub rail_spacing: f64,
     pub round_ends: bool,
@@ -44,7 +45,7 @@ pub struct Preferences {
 
 impl Default for Preferences {
     fn default() -> Self {
-        Self { network_proxy:Default::default(), panel_visible:true, tray_shows_usage:false, tray_style:"figure".into(), tray_account:None, accounts: vec![], account_labels: Default::default(), open_settings_shortcut: None, toggle_panel_shortcut: None, alerts: Default::default(), token_spend_enabled: false, token_spend_span: "week".into(), reset_celebration: true, enabled_providers: vec![], provider_order: vec![], panel_size: 1.0,
+        Self { network_proxy:Default::default(), panel_visible:true, tray_shows_usage:false, tray_style:"figure".into(), tray_account:None, accounts: vec![], account_labels: Default::default(), open_settings_shortcut: None, toggle_panel_shortcut: None, alerts: Default::default(), token_spend_enabled: false, token_spend_span: "week".into(), reset_celebration: true, enabled_providers: vec![], provider_order: vec![], panel_colour: "black".into(), panel_size: 1.0,
             rail_spacing: 1.0, round_ends: false, shows_remaining: false,
             show_percentages: true, label_above: false, auto_collapse: true,
             warning_threshold: 0.75, refresh_seconds: 120, refresh_automatic: true, show_reset_clock: false,
@@ -55,6 +56,7 @@ impl Default for Preferences {
 impl Preferences {
     pub fn normalize(&mut self, known: &[String]) {
         self.network_proxy.normalize();
+        if !["black","light"].contains(&self.panel_colour.as_str()) {self.panel_colour="black".into();}
         let mut seen_accounts=std::collections::HashSet::new();
         self.accounts.retain(|a| crate::accounts::valid(a) && seen_accounts.insert(a.id.clone()));
         self.accounts.truncate(64);
@@ -104,6 +106,14 @@ pub fn save(value: &Preferences) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test] fn panel_colour_is_backward_compatible_and_round_trips(){
+        let mut p:Preferences=serde_json::from_str("{}").unwrap();
+        assert_eq!(p.panel_colour,"black");
+        p.panel_colour="light".into();p.normalize(&[]);
+        let saved:Preferences=serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+        assert_eq!(saved.panel_colour,"light");assert!(saved.enabled_providers.is_empty());
+        p.panel_colour="invalid".into();p.normalize(&[]);assert_eq!(p.panel_colour,"black");
+    }
     #[test] fn tray_only_keeps_collection_and_legacy_defaults() {
         let mut p:Preferences=serde_json::from_str(r#"{"enabledProviders":["codex"],"panelVisible":false,"trayShowsUsage":true,"trayStyle":"ring","trayAccount":"codex"}"#).unwrap();
         p.normalize(&["codex".into()]);assert!(!p.panel_visible);assert_eq!(p.enabled_providers,vec!["codex"]);assert_eq!(p.tray_account.as_deref(),Some("codex"));

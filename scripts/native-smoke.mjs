@@ -24,6 +24,7 @@ let diagnostics = ''
 child.stderr.on('data', chunk => { diagnostics = (diagnostics + chunk.toString()).slice(-12000) })
 let browser
 let page
+let main
 try {
   for (let attempt = 0; attempt < 40; attempt++) {
     if (child.exitCode !== null) throw new Error(`Native app exited: ${child.exitCode}\n${diagnostics}`)
@@ -47,7 +48,7 @@ try {
   const prefs = JSON.parse(await readFile(path.join(profile, 'PulseWin/preferences.json'), 'utf8'))
   assert.equal(prefs.roundEnds, true)
   assert.deepEqual(prefs.enabledProviders, [])
-  const main = browser.contexts().flatMap(c => c.pages()).find(p => !p.url().includes('view=settings'))
+  main = browser.contexts().flatMap(c => c.pages()).find(p => !p.url().includes('view=settings'))
   assert(main, 'Native panel webview missing')
   const panelPrefs = await main.evaluate(() => window.__TAURI_INTERNALS__.invoke('get_preferences'))
   assert.equal(panelPrefs.roundEnds, true, 'Panel and settings must use the same persisted preferences')
@@ -127,17 +128,76 @@ try {
   assert(Math.abs(position.x+rail.x*scale-720)<=2,'Native rail must restore its X, not window X')
   assert(Math.abs(position.y+rail.y*scale-80)<=2,`Native rail must restore its Y: ${JSON.stringify({position,rail,scale,placement:await main.evaluate(()=>window.__TAURI_INTERNALS__.invoke('panel_placement'))})}`)
   await main.locator('.rail').screenshot({path:path.join(root,'test-results/native-assistant.png')})
+  // Real native placement/preferences, with synthetic display-only readings.
+  // This exercises IPC, work-area geometry and on-disk persistence without
+  // collecting an account or changing the user's installed profile.
+  await page.evaluate(async()=>{
+    const invoke=window.__TAURI_INTERNALS__.invoke,prefs=await invoke('get_preferences')
+    if(prefs.enabledProviders.length)throw new Error('Native fixture must never enable collection')
+    // Synthetic events also reach the settings UI. Save only authoritative
+    // disabled preferences, never its visual-only fixture state.
+    await invoke('save_preferences',{value:{...prefs,panelColour:'light',enabledProviders:[]}})
+  })
+  await main.waitForFunction(()=>document.querySelector('.panel-root')?.getAttribute('data-colour')==='light')
+  assert.equal(JSON.parse(await readFile(path.join(profile,'PulseWin/preferences.json'),'utf8')).panelColour,'light')
+  assert.equal(await main.locator('.rail__surface').evaluate(e=>getComputedStyle(e).fill),'rgb(247, 247, 247)')
+  await main.evaluate(async()=>{
+    const invoke=window.__TAURI_INTERNALS__.invoke,prefs=await invoke('get_preferences')
+    const ids=['claude-code','codex','cursor','copilot','deepseek','kiro','glm-coding']
+    await invoke('plugin:event|emit',{event:'preferences-changed',payload:{...prefs,enabledProviders:ids,providerOrder:ids,accountAppearance:Object.fromEntries(ids.map((id,i)=>[id,{animatedMark:true,persona:['calm','eager','steady','curious','sleepy','playful','stoic'][i],body:'blob'}]))}})
+    await invoke('plugin:event|emit',{event:'usage-updated',payload:{providers:ids.map((id,i)=>({id,name:id,windows:[{label:'5h',percentUsed:[24,13,2,1,0,0,0][i]}],configured:true,error:null})),fetchedAt:new Date().toISOString()}})
+  })
+  await main.locator('.rail__item').nth(6).waitFor()
+  await main.evaluate(async()=>{
+    window.placementTrace=[]
+    const api=window.__TAURI_INTERNALS__
+    for(const event of ['edge-changed','placement-changed']){
+      const handler=api.transformCallback(e=>window.placementTrace.push(e))
+      await api.invoke('plugin:event|listen',{event,target:{kind:'Any'},handler})
+    }
+  })
+  const bottom=await main.evaluate(()=>window.__TAURI_INTERNALS__.invoke('set_panel_position',{position:'bottom'}))
+  assert.equal(bottom.dockEdge,'bottom')
+  await main.waitForFunction(()=>document.querySelector('.rail')?.getBoundingClientRect().height===64&&document.querySelector('.rail')?.getBoundingClientRect().width===678,{},{timeout:10000})
+  const docked=await main.evaluate(()=>window.__TAURI_INTERNALS__.invoke('panel_placement'))
+  assert.equal(docked.dockEdge,'bottom')
+  await assert.rejects(main.evaluate(()=>window.__TAURI_INTERNALS__.invoke('set_panel_metrics',{width:342,height:630,railX:278,railY:0,railWidth:64,railHeight:630,expectedEdge:'right'})),/orientation changed/)
+  assert.equal((await main.evaluate(()=>window.__TAURI_INTERNALS__.invoke('panel_placement'))).dockEdge,'bottom','Obsolete metrics must not undo the selected orientation')
+  const bottomBox=await main.locator('.rail').boundingBox()
+  const bottomWindow=await main.evaluate(()=>window.__TAURI_INTERNALS__.invoke('plugin:window|outer_position',{label:'main'}))
+  const area=docked.railSpace.workArea
+  assert(Math.abs(bottomWindow.y+(bottomBox.y+bottomBox.height)*scale-area.bottom)<=2,'Bottom rail must attach to the Windows work area')
+  await main.evaluate(()=>window.__TAURI_INTERNALS__.invoke('plugin:event|emit',{event:'hover-changed',payload:'entry:codex'}))
+  await main.locator('.card').waitFor()
+  await main.waitForFunction(()=>Number(getComputedStyle(document.querySelector('.rail__items')).opacity)===1)
+  const card=await main.locator('.card').boundingBox()
+  assert(card.y+card.height<bottomBox.y && bottomBox.y-card.y-card.height<=12,'Bottom card tail must point down next to the rail')
+  await main.screenshot({path:path.join(root,'test-results/native-assistant-bottom-light.png')})
+  const horizontal=await main.evaluate(()=>window.__TAURI_INTERNALS__.invoke('set_panel_position',{position:'free-horizontal'}))
+  assert.equal(horizontal.dockEdge,null);assert.equal(horizontal.facingEdge,'bottom')
+  await main.waitForFunction(()=>document.querySelector('.rail')?.getBoundingClientRect().height===64&&document.querySelector('.rail')?.getBoundingClientRect().width===630)
+  const savedPlacement=JSON.parse(await readFile(path.join(profile,'PulseWin/panel.json'),'utf8'))
+  assert.equal(savedPlacement.facingEdge,'bottom');assert.equal(savedPlacement.dockEdge,null)
+  await main.screenshot({path:path.join(root,'test-results/native-assistant-horizontal-light.png')})
+  // Reloading the native webview must recover the horizontal facing edge.
+  await main.reload();await main.waitForFunction(()=>document.querySelector('.panel-root')?.getAttribute('data-colour')==='light')
+  assert.equal(await main.evaluate(()=>window.__TAURI_INTERNALS__.invoke('panel_edge')),'bottom')
+  assert.deepEqual((await main.evaluate(()=>window.__TAURI_INTERNALS__.invoke('get_preferences'))).enabledProviders,[])
   await writeFile(path.join(root, 'test-results/native-smoke.json'), JSON.stringify({
-    passed: true, checks: ['native startup', 'no automatic collection', 'settings IPC permission', 'preferences persistence', 'shared panel preferences', 'floating rail restoration', 'native capsule geometry', 'floating stays expanded', 'disabled additional accounts never collect', 'per-account encrypted credentials', 'stale window preserves account metadata', 'account rename persists', 'removal preserves primary credentials'],
+    passed: true, checks: ['native startup', 'no automatic collection', 'settings IPC permission', 'preferences persistence', 'shared panel preferences', 'floating rail restoration', 'native capsule geometry', 'floating stays expanded', 'disabled additional accounts never collect', 'per-account encrypted credentials', 'stale window preserves account metadata', 'account rename persists', 'removal preserves primary credentials','light appearance persistence','bottom work-area dock and card','obsolete layout metrics rejected','horizontal floating persistence after reload'],
     profile, testedAt: new Date().toISOString(),
   }, null, 2))
-  console.log('PASS: native startup and assistant geometry; additional accounts stay isolated, encrypted, renameable and removable without touching the primary.')
+  console.log('PASS: native light appearance, bottom docking, horizontal restoration and obsolete-layout rejection; accounts remain isolated and collection stays disabled.')
   if(process.env.PULSEWIN_TEST_KEEP_OPEN==='1') {
     await page.evaluate(()=>window.__TAURI_INTERNALS__.invoke('plugin:window|hide',{label:'settings'}))
     console.log('NATIVE_READY: isolated assistant available for real input validation')
     await new Promise(resolve=>setTimeout(resolve,180000))
   }
 } catch (error) {
+  if(main){
+    await main.screenshot({path:path.join(root,'test-results/native-assistant-failure.png')}).catch(()=>undefined)
+    console.error(await main.evaluate(async()=>({rail:document.querySelector('.rail')?.getBoundingClientRect().toJSON(),items:document.querySelectorAll('.rail__item').length,colour:document.querySelector('.panel-root')?.getAttribute('data-colour'),trace:window.placementTrace,placement:await window.__TAURI_INTERNALS__.invoke('panel_placement')})).catch(()=>null))
+  }
   if (page) {
     await page.screenshot({ path: path.join(root, 'test-results/native-failure.png') }).catch(() => undefined)
     console.error(await page.locator('body').innerText().catch(() => 'No readable page'))

@@ -1,0 +1,33 @@
+{
+  "version": "0.1.15",
+  "status": "implementation-in-progress",
+  "releaseHold": true,
+  "reason": "Implement upstream features and validate them before publishing, as requested by the user on 2026-10-11.",
+  "upstream": "1.9.0",
+  "publishedVersion": "0.1.14",
+  "implementedVerified": [
+    "Light assistant surfaces, rings and detail cards",
+    "Horizontal floating, bottom docking and orientation-aware detail cards",
+    "Counter-only persistent transcript history and database high-water marks",
+    "Claude streaming reply output completion and cross-file reply deduplication"
+  ],
+  "verification": {
+    "rust": "906 passed, 2 explicitly ignored real-account checks",
+    "frontendUnit": "190 passed",
+    "browser": "64 passed full suite; affected assistant/token panes subsequently passed 24 checks including one new retained-history check",
+    "native": "Isolated WebView2 profile: light persistence, bottom work-area geometry, obsolete-metrics rejection and horizontal facing restoration passed; display figures are synthetic",
+    "localUpdateFeed": "0.1.14 remains unchanged; release gate exercised without publishing"
+  },
+  "pending": [
+    "Official service status history and deduplicated outage notifications",
+    "Monthly/yearly recap cards, export/copy, plan prices and privacy settings",
+    "Recap notifications and twelve-month activity views",
+    "Codex local evidence analysis",
+    "DeepSeek and OpenCode Go logged-in browser billing records",
+    "Detailed-card output speed, TTFT and prompt-cache expiration list",
+    "Remaining token classification, daily unclassified column and exact large-integer sorting",
+    "Inherited Codex history, one-hour Claude cache pricing and long-context prices",
+    "Backup online update channel and release-note language selection",
+    "Remaining original token source readers and Windows/native parity acceptance"
+  ]
+}

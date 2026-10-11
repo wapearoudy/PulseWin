@@ -2,9 +2,11 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { assertReleaseReady } from './release-gate.mjs'
 
 // One command for subsequent builds: bump the patch version, build/sign/publish.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+assertReleaseReady(root)
 const packageFile = path.join(root, 'package.json')
 const pkg = JSON.parse(readFileSync(packageFile, 'utf8'))
 if (!/^\d+\.\d+\.\d+$/.test(pkg.version)) throw new Error('Automatic release requires a stable x.y.z version')

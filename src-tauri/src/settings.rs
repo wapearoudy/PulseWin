@@ -178,7 +178,7 @@ mod tests {
 
     #[test]
     fn every_edge_survives_a_round_trip() {
-        for edge in [PanelEdge::Left, PanelEdge::Right, PanelEdge::Top] {
+        for edge in [PanelEdge::Left, PanelEdge::Right, PanelEdge::Top, PanelEdge::Bottom] {
             let settings = PanelSettings {
                 dock_edge: Some(edge),
                 ..Default::default()
@@ -220,7 +220,7 @@ mod tests {
     #[test]
     fn an_unknown_edge_gives_the_defaults_rather_than_drawing_nothing() {
         // A stored choice that no longer exists falls back, like `BotMarkBody`.
-        assert_eq!(parse(r#"{"dockEdge":"bottom"}"#), PanelSettings::default());
+        assert_eq!(parse(r#"{"dockEdge":"diagonal"}"#), PanelSettings::default());
     }
 
     #[test]

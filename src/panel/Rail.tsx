@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef, type CSSProperties } from 'react'
+import { memo, useId, useMemo, useRef, type CSSProperties } from 'react'
 import {
   berthCanvas,
   berthPath,
@@ -9,6 +9,7 @@ import {
 } from './berthShape'
 import { percentFigure } from '../usagePresentation'
 import { UsageRing } from './UsageRing'
+import { PanelOutline } from './PanelOutline'
 import './panel.css'
 
 /**
@@ -43,6 +44,7 @@ export interface RailEntry {
 }
 
 export interface RailProps {
+  light?: boolean
   entries: RailEntry[]
   edge: PanelEdge
   /** 0 = the collapsed sliver, 1 = the full rail. Interpolated, not swapped. */
@@ -97,14 +99,16 @@ function RailImpl({
   onLeave,
   onClick,
   onDragStart,
+  light=false,
 }: RailProps) {
+  const outlineId=`rail-outline-${useId().replace(/:/g,'')}`
   const layout = useMemo(
     () => dockLayout({ scale: size, spacing, usesRoundEnds }),
     [size, spacing, usesRoundEnds],
   )
 
   // Side rails show labels by default; a top rail does not.
-  const labels = showPercentages ?? edge !== 'top'
+  const labels = showPercentages ?? (edge !== 'top' && edge !== 'bottom')
 
   const height = railHeight(layout, entries.length, isDocked)
   const padding = layout.verticalPadding - (isDocked ? 0 : layout.flareHeight)
@@ -116,7 +120,7 @@ function RailImpl({
   // the direction the items are laid out in. The *canonical* dims below stay
   // the ones the shape was authored in — thickness by length — because the
   // berth and the bubble are both drawn facing right and turned into place.
-  const isTop = edge === 'top'
+  const isTop = edge === 'top' || edge === 'bottom'
   const length = height
 
   // The rail at `openness` is its own silhouette wound down: the frame narrows
@@ -142,7 +146,7 @@ function RailImpl({
   // Anchored to the docked edge, so the rail grows away from the edge rather
   // than from its own centre.
   const berthInset: CSSProperties = isTop
-    ? { top: 0, left: (length - canvas.width) / 2 }
+    ? { ...(edge==='bottom' ? {bottom:0} : {top:0}), left: (length - canvas.width) / 2 }
     : edge === 'right'
       ? { right: 0, top: (length - canvas.height) / 2 }
       : { left: 0, top: (length - canvas.height) / 2 }
@@ -183,7 +187,8 @@ function RailImpl({
         aria-hidden="true"
         style={{ position: 'absolute', ...berthInset }}
       >
-        <path d={d} transform={transform} className="rail__surface" style={{fill: dockAlertColour && openness < .5 && entries.some(e=>e.hasWarning || e.isSpent || (e.usedFraction??0)>=1) ? '#FF4F42' : undefined}} />
+        {light&&<defs><PanelOutline id={outlineId}/></defs>}
+        <path d={d} transform={transform} filter={light?`url(#${outlineId})`:undefined} className="rail__surface" style={{fill: dockAlertColour && openness < .5 && entries.some(e=>e.hasWarning || e.isSpent || (e.usedFraction??0)>=1) ? light?'#DE382B':'#FF4F42' : undefined}} />
       </svg>
 
       <div
@@ -210,6 +215,7 @@ function RailImpl({
           const ring = (
             <UsageRing
               key="ring"
+              light={light}
               usedFraction={entry.usedFraction}
               elapsedFraction={entry.elapsedFraction}
               secondElapsedFraction={entry.secondElapsedFraction}

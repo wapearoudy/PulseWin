@@ -9,7 +9,7 @@
  * pushed ring hit targets up to 6pt off down a full rail.
  */
 
-export type PanelEdge = 'right' | 'left' | 'top'
+export type PanelEdge = 'right' | 'left' | 'top' | 'bottom'
 
 /** PanelSize → PanelMetrics.scale. "Deliberately modest steps." */
 export const PANEL_SCALE = {
@@ -316,6 +316,8 @@ export function berthTransform(
       return undefined
     case 'left':
       return `translate(${n(width)} 0) scale(-1 1)`
+    case 'bottom':
+      return `translate(${n(width)} 0) rotate(90)`
     case 'top':
       // The canonical rect is this one laid on its side.
       return `rotate(-90) translate(${n(-height)} 0)`
@@ -328,7 +330,7 @@ export function berthCanvas(
   width: number,
   height: number,
 ): { width: number; height: number } {
-  return edge === 'top'
+  return edge === 'top' || edge === 'bottom'
     ? { width: height, height: width }
     : { width, height }
 }

@@ -34,6 +34,7 @@ export interface Preferences {
   resetCelebration: boolean
   enabledProviders: string[]
   providerOrder: string[]
+  panelColour: 'black' | 'light'
   panelSize: number
   railSpacing: number
   roundEnds: boolean
@@ -62,7 +63,7 @@ export const defaultPreferences: Preferences = {
   accounts: [], accountLabels: {},
   openSettingsShortcut: null, togglePanelShortcut: null,
   alerts: { threshold: null, onReset: false, onFailure: false, lowBalance: {} }, tokenSpendEnabled: false, tokenSpendSpan: 'week', resetCelebration: true,
-  enabledProviders: [], providerOrder: [], panelSize: 1, railSpacing: 1,
+  enabledProviders: [], providerOrder: [], panelColour: 'black', panelSize: 1, railSpacing: 1,
   roundEnds: false, showsRemaining: false, showPercentages: true,
   labelAbove: false, autoCollapse: true, warningThreshold: 0.75, refreshSeconds: 120, refreshAutomatic: true,
   showSecondRing: false, topShowPercentages: false, animateActivity: true, dockAlertColour: true, accountAppearance: {},

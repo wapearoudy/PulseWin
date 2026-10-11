@@ -46,6 +46,43 @@ test('floating assistant matches original capsule geometry and stays expanded',a
   await rail.screenshot({path:'test-results/assistant-capsule.png'})
 })
 
+test('light assistant changes all surfaces without fetching quotas or resizing',async({page})=>{
+  await page.evaluate(()=>(window as any).testEmit('hover-changed','entry:codex'))
+  await expect(page.locator('.panel__card')).toBeVisible()
+  const before=await page.evaluate(()=>(window as any).testCommands.filter((c:any)=>['set_panel_metrics','refresh_provider','refresh_now'].includes(c.cmd)).length)
+  await page.evaluate(()=>{const w=window as any;w.testPrefs.panelColour='light';w.testEmit('preferences-changed',structuredClone(w.testPrefs))})
+  await expect(page.locator('.rail__surface')).toHaveCSS('fill','rgb(247, 247, 247)')
+  await expect(page.locator('.card__surface')).toHaveCSS('fill','rgb(247, 247, 247)')
+  await expect(page.locator('.rail__percent').first()).toHaveCSS('color','rgba(0, 0, 0, 0.88)')
+  await expect(page.locator('.card__title')).toHaveCSS('color','rgba(0, 0, 0, 0.88)')
+  await expect(page.locator('.rail__surface')).toHaveAttribute('filter',/^url\(#rail-outline-/)
+  expect(await page.evaluate(()=>(window as any).testCommands.filter((c:any)=>['set_panel_metrics','refresh_provider','refresh_now'].includes(c.cmd)).length)).toBe(before)
+  await page.screenshot({path:'test-results/assistant-light.png'})
+})
+
+test('bottom dock paints on the bottom and keeps its card tail next to the ring',async({page})=>{
+  await page.setViewportSize({width:960,height:1000})
+  await page.evaluate(()=>{const w=window as any;w.testPrefs.panelColour='light';w.testEmit('preferences-changed',structuredClone(w.testPrefs));w.testEmit('edge-changed','bottom');w.testEmit('placement-changed',{dockEdge:'bottom',railPosition:[100,800],facingEdge:'bottom'});w.testEmit('hover-changed','entry:codex')})
+  await expect(page.locator('.rail')).toHaveCSS('width','678px')
+  await expect(page.locator('.rail')).toHaveCSS('height','64px')
+  await expect(page.locator('.panel__card')).toBeVisible()
+  const rail=(await page.locator('.rail').boundingBox())!,card=(await page.locator('.card').boundingBox())!
+  expect(card.y+card.height).toBeLessThan(rail.y)
+  expect(rail.y-card.y-card.height).toBeLessThanOrEqual(12)
+  const ring=(await page.locator('.rail__item').nth(1).boundingBox())!
+  const painted=await page.locator('.card__surface').evaluate((path:SVGPathElement)=>{
+    const r=path.getBoundingClientRect();return {top:r.top,bottom:r.bottom,left:r.left,right:r.right}
+  })
+  expect(painted.bottom).toBeCloseTo(card.y+card.height,0)
+  expect(ring.x+ring.width/2).toBeGreaterThan(painted.left)
+  expect(ring.x+ring.width/2).toBeLessThan(painted.right)
+  await page.screenshot({path:'test-results/assistant-bottom-light.png'})
+  await page.evaluate(()=>(window as any).testEmit('hover-changed',null))
+  await expect(page.locator('.rail__items')).toHaveCSS('opacity','0')
+  const sliver=(await page.locator('.rail__berth').boundingBox())!
+  expect(sliver.y+sliver.height).toBeCloseTo(rail.y+rail.height,0)
+})
+
 test('only circle clicks refresh and a drag never refreshes',async({page})=>{
   const item=page.locator('.rail__item').first(); const box=(await item.boundingBox())!
   await item.click({position:{x:box.width/2,y:50}})

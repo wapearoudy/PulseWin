@@ -86,7 +86,10 @@ pub enum PanelEdge {
     Left,
     Right,
     Top,
+    Bottom,
 }
+
+impl PanelEdge { pub fn horizontal(self)->bool { matches!(self,Self::Top|Self::Bottom) } }
 
 impl Default for PanelEdge {
     fn default() -> Self {
@@ -132,6 +135,7 @@ pub struct AppState {
     /// because placing the window needs it, and the window is placed from Rust.
     pub edge: std::sync::Mutex<PanelEdge>,
     pub placement: std::sync::Mutex<settings::PanelSettings>,
+    pub placement_updates: std::sync::Mutex<()>,
     pub rail_metrics: std::sync::Mutex<(f64, f64, f64, f64)>,
     /// Set while the rail is being dragged off the edge. See `watch_pointer`.
     pub drag: std::sync::Mutex<Option<Drag>>,
@@ -175,6 +179,7 @@ impl AppState {
             hit_regions: Mutex::new(Vec::new()),
             edge: std::sync::Mutex::new(edge),
             placement: std::sync::Mutex::new(settings::load()),
+            placement_updates: std::sync::Mutex::new(()),
             rail_metrics: std::sync::Mutex::new((0.0, 0.0, 64.0, 100.0)),
             drag: std::sync::Mutex::new(None),
         }
@@ -749,8 +754,9 @@ async fn panel_placement(state: State<'_, AppState>) -> Result<settings::PanelSe
 #[tauri::command]
 async fn set_panel_position(app: AppHandle, position: String) -> Result<settings::PanelSettings, String> {
     let state=app.state::<AppState>();
+    let update_guard=state.placement_updates.lock().unwrap();
     if state.drag.lock().unwrap().is_some() { return Err("拖动结束后再更改停靠位置".into()); }
-    let edge=match position.as_str() { "left"=>PanelEdge::Left,"right"=>PanelEdge::Right,"top"=>PanelEdge::Top,"free"=>PanelEdge::Right,_=>return Err("Unknown panel position".into()) };
+    let edge=match position.as_str() { "left"=>PanelEdge::Left,"right"=>PanelEdge::Right,"top"|"free-horizontal"=>PanelEdge::Top,"bottom"=>PanelEdge::Bottom,"free"=>PanelEdge::Right,_=>return Err("Unknown panel position".into()) };
     let window=app.get_webview_window("main").ok_or("no main window")?;
     let monitor=window.current_monitor().ok().flatten().or(window.primary_monitor().ok().flatten()).ok_or("No display available")?;
     let mut placement=state.placement.lock().unwrap().clone();
@@ -759,8 +765,8 @@ async fn set_panel_position(app: AppHandle, position: String) -> Result<settings
     let (_,_,rw,rh)=*state.rail_metrics.lock().unwrap();
     let old_edge=*state.edge.lock().unwrap();
     let mut memory=desktop::resolve(&placement,&[display.clone()],Some(display.id.as_str()),(rw,rh)).map(|(_,memory)|memory).unwrap_or_default();
-    memory.dock_edge=if position=="free" {None}else{Some(edge)};
-    memory.facing_edge=Some(if position=="free"&&memory.horizontal_ratio<0.5{PanelEdge::Left}else{edge});
+    memory.dock_edge=if position=="free"||position=="free-horizontal" {None}else{Some(edge)};
+    memory.facing_edge=Some(if position=="free"&&memory.horizontal_ratio<0.5{PanelEdge::Left}else if position=="free-horizontal"&&memory.vertical_ratio>=0.5{PanelEdge::Bottom}else{edge});
     let prefs=state.preferences.lock().unwrap().clone();let flare=if prefs.round_ends{32.}else{24.}*prefs.panel_size;
     let rail=desktop::rail_for_memory((rw,rh),old_edge,was_docked,&memory,flare);
     placement.dock_edge=memory.dock_edge;placement.facing_edge=Some(desktop::memory_edge(&memory));
@@ -771,6 +777,7 @@ async fn set_panel_position(app: AppHandle, position: String) -> Result<settings
     let chrome_changed=old_edge!=edge||was_docked!=placement.dock_edge.is_some();
     *state.edge.lock().unwrap()=edge;*state.placement.lock().unwrap()=placement.clone();settings::save(&placement);
     let _=app.emit(EVENT_EDGE_CHANGED,edge);let _=app.emit("placement-changed",&placement);
+    drop(update_guard);
     if !chrome_changed{place_panel(&app);}
     Ok(placement)
 }
@@ -797,7 +804,12 @@ async fn show_panel_menu(app: AppHandle) -> Result<(), String> {
 /// frontend measures the rail and asks for a frame that can hold it plus a
 /// card, and the frame is then flushed against the screen edge.
 #[tauri::command]
-async fn set_panel_metrics(app: AppHandle, width: f64, height: f64, rail_x: f64, rail_y: f64, rail_width: f64, rail_height: f64) -> Result<(), String> {
+async fn set_panel_metrics(app: AppHandle, width: f64, height: f64, rail_x: f64, rail_y: f64, rail_width: f64, rail_height: f64, expected_edge:Option<PanelEdge>) -> Result<(), String> {
+    let state=app.state::<AppState>();
+    let update_guard=state.placement_updates.lock().unwrap();
+    if expected_edge.is_some_and(|edge|edge!=*app.state::<AppState>().edge.lock().unwrap()){
+        return Err("Panel orientation changed; discard obsolete metrics".into());
+    }
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| "no main window".to_string())?;
@@ -814,7 +826,6 @@ async fn set_panel_metrics(app: AppHandle, width: f64, height: f64, rail_x: f64,
     if (outer.width - wanted.width).abs() > 0.5 || (outer.height - wanted.height).abs() > 0.5 {
         let _ = window.set_size(wanted);
     }
-    let state=app.state::<AppState>();
     let dragging=state.drag.lock().unwrap().is_some_and(|d|d.moved);
     if dragging {
         if let Some(drag)=state.drag.lock().unwrap().as_mut(){drag.awaiting_metrics=false;}
@@ -822,7 +833,7 @@ async fn set_panel_metrics(app: AppHandle, width: f64, height: f64, rail_x: f64,
             let scale=window.scale_factor().unwrap_or(1.0);
             let _=window.set_position(tauri::PhysicalPosition::new(x-(rail_x*scale) as i32,y-(rail_y*scale) as i32));
         }
-    } else {place_panel(&app);}
+    } else {drop(update_guard);place_panel(&app);}
     Ok(())
 }
 
@@ -835,6 +846,7 @@ async fn set_panel_metrics(app: AppHandle, width: f64, height: f64, rail_x: f64,
 /// cursor, and the edge is chosen on release.
 #[tauri::command]
 async fn begin_drag(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let _update_guard=state.placement_updates.lock().unwrap();
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| "no main window".to_string())?;
@@ -877,6 +889,7 @@ fn place_panel(app: &AppHandle) {
     };
 
     let state = app.state::<AppState>();
+    let _update_guard=state.placement_updates.lock().unwrap();
     if state.drag.lock().unwrap().is_some() { return; }
     let mut placement = state.placement.lock().unwrap().clone();
     let Ok(monitors)=window.available_monitors() else{return};
@@ -914,12 +927,6 @@ fn place_panel(app: &AppHandle) {
     let _=window.set_position(tauri::PhysicalPosition::new(origin.0-(rx*display.scale).round() as i32,origin.1-(ry*display.scale).round() as i32));
 }
 
-/// Which edge the window is nearest, once the drag has been let go.
-///
-/// Only left, right and top are dockable — there is no bottom rail in the
-/// original, and a rail hanging off the bottom edge would have to draw its card
-/// upwards for no reason. A drop nearest the bottom therefore keeps the edge it
-/// came from.
 /// Show the panel, placing it before and after it is ordered in.
 fn show_panel(app: &AppHandle) {
     app.state::<AppState>().fullscreen_hidden.store(false,std::sync::atomic::Ordering::SeqCst);
@@ -1003,6 +1010,7 @@ fn advance_drag(app: &AppHandle, window: &tauri::WebviewWindow) -> bool {
         return false;
     }
     if drag.awaiting_metrics{return true}
+    let _update_guard=state.placement_updates.lock().unwrap();
     if let Ok(cursor)=window.cursor_position() {
         let dx=cursor.x-drag.cursor.0 as f64;let dy=cursor.y-drag.cursor.1 as f64;
         if !drag.moved&&dx*dx+dy*dy<25.{return true}
@@ -1114,9 +1122,10 @@ fn watch_desktop(app:AppHandle) {
                     if let Some(next)=geometry.iter().find(|display|display.contains((pointer.x,pointer.y))) {
                         if last_pointer_display.as_deref()!=Some(next.id.as_str()) {
                             if next.id!=old.id {
+                                let update_guard=state.placement_updates.lock().unwrap();
                                 let mut placement=state.placement.lock().unwrap();
                                 desktop::switch_display(&mut placement,old,next,rail,(rw,rh));
-                                settings::save(&placement);drop(placement);
+                                settings::save(&placement);drop(placement);drop(update_guard);
                                 place_panel(&app);
                                 last_pointer_display=Some(next.id.clone());
                                 continue;

@@ -51,16 +51,19 @@ fn parse_document(bytes: &[u8]) -> io::Result<Value> {
 }
 
 fn read_bytes(path: &Path) -> io::Result<Option<Vec<u8>>> {
+    read_bytes_bounded(path,MAX_DOCUMENT_BYTES)
+}
+fn read_bytes_bounded(path: &Path, limit:u64) -> io::Result<Option<Vec<u8>>> {
     let metadata = match fs::metadata(path) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error),
     };
-    if !metadata.is_file() || metadata.len() > MAX_DOCUMENT_BYTES {
+    if !metadata.is_file() || metadata.len() > limit {
         return Err(invalid("Credential file is not a regular file or exceeds the size limit"));
     }
     let bytes = fs::read(path)?;
-    if bytes.len() as u64 > MAX_DOCUMENT_BYTES { return Err(invalid("Credential file exceeds the size limit")); }
+    if bytes.len() as u64 > limit { return Err(invalid("Document exceeds the size limit")); }
     Ok(Some(bytes))
 }
 
@@ -151,6 +154,13 @@ fn set_field(object: &mut Map<String, Value>, field: &str, value: Option<&str>) 
 }
 
 pub(crate) fn atomic_write(path: &Path, encrypted: &[u8], expected: Option<&[u8]>) -> io::Result<()> {
+    atomic_write_bounded(path,encrypted,expected,MAX_DOCUMENT_BYTES)
+}
+
+/// Shared atomic replacement for non-credential documents. Credential callers
+/// retain their independent one-MiB bound; counter history has its own bound.
+pub(crate) fn atomic_write_bounded(path:&Path, encrypted:&[u8], expected:Option<&[u8]>, limit:u64)->io::Result<()> {
+    if encrypted.len() as u64>limit {return Err(invalid("Document exceeds the size limit"));}
     let parent = path.parent().ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Credential path has no directory"))?;
     fs::create_dir_all(parent)?;
     let unique = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
@@ -160,7 +170,7 @@ pub(crate) fn atomic_write(path: &Path, encrypted: &[u8], expected: Option<&[u8]
         file.write_all(encrypted)?;
         file.sync_all()?;
         drop(file);
-        if read_bytes(path)?.as_deref() != expected {
+        if read_bytes_bounded(path,limit)?.as_deref() != expected {
             return Err(io::Error::new(io::ErrorKind::Other, "Credential file changed while it was being saved; retry"));
         }
         platform::replace(&temporary, path)

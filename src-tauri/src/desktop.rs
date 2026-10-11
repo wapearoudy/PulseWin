@@ -48,19 +48,19 @@ pub struct Landing {pub edge:crate::PanelEdge,pub docked:bool,pub origin:(i32,i3
 /// Mirrors FloatingPanel's drag: dock during movement; quarter turns centre
 /// under the pointer, while dock/float length changes keep the rings in place.
 pub fn drag_landing(pointer:(f64,f64),grab:(f64,f64),rail:(f64,f64),edge:crate::PanelEdge,was_docked:bool,screen:Rect,scale:f64,flare:f64)->Landing {
-    use crate::PanelEdge::{Left,Right,Top};
+    use crate::PanelEdge::{Left,Right,Top,Bottom};
     let clamp_origin=|x:f64,y:f64,w:f64,h:f64|(x.clamp(screen.left as f64,(screen.right as f64-w).max(screen.left as f64)),y.clamp(screen.top as f64,(screen.bottom as f64-h).max(screen.top as f64)));
     let wanted=clamp_origin(pointer.0-grab.0*scale,pointer.1-grab.1*scale,rail.0*scale,rail.1*scale);
     let distance=24.*scale;
-    let dock=if pointer.1-screen.top as f64<=distance{Some(Top)}else if wanted.0-screen.left as f64<=distance{Some(Left)}else if screen.right as f64-(wanted.0+rail.0*scale)<=distance{Some(Right)}else{None};
-    let landing=dock.unwrap_or(if pointer.0<(screen.left+screen.right) as f64/2.{Left}else{Right});
-    let turned=(landing==Top)!=(edge==Top);
+    let dock=if pointer.1-screen.top as f64<=distance{Some(Top)}else if screen.bottom as f64-pointer.1<=distance{Some(Bottom)}else if wanted.0-screen.left as f64<=distance{Some(Left)}else if screen.right as f64-(wanted.0+rail.0*scale)<=distance{Some(Right)}else{None};
+    let landing=dock.unwrap_or(if edge.horizontal(){if pointer.1<(screen.top+screen.bottom) as f64/2.{Top}else{Bottom}}else if pointer.0<(screen.left+screen.right) as f64/2.{Left}else{Right});
+    let turned=landing.horizontal()!=edge.horizontal();
     let mut size=if turned{(rail.1,rail.0)}else{rail};
     let delta=(i32::from(dock.is_some())-i32::from(was_docked)) as f64*2.*flare;
-    if landing==Top{size.0+=delta}else{size.1+=delta}
+    if landing.horizontal(){size.0+=delta}else{size.1+=delta}
     let grab=if turned{(size.0/2.,size.1/2.)}else{(grab.0-(rail.0-size.0)/2.,grab.1-(rail.1-size.1)/2.)};
     let mut origin=clamp_origin(pointer.0-grab.0*scale,pointer.1-grab.1*scale,size.0*scale,size.1*scale);
-    match dock{Some(Left)=>origin.0=screen.left as f64,Some(Right)=>origin.0=(screen.right as f64-size.0*scale).max(screen.left as f64),Some(Top)=>origin.1=screen.top as f64,None=>{}}
+    match dock{Some(Left)=>origin.0=screen.left as f64,Some(Right)=>origin.0=(screen.right as f64-size.0*scale).max(screen.left as f64),Some(Top)=>origin.1=screen.top as f64,Some(Bottom)=>origin.1=(screen.bottom as f64-size.1*scale).max(screen.top as f64),None=>{}}
     Landing{edge:landing,docked:dock.is_some(),origin:(origin.0.round() as i32,origin.1.round() as i32),grab,rail:size}
 }
 
@@ -122,6 +122,7 @@ pub fn layout_origin(settings: &crate::settings::PanelSettings, memory: &crate::
         Some(crate::PanelEdge::Left)=>x=area.left as f64,
         Some(crate::PanelEdge::Right)=>x=area.left as f64+room_x,
         Some(crate::PanelEdge::Top)=>y=display.bounds.top as f64,
+        Some(crate::PanelEdge::Bottom)=>y=area.top as f64+room_y,
         None=>{
             let gap=(32.0*scale).min(room_x/2.0);
             x=x.clamp(area.left as f64+gap,area.left as f64+room_x-gap);
@@ -156,6 +157,7 @@ pub fn restored_origin(memory: &crate::settings::DisplayPlacement, display: &Dis
         Some(crate::PanelEdge::Left) => x = area.left as f64,
         Some(crate::PanelEdge::Right) => x = area.left as f64 + room_x,
         Some(crate::PanelEdge::Top) => y = display.bounds.top as f64,
+        Some(crate::PanelEdge::Bottom) => y = area.top as f64+room_y,
         None => {
             // A floating rail must leave a gap instead of looking docked.
             let gap = (32.0 * scale).min(room_x / 2.0);
@@ -166,16 +168,19 @@ pub fn restored_origin(memory: &crate::settings::DisplayPlacement, display: &Dis
 }
 
 pub fn memory_edge(memory: &crate::settings::DisplayPlacement) -> crate::PanelEdge {
-    memory.dock_edge.or(memory.facing_edge.filter(|edge|*edge!=crate::PanelEdge::Top))
+    if memory.dock_edge.is_none()&&memory.facing_edge.is_some_and(|edge|edge.horizontal()){
+        return if unit(memory.vertical_ratio)<0.5{crate::PanelEdge::Top}else{crate::PanelEdge::Bottom};
+    }
+    memory.dock_edge.or(memory.facing_edge)
         .unwrap_or_else(|| if unit(memory.horizontal_ratio) < 0.5 { crate::PanelEdge::Left } else { crate::PanelEdge::Right })
 }
 
 pub fn rail_for_memory(rail: (f64, f64), current_edge: crate::PanelEdge, current_docked: bool,
     memory: &crate::settings::DisplayPlacement, flare: f64) -> (f64, f64) {
     let target_edge = memory_edge(memory);
-    let mut size = if (current_edge == crate::PanelEdge::Top) != (target_edge == crate::PanelEdge::Top) { (rail.1, rail.0) } else { rail };
+    let mut size = if current_edge.horizontal() != target_edge.horizontal() { (rail.1, rail.0) } else { rail };
     let delta = (i32::from(memory.dock_edge.is_some()) - i32::from(current_docked)) as f64 * 2.0 * flare;
-    if target_edge == crate::PanelEdge::Top { size.0 = (size.0 + delta).max(1.0); } else { size.1 = (size.1 + delta).max(1.0); }
+    if target_edge.horizontal() { size.0 = (size.0 + delta).max(1.0); } else { size.1 = (size.1 + delta).max(1.0); }
     size
 }
 
@@ -215,6 +220,7 @@ pub fn resolve(settings: &crate::settings::PanelSettings, displays: &[Display], 
                     Some(crate::PanelEdge::Left)=>memory.horizontal_ratio=0.0,
                     Some(crate::PanelEdge::Right)=>memory.horizontal_ratio=1.0,
                     Some(crate::PanelEdge::Top)=>memory.vertical_ratio=0.0,
+                    Some(crate::PanelEdge::Bottom)=>memory.vertical_ratio=1.0,
                     None=>{},
                 }
             }
@@ -329,6 +335,36 @@ fn fallback_identity(name: Option<&str>, bounds: Rect) -> String {
         assert_eq!(memory_a,saved_a);
         assert_eq!(restored_origin(&memory_a,&a,(64.,200.)),(300,200));
         assert_eq!(settings.display.as_deref(),Some("physical-a"));
+    }
+    #[test]fn bottom_dock_turns_centres_and_floats_horizontally(){
+        let screen=Rect{left:-1920,top:-100,right:0,bottom:940};
+        let docked=drag_landing((-900.,930.),(32.,300.),(64.,630.),crate::PanelEdge::Right,false,screen,1.,24.);
+        assert!(docked.docked);assert_eq!(docked.edge,crate::PanelEdge::Bottom);
+        assert_eq!(docked.rail,(678.,64.));assert_eq!(docked.origin,(-1239,876));
+        let floated=drag_landing((-900.,500.),docked.grab,docked.rail,docked.edge,true,screen,1.,24.);
+        assert!(!floated.docked);assert_eq!(floated.edge,crate::PanelEdge::Bottom);
+        assert_eq!(floated.rail,(630.,64.));assert_eq!(floated.grab,(315.,32.));
+        assert_eq!(floated.origin,(-1215,468));
+    }
+    #[test]fn bottom_uses_work_area_and_oversized_rails_stay_visible(){
+        let mut d=display("bottom",Rect{left:0,top:0,right:1920,bottom:1080},2.);
+        d.work_area.bottom=1040;
+        let memory=crate::settings::DisplayPlacement{dock_edge:Some(crate::PanelEdge::Bottom),horizontal_ratio:0.5,..Default::default()};
+        assert_eq!(restored_origin(&memory,&d,(400.,64.)),(560,912));
+        assert_eq!(restored_origin(&memory,&d,(400.,900.)),(560,0));
+    }
+    #[test]fn horizontal_float_restores_orientation_and_per_display_ratios(){
+        let d=display("float",Rect{left:-1920,top:0,right:0,bottom:1080},1.5);
+        let memory=crate::settings::DisplayPlacement{dock_edge:None,facing_edge:Some(crate::PanelEdge::Top),horizontal_ratio:0.25,vertical_ratio:0.6};
+        assert_eq!(memory_edge(&memory),crate::PanelEdge::Bottom);
+        assert_eq!(rail_for_memory((64.,678.),crate::PanelEdge::Right,true,&memory,24.),(630.,64.));
+        assert_eq!(restored_origin(&memory,&d,(630.,64.)),(-1676,590));
+        let mut settings=crate::settings::PanelSettings{dock_edge:None,facing_edge:memory.facing_edge,..Default::default()};
+        remember(&mut settings,&d,(-1676,590),(630.,64.));
+        let saved=serde_json::to_string(&settings).unwrap();
+        let restored:crate::settings::PanelSettings=serde_json::from_str(&saved).unwrap();
+        assert_eq!(memory_edge(&restored.per_display["float"]),crate::PanelEdge::Bottom);
+        assert_eq!(restored_origin(&restored.per_display["float"],&d,(630.,64.)),(-1676,590));
     }
     #[test]fn unplug_fallback_keeps_disconnected_memory_and_reconnect_restores_it(){
         let a=display("physical-a",Rect{left:0,top:0,right:1920,bottom:1080},1.);

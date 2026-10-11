@@ -2,7 +2,7 @@ import { memo, useEffect, useId, useMemo, useState } from 'react'
 import { bubblePath, bubbleTransform } from './bubbleShape'
 import type { PanelEdge } from './berthShape'
 import { cardBox, type DetailCardLayout } from './cardLayout'
-import { USAGE_TINT, usageTint } from './tint'
+import { tintColour, usageTint } from './tint'
 import { openSettings } from '../api'
 import type { ProviderUsage } from '../types'
 import { percentFigure } from '../usagePresentation'
@@ -13,6 +13,7 @@ import { formatReset } from '../types'
 import { balanceOnly, creditText } from '../creditAmount'
 import { budgetEstimate, useCardHistory } from './cardHistory'
 import { CardActivity } from './CardActivity'
+import { PanelOutline } from './PanelOutline'
 import { formatCost } from '../token-spend/summary'
 import './panel.css'
 
@@ -26,6 +27,7 @@ import './panel.css'
  */
 
 export interface UsageCardProps {
+  light?: boolean
   provider: ProviderUsage
   layout: DetailCardLayout
   /** The edge the rail is docked to; the tail leaves towards it. */
@@ -44,6 +46,7 @@ export interface UsageCardProps {
 
 function UsageCardImpl({
   provider,
+  light=false,
   layout,
   edge,
   pointerCentre,
@@ -70,7 +73,7 @@ function UsageCardImpl({
   const viewBox =
     `0 0 ${box.width} ${box.height}`
 
-  const transform = bubbleTransform(edge, box.height)
+  const transform = bubbleTransform(edge, box.height, box.width)
 
   const d = useMemo(
     () =>
@@ -94,7 +97,7 @@ function UsageCardImpl({
       ? { marginLeft: tail }
       : edge === 'right'
         ? { marginRight: tail }
-        : { marginTop: tail }
+        : edge === 'bottom' ? { marginBottom: tail } : { marginTop: tail }
 
   return (
     <div
@@ -112,8 +115,8 @@ function UsageCardImpl({
         viewBox={viewBox}
         aria-hidden="true"
       >
-        <defs><clipPath id={clipId}><path d={d} transform={transform}/></clipPath></defs>
-        <path d={d} transform={transform} className="card__surface" />
+        <defs><clipPath id={clipId}><path d={d} transform={transform}/></clipPath>{light&&<PanelOutline id={`${clipId}-outline`}/>}</defs>
+        <path d={d} transform={transform} filter={light?`url(#${clipId}-outline)`:undefined} className="card__surface" />
       </svg>
 
       <div style={{position:'absolute',inset:0,clipPath:`url(#${clipId})`}}><div
@@ -162,7 +165,7 @@ function UsageCardImpl({
             const fraction =
               w.percentUsed === null || w.percentUsed === undefined ? null : w.percentUsed / 100
             const spent = !!w.isExhausted || (w.percentUsed !== null && w.percentUsed !== undefined && w.percentUsed >= 100)
-            const tint = USAGE_TINT[usageTint({ usedFraction: fraction, isExhausted: spent, warningAt,elapsedFraction:provider.stale || provider.error?null:quotaTimeFraction(w,Date.now()) })]
+            const tint = tintColour(usageTint({ usedFraction: fraction, isExhausted: spent, warningAt,elapsedFraction:provider.stale || provider.error?null:quotaTimeFraction(w,Date.now()) }),light)
             const reset = formatReset(w.resetsAt, new Date(now))
             const displayed = fraction === null ? null : showsRemaining ? Math.max(0, 1 - fraction) : fraction
 
@@ -197,7 +200,7 @@ function UsageCardImpl({
                   className="card__row-line"
                   style={{ fontSize: layout.rowFontSize, lineHeight: `${layout.rowTextLineHeight}px` }}
                 >
-                  <span className="card__percent" style={{ color: spent?tint:'rgba(255,255,255,.9)' }}>
+                  <span className="card__percent" style={{ color: spent?tint:light?'var(--panel-text)':'rgba(255,255,255,.9)' }}>
                     {displayed === null ? '—' : `${percentFigure(displayed)}% ${showsRemaining ? '剩余' : '已用'}`}
                   </span>
                   {reset ? (
@@ -207,7 +210,7 @@ function UsageCardImpl({
                   ) : null}
                 </div>
                 {layout.detailed&&<div className="card__estimate card__muted" style={{height:layout.rowTextLineHeight,fontSize:layout.footnoteFontSize,lineHeight:`${layout.rowTextLineHeight}px`}}>{(()=>{const estimate=history.snapshot?budgetEstimate(w,history.snapshot,now):null;return estimate?`估算额度 ≈${formatCost(estimate.full)} · 已用 ≈${formatCost(estimate.spent)}`:''})()}</div>}
-                {layout.showForecast && <div className="card__forecast" style={{height:layout.rowTextLineHeight,fontSize:layout.footnoteFontSize,lineHeight:`${layout.rowTextLineHeight}px`,color:'rgba(255,255,255,.55)'}}>{spent?'':forecastText(w,now)}</div>}
+                {layout.showForecast && <div className="card__forecast" style={{height:layout.rowTextLineHeight,fontSize:layout.footnoteFontSize,lineHeight:`${layout.rowTextLineHeight}px`,color:light?'var(--panel-muted)':'rgba(255,255,255,.55)'}}>{spent?'':forecastText(w,now)}</div>}
               </section>
             )
           })

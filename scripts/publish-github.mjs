@@ -2,7 +2,9 @@ import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { assertReleaseReady } from './release-gate.mjs'
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..')
+assertReleaseReady(root)
 const {repository}=JSON.parse(readFileSync(path.join(root,'release-channel.json'),'utf8'))
 if(!/^[\w.-]+\/[\w.-]+$/.test(repository))throw new Error('Invalid release repository')
 const git=(args)=>{const result=spawnSync('git',args,{cwd:root,encoding:'utf8',env:{...process.env,GIT_TERMINAL_PROMPT:'0',GCM_INTERACTIVE:'never'}});if(result.status!==0)throw new Error('Git command failed: '+result.stderr);return result.stdout.trim()}

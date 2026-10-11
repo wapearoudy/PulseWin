@@ -1,5 +1,5 @@
 import { memo, useId } from 'react'
-import { usageTint, isSpent as computeSpent, USAGE_TINT, type UsageTintName } from './tint'
+import { usageTint, isSpent as computeSpent, tintColour, type UsageTintName } from './tint'
 import {
   CLOCK_LINE_WIDTH,
   ICON_SCALE,
@@ -89,6 +89,7 @@ export interface UsageRingProps {
   /** Dims the icon when there is no reading. */
   hasReading?: boolean
   /** A chosen colour for this account's ring. Spent still wins. */
+  light?: boolean
   chosenTint?: string | null
 }
 
@@ -115,6 +116,7 @@ function UsageRingImpl({
   showsBotMark = false,
   hasReading = true,
   chosenTint = null,
+  light = false,
 }: UsageRingProps) {
   const uid = useId()
 
@@ -129,7 +131,7 @@ function UsageRingImpl({
   // Colour says how full the limit is, not which provider this is.
   const tintName: UsageTintName | null =
     chosenTint && !spent ? null : usageTint({ usedFraction, isExhausted: isSpent, warningAt, elapsedFraction })
-  const arcColour = chosenTint && !spent ? chosenTint : USAGE_TINT[tintName ?? 'good']
+  const arcColour = chosenTint && !spent ? chosenTint : tintColour(tintName ?? 'good',light)
 
   // Full when spent, whichever way it counts — the most urgent state must not
   // be the one with the least ink. And never let a full ring mean "over limit":
@@ -142,9 +144,7 @@ function UsageRingImpl({
   const secondArcFraction = secondSpent ? 1 : clamp01(secondShown)
   // Same colour language as the outer ring, deliberately: two arcs measuring
   // the same kind of thing must be read the same way.
-  const secondColour = chosenTint && !secondSpent ? chosenTint : USAGE_TINT[
-    usageTint({ usedFraction: secondUsed, isExhausted: secondSpent, warningAt, elapsedFraction:secondElapsedFraction })
-  ]
+  const secondColour = chosenTint && !secondSpent ? chosenTint : tintColour(usageTint({ usedFraction: secondUsed, isExhausted: secondSpent, warningAt, elapsedFraction:secondElapsedFraction }),light)
 
   const half = inkHalf
   const size = half * 2
@@ -183,7 +183,7 @@ function UsageRingImpl({
         cy={0}
         r={ringRadius}
         fill="none"
-        stroke={`rgba(255,255,255,${TRACK_OPACITY})`}
+        stroke={`rgba(${light?'0,0,0':'255,255,255'},${TRACK_OPACITY})`}
         strokeWidth={lineWidth}
       />
 
@@ -234,7 +234,7 @@ function UsageRingImpl({
             cy={0}
             r={secondRingRadius}
             fill="none"
-            stroke={`rgba(255,255,255,${TRACK_OPACITY})`}
+            stroke={`rgba(${light?'0,0,0':'255,255,255'},${TRACK_OPACITY})`}
             strokeWidth={secondRingLineWidth}
           />
           {secondArcFraction > 0 && (
@@ -260,7 +260,7 @@ function UsageRingImpl({
           cy={0}
           r={busyDiameter / 2}
           fill="none"
-          stroke="#ffffff"
+          stroke={light?'#000000':'#ffffff'}
           strokeWidth={Math.max(lineWidth * 0.5, 1.5)}
           strokeLinecap="round"
           strokeDasharray={dash(BUSY_SWEEP, busyDiameter / 2)}
@@ -297,7 +297,7 @@ function UsageRingImpl({
             cy={0}
             r={clockDiameter / 2}
             fill="none"
-            stroke={`rgba(255,255,255,${CLOCK_TRACK_OPACITY})`}
+            stroke={`rgba(${light?'0,0,0':'255,255,255'},${CLOCK_TRACK_OPACITY})`}
             strokeWidth={CLOCK_LINE_WIDTH * scale}
           />
           {clamp01(windowClockFraction) > 0 && (
@@ -306,7 +306,7 @@ function UsageRingImpl({
               cy={0}
               r={clockDiameter / 2}
               fill="none"
-              stroke={`rgba(255,255,255,${CLOCK_ARC_OPACITY})`}
+              stroke={`rgba(${light?'0,0,0':'255,255,255'},${CLOCK_ARC_OPACITY})`}
               strokeWidth={CLOCK_LINE_WIDTH * scale}
               strokeLinecap="round"
               strokeDasharray={dash(clamp01(windowClockFraction), clockDiameter / 2)}

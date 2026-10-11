@@ -145,6 +145,36 @@ pub(super) fn read(path: &Path, agent: &str, cancel: &AtomicBool) -> Result<(Vec
         let next=f.scan("opencode",&Prices::new());assert_eq!(next.records.len(),2);
         assert_eq!(next.sources.iter().find(|s|s.id=="opencode").unwrap().cached_files,0);
     }
+    #[test] fn pruning_database_rows_keeps_counters_without_double_counting_live_rows(){
+        let f=Fixture::new();let conn=f.db("opencode.db");
+        insert(&conn,"m1",&payload());insert(&conn,"m2",&payload());
+        let before=f.scan("opencode",&Prices::new());assert_eq!(before.records.iter().map(|r|r.tally.total()).sum::<u64>(),324);
+        conn.execute("DELETE FROM message WHERE id='m1'",[]).unwrap();
+        for _ in 0..2 {
+            let kept=f.scan("opencode",&Prices::new());assert!(kept.notes.is_empty());
+            assert_eq!(kept.records.iter().map(|r|r.tally.total()).sum::<u64>(),324);
+            assert_eq!(kept.records.iter().filter(|r|!r.session.is_empty()).count(),1);
+        }
+        insert(&conn,"m3",&payload());
+        let imported=f.scan("opencode",&Prices::new());
+        // High-water marks hold the larger tally, never old + live. Imports
+        // into a pruned old quarter-hour remain below its known maximum.
+        assert_eq!(imported.records.iter().map(|r|r.tally.total()).sum::<u64>(),324);
+        conn.execute("DELETE FROM message",[]).unwrap();drop(conn);
+        let prices=parse_prices(&json!({"opencode-go":{"models":{"model-only-on-plan":{"cost":{"input":2,"output":8}}}}}));
+        let gone=f.scan("opencode",&prices);assert_eq!(gone.records.iter().map(|r|r.tally.total()).sum::<u64>(),324);
+        assert!((gone.records.iter().map(|r|r.cost.unwrap()).sum::<f64>()-0.000948).abs()<1e-10);
+        let saved=fs::read_to_string(f.dir.join("cache/history-store-opencode.json")).unwrap();assert!(!saved.contains("SENSITIVE"));
+    }
+    #[test]fn partial_store_reads_never_raise_history_marks(){
+        let f=Fixture::new();let conn=f.db("opencode.db");insert(&conn,"m1",&payload());
+        f.scan("opencode",&Prices::new());let journal=f.dir.join("cache/history-store-opencode.json");let before=fs::read(&journal).unwrap();
+        let mut larger=payload();larger["tokens"]["input"]=json!(9000);insert(&conn,"large",&larger);
+        conn.execute("INSERT INTO message VALUES('bad','s','{broken}')",[]).unwrap();
+        let partial=f.scan("opencode",&Prices::new());assert!(!partial.notes.is_empty());assert_eq!(fs::read(&journal).unwrap(),before);
+        conn.execute("DELETE FROM message",[]).unwrap();
+        let gone=f.scan("opencode",&Prices::new());assert_eq!(gone.records.iter().map(|r|r.tally.total()).sum::<u64>(),162);
+    }
     #[test] fn plan_prices_are_isolated_and_first_party_always_wins() {
         let prices=parse_prices(&json!({"opencode-go":{"models":{"model-only-on-plan":{"cost":{"input":2,"output":8}}}},
             "kilo":{"models":{"model-only-on-plan":{"cost":{"input":4,"output":16}}}}}));

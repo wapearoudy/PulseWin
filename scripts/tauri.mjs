@@ -33,5 +33,5 @@ if (cli.status !== 0) process.exit(cli.status ?? 1);
 // Inherited Low Mandatory Level otherwise breaks NSIS before .onInit can run.
 if (releaseBuild) {
   finalizeWindowsArtifacts();
-  publishLocalUpdates(root);
+  if (!environment.PULSEWIN_SKIP_LOCAL_UPDATE) publishLocalUpdates(root);
 }
