@@ -1,0 +1,299 @@
+{
+  "version": "0.1.16",
+  "status": "prepared",
+  "authorization": "先发布一版，未实现的token来源先隐藏了",
+  "tests": {
+    "rust": {
+      "passed": 984,
+      "failed": 0,
+      "ignored": 2
+    },
+    "frontend": {
+      "passed": 205,
+      "files": 20
+    },
+    "browser": {
+      "passed": 81
+    },
+    "native": [
+      "hidden unported Token sources",
+      "account switch identity regression",
+      "13 synthetic token source readers",
+      "PNG export and preferences",
+      "assistant light, bottom and horizontal",
+      "CLI isolated cache",
+      "real Tauri signed fixture download",
+      "tampered bytes and forged version rejected",
+      "same version skipped",
+      "test install blocked",
+      "user settings unchanged"
+    ]
+  },
+  "assets": [
+    {
+      "name": "latest.json",
+      "bytes": 3544,
+      "sha256": "937c86f734d87d6b14ae0f289b5f0d24bcc0c841d92045fb5f105d040643b804"
+    },
+    {
+      "name": "PulseWin_0.1.10_x64-setup.exe",
+      "bytes": 2959123,
+      "sha256": "de62f273c4338607e1a321307b03964681c7ca8af19388d3bee3ed739cd44426"
+    },
+    {
+      "name": "PulseWin_0.1.10_x64-setup.exe.sig",
+      "bytes": 440,
+      "sha256": "909adea72db63ab0065cb40ca26a61c4d5f6543ae080d6d223c9f45d56152570"
+    },
+    {
+      "name": "PulseWin_0.1.10_x64_en-US.msi",
+      "bytes": 4694016,
+      "sha256": "e34118e0ecf34547affa8c8ec54f52e0548fe3b24b2d5be893ec551c122b5f3b"
+    },
+    {
+      "name": "PulseWin_0.1.10_x64_en-US.msi.sig",
+      "bytes": 440,
+      "sha256": "3e7439cdecc90f81c2954e8a57ebcc32fc0d6e5d8d2a27978ac9c83783617a97"
+    },
+    {
+      "name": "PulseWin_0.1.11_x64-setup.exe",
+      "bytes": 2958012,
+      "sha256": "47c439f4faafb8e416c756efd1badd63008259338897a4a928863f7a7549fbb7"
+    },
+    {
+      "name": "PulseWin_0.1.11_x64-setup.exe.sig",
+      "bytes": 440,
+      "sha256": "8ed4d082b4bde61d651dcac2eddac6634efd8ddcafdf17f5b4ba820d633cdb3b"
+    },
+    {
+      "name": "PulseWin_0.1.11_x64_en-US.msi",
+      "bytes": 4694016,
+      "sha256": "85c788056474a7c9b9d2ac60bba31c51036776e2d27476a4cc472ea876e20cd9"
+    },
+    {
+      "name": "PulseWin_0.1.11_x64_en-US.msi.sig",
+      "bytes": 440,
+      "sha256": "64798f22b0e43bfa609704ce849a37a4b7fab694d529bd73e9346583ef427fa6"
+    },
+    {
+      "name": "PulseWin_0.1.12_x64-setup.exe",
+      "bytes": 3000289,
+      "sha256": "a0e43282b38b697f01f16db8117e9a09bd88a3d6a0f865acb9fffc37799bdec6"
+    },
+    {
+      "name": "PulseWin_0.1.12_x64-setup.exe.sig",
+      "bytes": 440,
+      "sha256": "2fa1b6d3dd66a5f0defc5ec53408863b1d8ab6ccbab6e6ef41b7f695d583d96e"
+    },
+    {
+      "name": "PulseWin_0.1.12_x64_en-US.msi",
+      "bytes": 4820992,
+      "sha256": "f78fb5ecf7c1a9a7d8c154954c52acd821de7e3430b217b623ef041ea654070c"
+    },
+    {
+      "name": "PulseWin_0.1.12_x64_en-US.msi.sig",
+      "bytes": 440,
+      "sha256": "8e908eb11a3310f32dd56f54d5e9ad7f1772b18cdca70f92382f648824f22a6d"
+    },
+    {
+      "name": "PulseWin_0.1.13_x64-setup.exe",
+      "bytes": 3000782,
+      "sha256": "b4e044cbb275576229fd0247662bd016a789b60e96c04596965a7dba807d1bb8"
+    },
+    {
+      "name": "PulseWin_0.1.13_x64-setup.exe.sig",
+      "bytes": 440,
+      "sha256": "833f8d533a20a486b5115d78dbca106fe2e90449bcc26365c6cb606f5d9f0e6d"
+    },
+    {
+      "name": "PulseWin_0.1.13_x64_en-US.msi",
+      "bytes": 4825088,
+      "sha256": "c7a33b5cd244cd705103f84863a1940fd3b718e273d55146251c8704ed9bc66a"
+    },
+    {
+      "name": "PulseWin_0.1.13_x64_en-US.msi.sig",
+      "bytes": 440,
+      "sha256": "c02d792e05c9541c8ae5aba983d03359ca8d1ed0b791079be6f63312bf6b0e0a"
+    },
+    {
+      "name": "PulseWin_0.1.14_x64-setup.exe",
+      "bytes": 3001881,
+      "sha256": "b82fd69100a6387999a00e7b1dbc51f8591dc6d50178b8e27891c3027028829e"
+    },
+    {
+      "name": "PulseWin_0.1.14_x64-setup.exe.sig",
+      "bytes": 440,
+      "sha256": "54ca8ef500964115e1287bd5cd970698960c5a5fc3b6f767540de85e739163dd"
+    },
+    {
+      "name": "PulseWin_0.1.14_x64_en-US.msi",
+      "bytes": 4820992,
+      "sha256": "9d22096fe20b91d3292a9ca9a9b3d591fad0470bbea4bf24262571647ee4d4a8"
+    },
+    {
+      "name": "PulseWin_0.1.14_x64_en-US.msi.sig",
+      "bytes": 440,
+      "sha256": "d12637a7cb9e5745c5c8137f5e40c8f7345e3db3f0a195801f3a00beb2c705f8"
+    },
+    {
+      "name": "PulseWin_0.1.16_x64-setup.exe",
+      "bytes": 3298973,
+      "sha256": "49a8d96d5dc3a722cfe4cd72fa9c9e01e07a157629a3ce91d893baa20f4e1a7e"
+    },
+    {
+      "name": "PulseWin_0.1.16_x64-setup.exe.sig",
+      "bytes": 440,
+      "sha256": "4812dfa31e621f8400b3f0ff5ae215d2c36dfca6734141f695938bc3e8ade73f"
+    },
+    {
+      "name": "PulseWin_0.1.16_x64_en-US.msi",
+      "bytes": 5251072,
+      "sha256": "c62f291c2b8a66f66b0ffbdde32e88b947c9379fa0b5b9b584973f5aa26562ed"
+    },
+    {
+      "name": "PulseWin_0.1.16_x64_en-US.msi.sig",
+      "bytes": 440,
+      "sha256": "b02545e0a78c80b0716931a4db2d59ee598fb4f1204e322278cdcda956ab9f7d"
+    },
+    {
+      "name": "PulseWin_0.1.4_x64-setup.exe",
+      "bytes": 2876448,
+      "sha256": "78a42f90cfbffd42126e58c615d09f0103af99dba9a29eca77962aebfb458ea8"
+    },
+    {
+      "name": "PulseWin_0.1.4_x64-setup.exe.sig",
+      "bytes": 436,
+      "sha256": "0e4cb35fb7418f93fce4223d6239d814f1a059d938d10e4e745be765842bab07"
+    },
+    {
+      "name": "PulseWin_0.1.4_x64_en-US.msi",
+      "bytes": 4587520,
+      "sha256": "f172f9713a8953d560118006a0d9b6f1679b0045e62fe1681b37549405fedcf2"
+    },
+    {
+      "name": "PulseWin_0.1.4_x64_en-US.msi.sig",
+      "bytes": 436,
+      "sha256": "eb14fb67272e9280a3e03345430065cdf7c953d47ecf90dc5222584d6c92b2a6"
+    },
+    {
+      "name": "PulseWin_0.1.5_x64-setup.exe",
+      "bytes": 2875641,
+      "sha256": "50130fac4bac5c2421b415e7f2571013cc770d864e8cd688d8dc302c30d557e8"
+    },
+    {
+      "name": "PulseWin_0.1.5_x64-setup.exe.sig",
+      "bytes": 436,
+      "sha256": "0e68dbb35ab11e44e946fb7d4f6cafa6a0664a32a3681d9bfee80a8403ae46e3"
+    },
+    {
+      "name": "PulseWin_0.1.5_x64_en-US.msi",
+      "bytes": 4587520,
+      "sha256": "1765c72ba7eff90b180c2e31719d251cd572411ee1aa5f11d8a8a84c3b7a8f9e"
+    },
+    {
+      "name": "PulseWin_0.1.5_x64_en-US.msi.sig",
+      "bytes": 436,
+      "sha256": "2fce52e2041e4c6aeb73c1d3144336fada1a61cec19b0672221a9b5db8d14d30"
+    },
+    {
+      "name": "PulseWin_0.1.6_x64-setup.exe",
+      "bytes": 2878175,
+      "sha256": "79b3bf4eed64c38a7125fa2c0bd0eefd51c464ad73a66eb4d3bc1e4c65ae8c89"
+    },
+    {
+      "name": "PulseWin_0.1.6_x64-setup.exe.sig",
+      "bytes": 436,
+      "sha256": "62975dda7d905fb2245f1cb68da1a38da1e90cebdbd97612017226d6874645ba"
+    },
+    {
+      "name": "PulseWin_0.1.6_x64_en-US.msi",
+      "bytes": 4587520,
+      "sha256": "4f207873da4accad9aecfb2b543798c5efb7661ddf070897313707493eac0501"
+    },
+    {
+      "name": "PulseWin_0.1.6_x64_en-US.msi.sig",
+      "bytes": 436,
+      "sha256": "c679f1038db42d1f81f3a588ce3d1218f01168c61e4a9214a5b53b25c933c472"
+    },
+    {
+      "name": "PulseWin_0.1.7_x64-setup.exe",
+      "bytes": 2876930,
+      "sha256": "c29e089db495164e609b304212cbe854258f8763c4a41d01692c662e81e83edb"
+    },
+    {
+      "name": "PulseWin_0.1.7_x64-setup.exe.sig",
+      "bytes": 436,
+      "sha256": "c772713cf665ec7747b391952590705c1ec023fdccc90afa6bcfc174231d63f1"
+    },
+    {
+      "name": "PulseWin_0.1.7_x64_en-US.msi",
+      "bytes": 4587520,
+      "sha256": "94fc3a0926e25b60b18befe0ceea2dd82b5ff2219a18827953783c980fff4e0b"
+    },
+    {
+      "name": "PulseWin_0.1.7_x64_en-US.msi.sig",
+      "bytes": 436,
+      "sha256": "24dceab0a077f6e868434c86fbb554fe64bb79b3b0ddcf1e973678bb92805e24"
+    },
+    {
+      "name": "PulseWin_0.1.8_x64-setup.exe",
+      "bytes": 2899716,
+      "sha256": "5d2caf6901579d465e843424bd63114e071e02834640adf0f7a28916ca7101a6"
+    },
+    {
+      "name": "PulseWin_0.1.8_x64-setup.exe.sig",
+      "bytes": 436,
+      "sha256": "997935a98ec2129b3c65721cf1308ca60d0a726f433cbd5e4fe03438dbd579b4"
+    },
+    {
+      "name": "PulseWin_0.1.8_x64_en-US.msi",
+      "bytes": 4616192,
+      "sha256": "b66fb89f43504831280999faae995b7aec08fa034b55a84c62c33bfc4387eba4"
+    },
+    {
+      "name": "PulseWin_0.1.8_x64_en-US.msi.sig",
+      "bytes": 436,
+      "sha256": "f22fbe3c40f469ee31a9ca475bd912c7f39ee380d1a375650642271dd550a29f"
+    },
+    {
+      "name": "PulseWin_0.1.9_x64-setup.exe",
+      "bytes": 2922599,
+      "sha256": "a145c061790dd5fffea93d3b8f44865154e373ce2015a6730780e2661c833052"
+    },
+    {
+      "name": "PulseWin_0.1.9_x64-setup.exe.sig",
+      "bytes": 436,
+      "sha256": "e1640c28aa018abf9b2cd9489aede5fe0c2d7f625aa9f79f25afa78909190859"
+    },
+    {
+      "name": "PulseWin_0.1.9_x64_en-US.msi",
+      "bytes": 4648960,
+      "sha256": "9e7be89c0cbcb456d95719fafbd1ec24579e85e69dc954333fd7c94acd86b193"
+    },
+    {
+      "name": "PulseWin_0.1.9_x64_en-US.msi.sig",
+      "bytes": 436,
+      "sha256": "0008b6b2cfe9f4edb7aac66b9defdc866834ea2f11ca55ac7e38595e8fc39037"
+    }
+  ],
+  "installationExecuted": false,
+  "fullParity": false,
+  "limitations": [
+    "30 unported Token sources are hidden from the UI and tracked in docs/token-source-backlog.md; four existing export/capture sources still require supplied exports",
+    "DeepSeek console renewal/import and detailed-card integration; complete login-to-bill comparison still needs documented acceptance",
+    "OpenCode Go session renewal and detailed-card integration; authenticated read/resume/restart/account-scope cancellation now passed",
+    "Original recap visual parity, native recap flow, notification click navigation, interactive clipboard/file-dialog acceptance",
+    "Prompt-cache hover-card integration and complete per-model output/TTFT rows",
+    "Background warming timer/cancellation acceptance",
+    "Remaining provider authentication/diagnostics, stable quota identities and full 77-route audit",
+    "Extensions, complete JSON/integration fields and account deep links remain listed in README coverage",
+    "Windows multi-DPI/multi-monitor, full-screen and live-account regression acceptance",
+    "Live official outage notification and backup update acceptance",
+    "Stable real Harness source integrity acceptance; initial read-before/read-after verification failed on changing source logs"
+  ],
+  "externalLimitations": [
+    "Anonymous GitHub backup API rate limited; live fallback not accepted",
+    "DeepSeek official status network/TLS request failed",
+    "Real Harness read-only integrity check failed because source logs changed during its 57.8-second scan; no stable live-source acceptance. Full offline fixture regression remains passing."
+  ]
+}

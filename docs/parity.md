@@ -8,7 +8,8 @@ Upstream release-note sync (2026-10-11): latest stable Pulse is 1.9.0.
 1.7.0 through 1.9.0. The reference source checkout remains at its earlier
 commit; this documentation sync does not establish parity with the new release.
 
-0.1.15 implementation is in progress and publication is explicitly held by
+The user authorized an interim 0.1.16 release on 2026-10-11 and requested hiding
+unported Token sources from the UI. Remaining parity work is tracked in
 [release-progress.json](release-progress.json). Light assistant surfaces,
 horizontal floating/bottom docking and durable counter history are now implemented.
 The continuing checkpoint is recorded in [release-progress.json](release-progress.json):
@@ -27,8 +28,9 @@ because source logs changed during scanning and is not counted as accepted.
 The Token source catalog now declares 24 integrations (Crush recognizes a
 cost-only store and intentionally emits no token records); 30 source entries
 remain unported. This is a source inventory, not an overall parity percentage.
-No update feed promotion or release is authorized until the remaining work is
-implemented and acceptance succeeds.
+This interim release does not establish full parity. The 30 unported sources
+remain in [the internal backlog](token-source-backlog.md); their entries are
+hidden from the Token page. Existing source failures and no-data states remain visible.
 
 ## Acceptance inventory
 

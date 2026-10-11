@@ -32,7 +32,7 @@ export interface TokenSpendPaneProps {
 const spans: [SpendSpan, string][] = [['today', '今天'], ['week', '最近 7 天'], ['month', '最近 30 天']]
 // This list is about actual readers, not provider registrations. Antigravity's
 // original catalog uses separate labels for CLI/IDE native stores and capture.
-const pendingSources = ['Grok Build','Devin','OmO Native','Prime Agent','Roo Code','Kilo Code','Cline','CodeBuddy','WorkBuddy','Cherry Studio','Command Code','OpenCodeReview','ZCode','Unsloth','Antigravity CLI','Antigravity IDE','Devin Desktop','Mux','Codebuff','Freebuff','JCode','Augment','Gajae Code','Junie','Fx','LM Studio','Reasonix','Trae','Warp','Copilot']
+
 const exportHelp: Record<string, string> = {
   dsh: '自动读取 DeepSeek Harness 的 sessions 会话目录（默认 ~/.dsh，可通过 DSH_HOME 指定）。支持普通、版本化及 Zstandard 压缩 JSONL，分别统计输入、输出和缓存；分叉历史与迁移副本去重。CLI 与当前桌面版共享此目录。',
   cursor: '需要事先导出 Cursor usageEventsDisplay JSON 或带四类计数列的 CSV。不会读取 Cursor 原生日志或自动登录；CSV 只用于日统计。',
@@ -148,7 +148,7 @@ export function TokenSpendPane({ enabled, onEnabledChange, span: savedSpan, onSp
           <section className="spend-card"><h2>项目</h2><GroupRows groups={summary.projects} /><p className="spend-footnote">仅显示记录中明确写出的项目路径；缺少路径的会话仍计入总量。</p></section></>}
         <section className="spend-card spend-sources"><h2>读取来源</h2>{snapshot.sources.map(source => <div key={source.id}><strong>{source.name}{source.origin === 'export' ? ' · 导出 / 捕获' : ''}</strong><span>{source.status === 'counted' ? `${source.files} 个记录文件 · ${source.cachedFiles} 个缓存命中${source.retainedRecords ? ` · 保留 ${source.retainedRecords} 条历史计数` : ''}` : source.status === 'no-data' ? source.id === 'crush' ? '已识别 · 来源只报告费用，无法确定 Token 计数' : '未读取到用量' : source.origin === 'export' ? '尚无导出 / 捕获文件' : '未检测到记录目录'}</span></div>)}
           <details><summary>支持格式与读取位置 · {snapshot.sources.length} 个实际 reader</summary>{snapshot.sources.map(source => <section key={source.id}><strong>{source.name}</strong>{exportHelp[source.id] && <p>{exportHelp[source.id]}</p>}{source.roots?.map(root => <p key={root}>{root}</p>)}</section>)}<p>UsageImports 文件夹需要自行放入符合格式的导出；不会扫描其他任意文件夹。</p></details>
-          <details><summary>其他 {pendingSources.length} 个原版来源尚未移植</summary><p>{pendingSources.join('、')}</p><p>这些来源未扫描，未被算作已覆盖，也未以零用量代替读取。</p></details>
+
         </section>
         <p className="spend-footnote">本机记录按 models.dev 公布的 API 价格估算，货币为美元。这不是订阅账单，其他设备的工作不会自动计入。</p>
         <p className="spend-footnote">扫描时间：{new Date(snapshot.scannedAt).toLocaleString('zh-CN')} · {snapshot.pricingStatus === 'unavailable' ? '公开价格暂不可用' : snapshot.pricingStatus === 'stale' ? '使用离线价格缓存' : '价格来源：models.dev'}{snapshot.pricesAt ? ` · ${new Date(snapshot.pricesAt).toLocaleDateString('zh-CN')}` : ''}</p>

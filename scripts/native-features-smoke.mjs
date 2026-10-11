@@ -68,6 +68,8 @@ try{
  await assert.rejects(invoke('get_prompt_cache',{provider:'codex'}),/未开启/)
  await page.getByRole('button',{name:'Token 消耗',exact:true}).click();await page.getByRole('switch',{name:'读取本机 Token 用量记录'}).click();await page.waitForFunction(()=>document.querySelector('[aria-label="读取本机 Token 用量记录"]')?.checked)
  await page.getByRole('button',{name:'月度 / 年度回顾'}).waitFor({timeout:15000})
+ assert.equal(await page.locator('.spend-sources').getByText('尚未移植',{exact:false}).count(),0)
+ assert.equal(await page.locator('.spend-sources').getByText('Grok Build',{exact:false}).count(),0)
  const scan=await page.evaluate(async()=>{const id=await window.__TAURI_INTERNALS__.invoke('spend_begin_scan',{enabled:true,force:false});for(let i=0;i<100;i++){const r=await window.__TAURI_INTERNALS__.invoke('spend_get_scan',{scanId:id});if(r.status==='completed')return r;if(r.status==='error')throw Error(r.error);await new Promise(r=>setTimeout(r,100))}throw Error('scan timeout')})
  assert.equal(scan.snapshot.sources.length,24);assert.equal(scan.snapshot.records.length,13);assert(scan.snapshot.records.every(r=>r.sourceTimestamp>1e9&&r.sourceTimestamp<1e10));assert.deepEqual(scan.snapshot.notes,[]);assert.equal((await invoke('spend_kept_snapshot')).records.length,13)
  const codex=scan.snapshot.records.find(r=>r.agent==='codex');assert.equal(codex.replyTiming.seconds,4);assert.equal(codex.replyTiming.firstTokenSeconds,1.5)

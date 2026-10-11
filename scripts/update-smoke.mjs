@@ -36,7 +36,7 @@ try{
   const initial=await call('get_update_status')
   assert.equal(initial.settings.source,JSON.parse(await readFile(path.join(root,'release-channel.json'),'utf8')).source,'A fresh profile must use the configured release source')
   await call('save_update_settings',{settings:{source:channel,automatic:false}})
-  assert.deepEqual(JSON.parse(await readFile(path.join(profile,'PulseWin/updates.json'),'utf8')),{source:channel,automatic:false},'Update settings must stay inside the isolated application profile')
+  assert.deepEqual(JSON.parse(await readFile(path.join(profile,'PulseWin/updates.json'),'utf8')),{source:channel,automatic:false,backupAutomatic:true,notesLanguage:'auto'},'Update settings and defaults must stay inside the isolated application profile')
   const available=await call('check_app_update');assert.equal(available.phase,'available');assert.equal(available.version,next)
   await call('verify_app_update_smoke',{version:next})
   assert.equal((await call('get_update_status')).downloaded,original.length)

@@ -1,8 +1,8 @@
 {
-  "version": "0.1.15",
-  "status": "implementation-in-progress",
-  "releaseHold": true,
-  "reason": "Implement upstream features and validate them before publishing, as requested by the user on 2026-10-11.",
+  "version": "0.1.16",
+  "status": "interim-release-preparation",
+  "releaseHold": false,
+  "reason": "User explicitly authorized one interim release on 2026-10-11 and requested hiding unimplemented Token sources. This does not establish full Pulse parity.",
   "upstream": "1.9.0",
   "publishedVersion": "0.1.14",
   "implementedVerified": [
@@ -26,9 +26,9 @@
   "verification": {
     "rust": "984 passed, 0 failed, 2 explicitly ignored real-account checks (986 total)",
     "frontendUnit": "205 passed in 20 files",
-    "browser": "80 passed preceding full suite; latest account identity fix passed all 17 Settings flows, including a red/green repeated-switch regression. All browser IPC responses are synthetic.",
-    "native": "PASS on latest rebuilt 0.1.15 Windows/WebView2 binary: 13 synthetic native sources including Kiro/Kimi, kept reuse/opt-out, Codex evidence/cache/speed/TTFT, full-size PNG and preferences; light/bottom/horizontal suites. No interactive clipboard/file-dialog acceptance.",
-    "localUpdateFeed": "0.1.14 remains unchanged; build explicitly holds promotion",
+    "browser": "81 passed in the full browser suite on 0.1.16 source; browser IPC responses are synthetic.",
+    "native": "PASS on rebuilt 0.1.16 Windows/WebView2 binary: hidden unported source list, repeated account switching, 13 synthetic native token sources, cache/speed/TTFT, full-size PNG, preferences, light/bottom/horizontal assistant, CLI and signed updater tamper/version rejection. No installer executed.",
+    "localUpdateFeed": "Signed local 0.1.16 feed promoted for the user-authorized interim release.",
     "externalLimitations": [
       "Anonymous GitHub backup API rate limited; live fallback not accepted",
       "DeepSeek official status network/TLS request failed",
@@ -37,7 +37,7 @@
     "authenticatedConsole": "DeepSeek official interactive login and actual 30-day billing read passed. OpenCode official interactive login and resume passed: 20,364 Go request IDs, all unique, pending ranges 0, complete=true. Private credentials/ledger are ignored; this validates live reads, not full original card/renewal parity. Both encrypted connections and complete OpenCode ledger restored after restart. Live OpenCode forced read cancelled on account disable, disabled read rejected, DeepSeek unaffected. OpenCode Go explicit live quota GET passed."
   },
   "pending": [
-    "30 sources still listed as unported in Token pane; four existing export/capture sources still require supplied exports",
+    "30 unported Token sources are hidden from the UI and tracked in docs/token-source-backlog.md; four existing export/capture sources still require supplied exports",
     "DeepSeek console renewal/import and detailed-card integration; complete login-to-bill comparison still needs documented acceptance",
     "OpenCode Go session renewal and detailed-card integration; authenticated read/resume/restart/account-scope cancellation now passed",
     "Original recap visual parity, native recap flow, notification click navigation, interactive clipboard/file-dialog acceptance",
@@ -57,5 +57,6 @@
     "Recap posters, export/copy and monthly notice; full original visuals, notification click and interactive exports not accepted",
     "Prompt-cache and console billing currently settings-only; full detailed-card integration pending",
     "OpenCode encrypted independent login, workspace resolution and adaptive pager; 20,364 unique live Go IDs, zero pending ranges, restart recovery and account disable cancellation passed. Renewal and detailed-card acceptance pending."
-  ]
+  ],
+  "interimReleaseAuthorization": "先发布一版，未实现的token来源先隐藏了"
 }
