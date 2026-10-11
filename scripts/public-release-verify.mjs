@@ -1,5 +1,6 @@
 import { chromium } from '@playwright/test'
-import { spawn } from 'node:child_process'
+import { spawn, execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { createHash } from 'node:crypto'
 import { readFile, writeFile, mkdir, mkdtemp } from 'node:fs/promises'
 import path from 'node:path'
@@ -14,17 +15,19 @@ const release = `https://github.com/${repository}/releases/tag/v${version}`
 const folder = path.join(root, 'updates/github')
 const names = ['latest.json', `PulseWin_${version}_x64-setup.exe`, `PulseWin_${version}_x64-setup.exe.sig`, `PulseWin_${version}_x64_en-US.msi`, `PulseWin_${version}_x64_en-US.msi.sig`]
 const digest = bytes => createHash('sha256').update(bytes).digest('hex')
+const execute = promisify(execFile)
+async function anonymousDownload(url) {
+  // curl honors the session's HTTPS proxy; Node fetch does not by default.
+  const { stdout } = await execute('curl.exe', ['--fail', '--location', '--silent', '--show-error', '--connect-timeout', '15', '--max-time', '60', url], { encoding: 'buffer', maxBuffer: 32 * 1024 * 1024, windowsHide: true })
+  return stdout
+}
 const anonymousAssets = await Promise.all(names.map(async name => {
   const local = await readFile(path.join(folder, name))
-  const response = await fetch(`https://github.com/${repository}/releases/download/v${version}/${name}`, { signal: AbortSignal.timeout(60000) })
-  assert(response.ok, `${name}: HTTP ${response.status}`)
-  const downloaded = Buffer.from(await response.arrayBuffer())
+  const downloaded = await anonymousDownload(`https://github.com/${repository}/releases/download/v${version}/${name}`)
   assert.equal(digest(downloaded), digest(local), `${name}: published bytes differ`)
   return { name, bytes: downloaded.length, sha256: digest(downloaded) }
 }))
-const response = await fetch(source, { signal: AbortSignal.timeout(30000) })
-assert(response.ok, 'Latest update pointer is unavailable')
-assert.equal((await response.json()).version, version)
+assert.equal(JSON.parse((await anonymousDownload(source)).toString('utf8')).version, version)
 await mkdir(path.join(root, 'test-results'), { recursive: true })
 
 async function native(executable, port, upgrade) {

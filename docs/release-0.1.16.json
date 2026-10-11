@@ -1,6 +1,6 @@
 {
   "version": "0.1.16",
-  "status": "prepared",
+  "status": "published-and-verified",
   "authorization": "先发布一版，未实现的token来源先隐藏了",
   "tests": {
     "rust": {
@@ -295,5 +295,52 @@
     "Anonymous GitHub backup API rate limited; live fallback not accepted",
     "DeepSeek official status network/TLS request failed",
     "Real Harness read-only integrity check failed because source logs changed during its 57.8-second scan; no stable live-source acceptance. Full offline fixture regression remains passing."
-  ]
+  ],
+  "releaseCommit": "2527d8d",
+  "publicVerification": {
+    "passed": true,
+    "testedAt": "2026-10-11T10:42:30.248Z",
+    "repository": "wapearoudy/PulseWin",
+    "release": "https://github.com/wapearoudy/PulseWin/releases/tag/v0.1.16",
+    "version": "0.1.16",
+    "anonymousAssets": [
+      {
+        "name": "latest.json",
+        "bytes": 3544,
+        "sha256": "937c86f734d87d6b14ae0f289b5f0d24bcc0c841d92045fb5f105d040643b804"
+      },
+      {
+        "name": "PulseWin_0.1.16_x64-setup.exe",
+        "bytes": 3298973,
+        "sha256": "49a8d96d5dc3a722cfe4cd72fa9c9e01e07a157629a3ce91d893baa20f4e1a7e"
+      },
+      {
+        "name": "PulseWin_0.1.16_x64-setup.exe.sig",
+        "bytes": 440,
+        "sha256": "4812dfa31e621f8400b3f0ff5ae215d2c36dfca6734141f695938bc3e8ade73f"
+      },
+      {
+        "name": "PulseWin_0.1.16_x64_en-US.msi",
+        "bytes": 5251072,
+        "sha256": "c62f291c2b8a66f66b0ffbdde32e88b947c9379fa0b5b9b584973f5aa26562ed"
+      },
+      {
+        "name": "PulseWin_0.1.16_x64_en-US.msi.sig",
+        "bytes": 440,
+        "sha256": "b02545e0a78c80b0716931a4db2d59ee598fb4f1204e322278cdcda956ab9f7d"
+      }
+    ],
+    "nativeCheck": {
+      "phase": "current",
+      "source": "https://github.com/wapearoudy/PulseWin/releases/latest/download/latest.json",
+      "currentVersion": "0.1.16"
+    },
+    "installationExecuted": false,
+    "signedUpgradeDownload": {
+      "from": "0.1.4",
+      "to": "0.1.16",
+      "passed": true,
+      "actualPublishedPackage": true
+    }
+  }
 }

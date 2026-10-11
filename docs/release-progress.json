@@ -1,10 +1,10 @@
 {
   "version": "0.1.16",
-  "status": "interim-release-preparation",
-  "releaseHold": false,
-  "reason": "User explicitly authorized one interim release on 2026-10-11 and requested hiding unimplemented Token sources. This does not establish full Pulse parity.",
+  "status": "interim-published",
+  "releaseHold": true,
+  "reason": "The user-authorized interim 0.1.16 release is published and publicly verified. The prior requirement to complete and verify remaining parity before further releases is restored; 100% parity is not established.",
   "upstream": "1.9.0",
-  "publishedVersion": "0.1.14",
+  "publishedVersion": "0.1.16",
   "implementedVerified": [
     "Light assistant surfaces, rings and detail cards",
     "Horizontal floating, bottom docking and orientation-aware detail cards",
@@ -34,7 +34,8 @@
       "DeepSeek official status network/TLS request failed",
       "Real Harness read-only integrity check failed because source logs changed during its 57.8-second scan; no stable live-source acceptance. Full offline fixture regression remains passing."
     ],
-    "authenticatedConsole": "DeepSeek official interactive login and actual 30-day billing read passed. OpenCode official interactive login and resume passed: 20,364 Go request IDs, all unique, pending ranges 0, complete=true. Private credentials/ledger are ignored; this validates live reads, not full original card/renewal parity. Both encrypted connections and complete OpenCode ledger restored after restart. Live OpenCode forced read cancelled on account disable, disabled read rejected, DeepSeek unaffected. OpenCode Go explicit live quota GET passed."
+    "authenticatedConsole": "DeepSeek official interactive login and actual 30-day billing read passed. OpenCode official interactive login and resume passed: 20,364 Go request IDs, all unique, pending ranges 0, complete=true. Private credentials/ledger are ignored; this validates live reads, not full original card/renewal parity. Both encrypted connections and complete OpenCode ledger restored after restart. Live OpenCode forced read cancelled on account disable, disabled read rejected, DeepSeek unaffected. OpenCode Go explicit live quota GET passed.",
+    "publicRelease": "PASS: all five anonymous GitHub assets match local SHA-256; latest manifest is 0.1.16; actual 0.1.16 native updater reports current; isolated 0.1.4 client downloads and verifies the real signed 0.1.16 package, with preferences unchanged. No installer executed."
   },
   "pending": [
     "30 unported Token sources are hidden from the UI and tracked in docs/token-source-backlog.md; four existing export/capture sources still require supplied exports",
