@@ -14,14 +14,14 @@ use std::path::{Path, PathBuf};
 use std::sync::{atomic::{AtomicBool, AtomicU64, Ordering}, Arc, Mutex, OnceLock};
 use std::time::{Duration, UNIX_EPOCH};
 
-const CACHE_VERSION: u32 = 2;
-const TRANSCRIPT_VERSION: u32 = 6;
+const CACHE_VERSION: u32 = 3;
+const TRANSCRIPT_VERSION: u32 = 9;
 const MAX_LINE: usize = 8 * 1024 * 1024;
 const MAX_FILES: usize = 50_000;
 const MAX_RECORDS: usize = 1_000_000;
-const AGENTS: [(&str, &str); 12] = [("claude", "Claude Code"), ("codex", "Codex"), ("qwen", "Qwen Code"),
+const AGENTS: [(&str, &str); 22] = [("claude", "Claude Code"), ("codex", "Codex"), ("qwen", "Qwen Code"),
     ("gemini", "Gemini CLI"), ("cursor", "Cursor"), ("antigravity", "Antigravity"), ("hindsight", "Hindsight"), ("mcode", "MCode"),
-    ("opencode", "OpenCode"), ("kilo", "Kilo CLI"), ("micode", "MiMo Code"), ("dsh", "DeepSeek Harness")];
+    ("opencode", "OpenCode"), ("kilo", "Kilo CLI"), ("micode", "MiMo Code"), ("dsh", "DeepSeek Harness"),("pi","Pi"),("omp","Oh My Pi"),("kimchi","Kimchi"),("amp","Amp"),("droid","Droid"),("openclaw","OpenClaw"),("goose","Goose"),("hermes","Hermes"),("zed","Zed"),("crush","Crush")];
 #[path = "token_spend/dsh_reader.rs"]
 mod dsh_reader;
 #[path = "token_spend/measured_readers.rs"]
@@ -30,19 +30,58 @@ mod measured_readers;
 mod opencode_store;
 #[path = "token_spend/history.rs"]
 mod history;
+mod reply_timing;
+mod session_readers;
+mod droid_reader;
+mod warmer;
+mod openclaw_reader;
+mod aggregate_databases;
+mod zed_reader;
+mod crush_reader;
+pub fn watch(app:tauri::AppHandle){warmer::watch(app)}
+pub fn reading_changed(){warmer::changed()}
+pub fn forget_kept(){warmer::forget()}
+#[tauri::command]pub fn spend_kept_snapshot()->Option<SpendSnapshot>{if crate::preferences::load().token_spend_enabled{warmer::snapshot()}else{None}}
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct Tally { pub input: u64, pub output: u64, pub cache_write: u64, pub cache_read: u64 }
+pub struct Tally {
+    pub input:u64, pub output:u64, pub cache_write:u64, pub cache_read:u64,
+    /// A subset of cache_write, never added to total tokens again.
+    #[serde(default,skip_serializing_if="is_zero")] pub cache_write_1h:u64,
+    #[serde(default,skip_serializing_if="is_zero")] pub replies_without_cache_fields:u64,
+    /// Per-request context bands, retained when quarters/days are aggregated.
+    #[serde(default,skip_serializing_if="BTreeMap::is_empty")] pub context_bands:BTreeMap<u64,Tally>,
+}
+fn is_zero(n:&u64)->bool{*n==0}
 impl Tally {
-    fn total(&self) -> u64 { self.input.saturating_add(self.output).saturating_add(self.cache_write).saturating_add(self.cache_read) }
+    pub(crate) fn total(&self) -> u64 { self.input.saturating_add(self.output).saturating_add(self.cache_write).saturating_add(self.cache_read) }
     fn add(&mut self, other: &Self) {
         self.input = self.input.saturating_add(other.input); self.output = self.output.saturating_add(other.output);
         self.cache_write = self.cache_write.saturating_add(other.cache_write); self.cache_read = self.cache_read.saturating_add(other.cache_read);
+        self.cache_write_1h=self.cache_write_1h.saturating_add(other.cache_write_1h);
+        self.replies_without_cache_fields=self.replies_without_cache_fields.saturating_add(other.replies_without_cache_fields);
+        for (band,tally) in &other.context_bands{self.context_bands.entry(*band).or_default().add(tally);}
+    }
+    fn request(mut self,context:u64)->Self{
+        if let Some(band)=[128_000,200_000,256_000,272_000].into_iter().rev().find(|b|context>*b){let mut plain=self.clone();plain.context_bands.clear();self.context_bands.insert(band,plain);}self
+    }
+    fn removing(&self,other:&Self)->Self{Self{input:self.input.saturating_sub(other.input),output:self.output.saturating_sub(other.output),cache_write:self.cache_write.saturating_sub(other.cache_write),cache_read:self.cache_read.saturating_sub(other.cache_read),cache_write_1h:self.cache_write_1h.saturating_sub(other.cache_write_1h),..Default::default()}}
+    fn flat_cost(&self,p:&Price)->[f64;4]{let hour=self.cache_write_1h.min(self.cache_write);[self.input as f64*p.input/1e6,self.output as f64*p.output/1e6,((self.cache_write-hour) as f64*p.cache_write.unwrap_or(p.input)+hour as f64*p.input*2.)/1e6,self.cache_read as f64*p.cache_read.unwrap_or(p.input)/1e6]}
+    fn without_cache(&self)->Self{let mut tally=self.clone();tally.input=tally.input.saturating_add(tally.cache_write).saturating_add(tally.cache_read);tally.cache_write=0;tally.cache_read=0;tally.cache_write_1h=0;tally.context_bands=self.context_bands.iter().map(|(k,v)|(*k,v.without_cache())).collect();tally}
+    fn valid(&self)->bool{
+        if self.cache_write_1h>self.cache_write||self.context_bands.len()>4{return false}
+        let mut sums=[0u128;5];for (band,t)in &self.context_bands{if ![128000,200000,256000,272000].contains(band)||!t.context_bands.is_empty()||t.cache_write_1h>t.cache_write{return false}for(i,n)in[t.input,t.output,t.cache_write,t.cache_read,t.cache_write_1h].iter().enumerate(){sums[i]+=*n as u128;}}
+        sums.iter().zip([self.input,self.output,self.cache_write,self.cache_read,self.cache_write_1h]).all(|(n,total)|*n<=total as u128)
+    }
+    fn cost_breakdown(&self,p:&Price)->[f64;4]{
+        let mut rest=self.clone();rest.context_bands.clear();let mut cost=[0.;4];
+        for (band,tally) in &self.context_bands{if let Some(tier)=p.tiers.iter().filter(|t|t.threshold<=*band).max_by_key(|t|t.threshold){rest=rest.removing(tally);let part=tally.flat_cost(&tier.price);for i in 0..4{cost[i]+=part[i];}}}
+        let base=rest.flat_cost(p);for i in 0..4{cost[i]+=base[i]}cost
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SpendRecord {
     pub agent: String, pub model: String, pub day: String, pub hour: u32,
@@ -53,6 +92,24 @@ pub struct SpendRecord {
     #[serde(default)] pub source_timestamp: Option<i64>,
     #[serde(default)] pub source_scope: Option<String>,
     pub cost: Option<f64>, pub cost_breakdown: Option<[f64; 4]>, pub model_name: Option<String>,
+    #[serde(default)]pub cache_savings:Option<f64>,
+    #[serde(default)]pub reply_timing:Option<reply_timing::ReplyTiming>,
+}
+impl Serialize for SpendRecord {
+    fn serialize<S:serde::Serializer>(&self,serializer:S)->Result<S::Ok,S::Error>{
+        use serde::ser::SerializeStruct;
+        let counts=[self.tally.input,self.tally.output,self.tally.cache_write,self.tally.cache_read,self.unclassified_tokens];
+        let exact=counts.iter().any(|v|*v>9_007_199_254_740_991)||counts.iter().fold(0u128,|a,b|a+*b as u128)>9_007_199_254_740_991;
+        let mut s=serializer.serialize_struct("SpendRecord",if exact{19}else{17})?;
+        s.serialize_field("agent",&self.agent)?;s.serialize_field("model",&self.model)?;s.serialize_field("day",&self.day)?;s.serialize_field("hour",&self.hour)?;
+        s.serialize_field("session",&self.session)?;s.serialize_field("project",&self.project)?;s.serialize_field("tally",&self.tally)?;
+        s.serialize_field("unclassifiedTokens",&self.unclassified_tokens)?;s.serialize_field("deduplicationId",&self.deduplication_id)?;
+        s.serialize_field("aggregateTiming",&self.aggregate_timing)?;s.serialize_field("sourceTimestamp",&self.source_timestamp)?;s.serialize_field("sourceScope",&self.source_scope)?;
+        s.serialize_field("cost",&self.cost)?;s.serialize_field("costBreakdown",&self.cost_breakdown)?;s.serialize_field("modelName",&self.model_name)?;
+        s.serialize_field("cacheSavings",&self.cache_savings)?;
+        s.serialize_field("replyTiming",&self.reply_timing)?;
+        if exact{s.serialize_field("exactTally",&serde_json::json!({"input":self.tally.input.to_string(),"output":self.tally.output.to_string(),"cacheWrite":self.tally.cache_write.to_string(),"cacheRead":self.tally.cache_read.to_string()}))?;s.serialize_field("exactUnclassifiedTokens",&self.unclassified_tokens.to_string())?;}s.end()
+    }
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -89,6 +146,7 @@ fn publish(id: &str, update: impl FnOnce(&mut SpendScan)) {
 #[tauri::command]
 pub async fn spend_begin_scan(enabled: bool, force: bool) -> Result<String, String> {
     ensure_opt_in(enabled, enabled && crate::preferences::load().token_spend_enabled)?;
+    warmer::cancel();
     let id = format!("{}-{}", Utc::now().timestamp_millis(), NEXT_ID.fetch_add(1, Ordering::Relaxed));
     let cancel = Arc::new(AtomicBool::new(false));
     {
@@ -110,6 +168,7 @@ pub async fn spend_begin_scan(enabled: bool, force: bool) -> Result<String, Stri
         if check(&cancel).is_err() { return; }
         match result {
             Ok(Ok(mut snapshot)) => { snapshot.prices_at = prices_at; snapshot.pricing_status = pricing_status;
+                if crate::preferences::load().token_spend_enabled{warmer::keep(&snapshot);}
                 publish(&task_id, |s| { s.status = "completed".into(); s.current_source = None; s.snapshot = Some(snapshot); }); }
             Ok(Err(error)) => publish(&task_id, |s| { s.status = "error".into(); s.error = Some(error); }),
             Err(error) => publish(&task_id, |s| { s.status = "error".into(); s.error = Some(error.to_string()); }),
@@ -173,11 +232,21 @@ pub async fn spend_card_history(provider:String) -> Result<CardHistory,String> {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct Price { input: f64, output: f64, cache_read: Option<f64>, cache_write: Option<f64>, name: Option<String> }
+struct Price { input:f64, output:f64, cache_read:Option<f64>, cache_write:Option<f64>, name:Option<String>, #[serde(default)] tiers:Vec<ContextTier> }
+#[derive(Clone,Debug,Serialize,Deserialize)]
+struct ContextTier { threshold:u64,price:Price }
 type Prices = BTreeMap<String, Price>;
 #[derive(Serialize, Deserialize)]
 struct PriceCache { version: u32, fetched_at: i64, prices: Prices }
 fn number(value: &Value) -> Option<f64> { value.as_f64().filter(|v| v.is_finite() && *v >= 0.) }
+fn parse_tiers(cost:&Value)->Vec<ContextTier>{
+    let mut tiers=cost["tiers"].as_array().map(|a|a.iter().filter_map(|t|{
+        if t["tier"]["type"]!="context"{return None}let size=t["tier"]["size"].as_u64()?;if size<=1{return None}
+        Some(ContextTier{threshold:if (size-1)%1000==0 {size-1}else{size},price:Price{input:number(&t["input"])?,output:number(&t["output"])?,cache_read:number(&t["cache_read"]),cache_write:number(&t["cache_write"]),name:None,tiers:vec![]}})
+    }).collect::<Vec<_>>()).unwrap_or_default();
+    if tiers.is_empty(){let t=&cost["context_over_200k"];if let (Some(input),Some(output))=(number(&t["input"]),number(&t["output"])){tiers.push(ContextTier{threshold:200_000,price:Price{input,output,cache_read:number(&t["cache_read"]),cache_write:number(&t["cache_write"]),name:None,tiers:vec![]}})}}
+    tiers.sort_by_key(|t|t.threshold);tiers
+}
 fn parse_prices(root: &Value) -> Prices {
     let mut prices = Prices::new();
     for vendor in ["anthropic", "openai", "xai", "moonshotai", "zhipuai", "minimax", "deepseek", "google", "xiaomi", "alibaba", "mistral", "meta"] {
@@ -185,7 +254,7 @@ fn parse_prices(root: &Value) -> Prices {
             if prices.contains_key(id) { continue; }
             if let (Some(input), Some(output)) = (number(&model["cost"]["input"]), number(&model["cost"]["output"])) {
                 prices.insert(id.clone(), Price { input, output, cache_read: number(&model["cost"]["cache_read"]),
-                    cache_write: number(&model["cost"]["cache_write"]), name: model["name"].as_str().map(str::to_owned) });
+                    cache_write: number(&model["cost"]["cache_write"]), name: model["name"].as_str().map(str::to_owned), tiers:parse_tiers(&model["cost"]) });
             }
         } }
     }
@@ -196,7 +265,7 @@ fn parse_prices(root: &Value) -> Prices {
             if let (Some(input), Some(output)) = (number(&model["cost"]["input"]), number(&model["cost"]["output"])) {
                 prices.insert(format!("{vendor}|{id}"), Price { input, output,
                     cache_read: number(&model["cost"]["cache_read"]), cache_write: number(&model["cost"]["cache_write"]),
-                    name: model["name"].as_str().map(str::to_owned) });
+                    name: model["name"].as_str().map(str::to_owned), tiers:parse_tiers(&model["cost"]) });
             }
         } }
     }
@@ -223,18 +292,18 @@ fn price_for_agent<'a>(model: &str, agent: &str, prices: &'a Prices) -> Option<&
 }
 async fn fetch_prices(cache: &Path, cancel: &AtomicBool) -> (Prices, Option<String>, String) {
     if check(cancel).is_err() { return (Prices::new(), None, "cancelled".into()); }
-    let saved = fs::read(cache.join("prices-1.json")).ok().and_then(|b| serde_json::from_slice::<PriceCache>(&b).ok()).filter(|c| c.version == CACHE_VERSION);
+    let saved = fs::read(cache.join("prices-1.json")).ok().and_then(|b| serde_json::from_slice::<PriceCache>(&b).ok()).filter(|c| (2..=CACHE_VERSION).contains(&c.version));
     let now = Utc::now().timestamp();
-    if let Some(ref value) = saved { if now.saturating_sub(value.fetched_at) < 86400 {
+    if let Some(ref value) = saved { if value.version==CACHE_VERSION && value.fetched_at<=now && now.saturating_sub(value.fetched_at) < 86400 {
         return (value.prices.clone(), DateTime::from_timestamp(value.fetched_at, 0).map(|d| d.to_rfc3339()), "cached".into());
     } }
     let request = async {
         let network=crate::preferences::load().network_proxy;
         let builder=crate::proxy::configure(reqwest::Client::builder().timeout(Duration::from_secs(30)),&network).ok()?;
-        let response = builder.build().ok()?.get("https://models.dev/api.json").send().await.ok()?.error_for_status().ok()?;
+        let mut response = builder.build().ok()?.get("https://models.dev/api.json").send().await.ok()?.error_for_status().ok()?;
         // The public table has a bound too; no transcript, key or identity is sent.
         if response.content_length().is_some_and(|n| n > 32 * 1024 * 1024) { return None; }
-        let bytes = response.bytes().await.ok()?; if bytes.len() > 32 * 1024 * 1024 { return None; }
+        let mut bytes=Vec::new();while let Some(chunk)=response.chunk().await.ok()?{if bytes.len()+chunk.len()>32*1024*1024{return None}bytes.extend_from_slice(&chunk);}
         let root: Value = serde_json::from_slice(&bytes).ok()?; let prices = parse_prices(&root);
         if prices.is_empty() { None } else { Some(prices) }
     };
@@ -261,14 +330,24 @@ fn stamp(path: &Path) -> std::io::Result<u64> {
     let main=(meta.len(), meta.modified()?.duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos());
     // A running SQLite writer can append records without changing the main
     // file. Fingerprint its WAL/journal too; never open with immutable=1.
-    let sidecars=if opencode_store::is_database(path) { ["-wal", "-journal"].into_iter().map(|suffix| {
+    let sidecars=if opencode_store::is_database(path)||openclaw_reader::database(path)||aggregate_databases::candidate(path,"goose")||aggregate_databases::candidate(path,"hermes")||zed_reader::candidate(path) { ["-wal", "-journal"].into_iter().map(|suffix| {
         let mut name=path.as_os_str().to_os_string(); name.push(suffix);
         match fs::metadata(PathBuf::from(name)) {
             Ok(m)=>Ok(Some((m.len(),m.modified()?.duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos()))),
             Err(e) if e.kind()==std::io::ErrorKind::NotFound=>Ok(None),Err(e)=>Err(e)
         }
     }).collect::<std::io::Result<Vec<_>>>()? } else { Vec::new() };
-    Ok(hash((path.to_string_lossy().to_string(), main, sidecars)))
+    let dependency=path.file_name().and_then(|n|n.to_str()).and_then(|n|n.strip_suffix(".settings.json")).map(|stem|{
+        match fs::metadata(path.with_file_name(format!("{stem}.jsonl"))){Ok(m)=>Ok(Some((m.len(),m.modified()?.duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos()))),Err(e)if e.kind()==std::io::ErrorKind::NotFound=>Ok(None),Err(e)=>Err(e)}
+    }).transpose()?;
+    let registry = if openclaw_reader::candidate(path) {
+        match fs::metadata(path.with_file_name("sessions.json")) {
+            Ok(m) => Some((m.len(),m.modified()?.duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos())),
+            Err(e) if e.kind()==std::io::ErrorKind::NotFound => None,
+            Err(e) => return Err(e)
+        }
+    } else { None };
+    Ok(hash((path.to_string_lossy().to_string(), main, sidecars,dependency,registry)))
 }
 fn write_cache(dir: &Path, name: &str, value: &impl Serialize, cancel: &AtomicBool) -> Result<(), String> {
     check(cancel)?; let bytes = serde_json::to_vec(value).map_err(|e| e.to_string())?; check(cancel)?;
@@ -295,25 +374,50 @@ fn roots(home: &Path, agent: &str, environment: impl Fn(&str) -> Option<String>)
         "cursor" | "antigravity" | "hindsight" | "mcode" => measured_readers::roots(home, agent, &environment),
         "opencode" | "kilo" | "micode" => opencode_store::roots(home,agent,&environment),
         "dsh" => dsh_reader::roots(home, &environment),
+        "zed"=>zed_reader::roots(home,&environment),
+        "crush"=>crush_reader::roots(home,&environment),
+        "openclaw"=>[".openclaw/agents",".clawdbot",".moltbot",".moldbot"].into_iter().map(|p|home.join(p)).collect(),
+        id if aggregate_databases::agent(id)=>aggregate_databases::roots(home,id,&environment),
+        id if session_readers::agent(id)=>session_readers::roots(home,id,&environment),
         _ => Vec::new(),
     }
 }
+fn candidate(path: &Path, agent: &str) -> bool {
+    if agent=="crush" { false }
+    else if agent=="zed" { zed_reader::candidate(path) }
+    else if aggregate_databases::agent(agent) { aggregate_databases::candidate(path,agent) }
+    else if agent == "openclaw" { openclaw_reader::candidate(path) }
+    else if agent == "dsh" { dsh_reader::candidate(path) }
+    else if opencode_store::agent(agent) { opencode_store::candidate(path, agent) }
+    else if session_readers::agent(agent) { session_readers::candidate(path, agent) }
+    else { measured_readers::candidate(path, agent) }
+}
 fn enumerate(root: &Path, agent: &str, files: &mut Vec<PathBuf>, cancel: &AtomicBool, notes: &mut Vec<String>) -> Result<(), String> {
-    check(cancel)?;
-    if root.is_file() {
-        if !fs::symlink_metadata(root).map(|m|m.file_type().is_symlink()).unwrap_or(true) && (opencode_store::candidate(root,agent) || (agent == "dsh" && dsh_reader::candidate(root))) { files.push(root.into()); }
-        return Ok(());
-    }
-    let entries = match fs::read_dir(root) { Ok(v) => v, Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()), Err(e) => { notes.push(format!("无法读取目录 {}：{e}", root.display())); return Ok(()); } };
-    for entry in entries {
+    let mut pending = vec![(root.to_path_buf(), 0usize)];
+    let mut visited = 0usize;
+    while let Some((path, depth)) = pending.pop() {
         check(cancel)?;
-        if files.len() >= MAX_FILES { notes.push(format!("文件数超过 {MAX_FILES}，计数可能不完整")); return Ok(()); }
-        let entry = match entry { Ok(e) => e, Err(e) => { notes.push(format!("目录条目读取失败：{e}")); continue; } };
-        let kind = entry.file_type().map_err(|e| e.to_string())?;
-        if kind.is_symlink() { continue; }
-        let path = entry.path();
-        if kind.is_dir() { enumerate(&path, agent, files, cancel, notes)?; }
-        else if kind.is_file() && (if agent == "dsh" {dsh_reader::candidate(&path)} else if opencode_store::agent(agent) {opencode_store::candidate(&path,agent)}else{measured_readers::candidate(&path, agent)}) { files.push(path); }
+        visited += 1;
+        if visited > 100_000 || files.len() >= MAX_FILES {
+            notes.push("目录或文件数超过读取上限，计数可能不完整".into()); break;
+        }
+        let meta = match fs::symlink_metadata(&path) {
+            Ok(meta) => meta,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => { notes.push(format!("无法读取路径 {}：{e}", path.display())); continue; }
+        };
+        if meta.file_type().is_symlink() { continue; }
+        if meta.is_file() { if candidate(&path, agent) { files.push(path); } continue; }
+        if !meta.is_dir() { continue; }
+        if depth >= 32 { notes.push(format!("目录深度超过读取上限：{}", path.display())); continue; }
+        match fs::read_dir(&path) {
+            Ok(entries) => for entry in entries {
+                check(cancel)?;
+                if pending.len() + visited >= 100_000 { notes.push("目录条目超过读取上限，计数可能不完整".into()); break; }
+                match entry { Ok(entry) => pending.push((entry.path(), depth+1)), Err(e) => notes.push(format!("目录条目读取失败：{e}")) }
+            },
+            Err(e) => notes.push(format!("无法读取目录 {}：{e}", path.display()))
+        }
     }
     Ok(())
 }
@@ -347,7 +451,7 @@ fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl
             let cache_name = format!("transcript-{TRANSCRIPT_VERSION}-{}-{:016x}.json", agent, hash(file.to_string_lossy().to_string()));
             let cached = fs::read(cache.join(&cache_name)).ok().and_then(|b| serde_json::from_slice::<FileCache>(&b).ok()).filter(|c|
                 c.version == TRANSCRIPT_VERSION && c.agent == *agent && c.fingerprint == before && c.records.iter().all(|record|
-                    record.agent == *agent && record.hour < 24 && !record.model.trim().is_empty()
+                    record.tally.valid() && record.agent == *agent && record.hour < 24 && !record.model.trim().is_empty()
                     && chrono::NaiveDate::parse_from_str(&record.day, "%Y-%m-%d").is_ok()
                     && (record.tally.total() > 0 || record.unclassified_tokens > 0)
                     && (*agent != "qwen" || record.deduplication_id.is_some())
@@ -371,7 +475,8 @@ fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl
             per_file=vec![("reconciled-cursor-store".into(),records)];
         }
         let stable=snapshot.notes.len()==note_start && snapshot.records.len()+raw_count<=MAX_RECORDS;
-        let mut records=if !inputs.is_empty() && matches!(*agent,"claude"|"codex"|"qwen"|"gemini") {
+        history::order_live(&mut per_file);
+        let mut records=if !inputs.is_empty() && matches!(*agent,"claude"|"codex"|"qwen"|"gemini"|"pi"|"omp"|"kimchi"|"amp"|"droid") {
             if let Some(mut journal)=history::History::load(cache,agent,&mut snapshot.notes) {
                 let (records,retained)=journal.reconcile(per_file,stable,&mut identities,cancel)?;
                 source.retained_records=retained;
@@ -379,7 +484,7 @@ fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl
                 records
             } else {per_file.into_iter().flat_map(|(_,r)|r).filter(|r|history::claim(r,&mut identities)).collect()}
         } else {per_file.into_iter().flat_map(|(_,r)|r).filter(|r|history::claim(r,&mut identities)).collect()};
-        if !inputs.is_empty() && !matches!(*agent,"claude"|"codex"|"qwen"|"gemini") {
+        if !inputs.is_empty() && !matches!(*agent,"claude"|"codex"|"qwen"|"gemini"|"pi"|"omp"|"kimchi"|"amp"|"droid") {
             if let Some(mut journal)=history::StoreHistory::load(cache,agent,&mut snapshot.notes){
                 source.retained_records=journal.reconcile(&mut records,stable,cancel)?;
                 if stable {store_journals.push(journal)}
@@ -387,11 +492,11 @@ fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl
         }
         let remaining = MAX_RECORDS.saturating_sub(snapshot.records.len());
         if records.len() > remaining { snapshot.notes.push("记录超过读取上限，计数可能不完整".into()); records.truncate(remaining); }
-        for record in &mut records { check(cancel)?; record.cost = None; record.cost_breakdown = None; record.model_name = None;
+        for record in &mut records { check(cancel)?; record.cost = None; record.cost_breakdown = None; record.model_name = None;record.cache_savings=None;
                 if let Some(price) = price_for_agent(&record.model, agent, prices) {
                     let tally = &record.tally;
-                    let cost = [tally.input as f64 * price.input / 1e6, tally.output as f64 * price.output / 1e6,
-                        tally.cache_write as f64 * price.cache_write.unwrap_or(price.input) / 1e6, tally.cache_read as f64 * price.cache_read.unwrap_or(price.input) / 1e6];
+                    let cost = tally.cost_breakdown(price);
+                    if tally.cache_read>0{record.cache_savings=Some(tally.without_cache().cost_breakdown(price).iter().sum::<f64>()-cost.iter().sum::<f64>());}
                     if record.tally.total() > 0 { record.cost = Some(cost.iter().sum()); record.cost_breakdown = Some(cost); }
                     record.model_name = price.name.clone();
                 }
@@ -414,8 +519,12 @@ fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl
 
 fn counter(value: &Value) -> u64 { value.as_u64().or_else(|| value.as_f64().filter(|x| x.is_finite() && *x >= 0.).map(|x| x as u64)).unwrap_or(0) }
 fn parse_file(path: &Path, agent: &str, cancel: &AtomicBool) -> Result<(Vec<SpendRecord>, Vec<String>), String> {
+    if agent=="zed"{return zed_reader::read(path,cancel)}
+    if aggregate_databases::agent(agent){return aggregate_databases::read(path,agent,cancel)}
+    if agent=="openclaw"{return openclaw_reader::parse(path,cancel)}
     if agent == "dsh" { return dsh_reader::read(path, cancel); }
     if opencode_store::agent(agent) { return opencode_store::read(path, agent, cancel); }
+    if session_readers::agent(agent){return session_readers::parse(path,agent,cancel);}
     if matches!(agent, "gemini" | "cursor" | "antigravity" | "hindsight" | "mcode") { return measured_readers::parse_file(path, agent, cancel); }
     let file = File::open(path).map_err(|e| format!("无法读取 {}：{e}", path.display()))?;
     let mut reader = BufReader::with_capacity(64 * 1024, file);
@@ -431,9 +540,11 @@ fn parse_file(path: &Path, agent: &str, cancel: &AtomicBool) -> Result<(Vec<Spen
 }
 fn parse_reader(reader: &mut impl BufRead, agent: &str, session: &str, cancel: &AtomicBool) -> Result<(Vec<SpendRecord>, Vec<String>), String> {
     let mut notes = Vec::new(); let mut seen = HashSet::new(); let mut model = None::<String>; let mut previous = None::<[u64; 4]>;
-    let mut project = None; let mut grouped: HashMap<(String, u32, String, i64), Tally> = HashMap::new();
+    let mut project = None;
     let mut normalized = Vec::new(); let mut digest = std::collections::hash_map::DefaultHasher::new(); let mut emitted = 0usize;
+    let mut clock=reply_timing::Clock::default();
     let mut claude_replies=HashMap::<String,usize>::new();
+    let mut codex_session=session.to_owned();let mut headed=false;let mut forked=false;let mut replaying=false;let mut codex_epoch=0u32;
     loop {
         check(cancel)?;
         // fill_buf gives a bounded IO chunk. Oversize message bodies are skipped,
@@ -451,12 +562,18 @@ fn parse_reader(reader: &mut impl BufRead, agent: &str, session: &str, cancel: &
         if line.is_empty() { if eof { break; } continue; }
         // Incremental byte digest for Qwen mirror identities; no body is retained.
         if agent == "qwen" { digest.write(&line); }
-        let relevant = line.windows(7).any(|w| w == b"\"usage\"") || line.windows(15).any(|w| w == b"\"usageMetadata\"") || line.windows(13).any(|w| w == b"\"token_count\"") || line.windows(7).any(|w| w == b"\"model\"") || line.windows(5).any(|w| w == b"\"cwd\"");
-        if !relevant { if eof { break; } continue; }
+        let relevant = line.windows(7).any(|w| w == b"\"usage\"") || line.windows(15).any(|w| w == b"\"usageMetadata\"") || line.windows(13).any(|w| w == b"\"token_count\"") || line.windows(7).any(|w| w == b"\"model\"") || line.windows(5).any(|w| w == b"\"cwd\"") || (agent=="codex"&&line.windows(14).any(|w|w==b"\"task_started\""||w==b"\"session_meta\""));
+        let timing_line=[b"\"user\"".as_slice(),b"\"response_item\"",b"\"task_complete\""].iter().any(|needle|line.windows(needle.len()).any(|w|w==*needle));
+        if !relevant && !timing_line { if eof { break; } continue; }
         let root: Value = match serde_json::from_slice(&line) { Ok(v) => v, Err(_) => { notes.push(format!("{agent}：无法解码一条用量/元信息记录，计数可能不完整")); if eof { break; } continue; } };
         let payload = &root["payload"];
+        if agent=="codex"{
+            if !headed&&root["type"]=="session_meta"{headed=true;if let Some(id)=payload["id"].as_str().filter(|s|!s.is_empty()){codex_session=id.into();}forked=payload["forked_from_id"].as_str().is_some_and(|s|!s.is_empty());}
+            if payload["type"]=="task_started"{replaying=forked&&payload["turn_id"].as_str().is_some_and(|s|s.starts_with("rollout-"));if eof{break}continue}
+        }
         if project.is_none() { project = root["cwd"].as_str().or_else(|| payload["cwd"].as_str()).filter(|v| !v.trim().is_empty()).map(str::to_owned); }
         let timestamp = root["timestamp"].as_str().and_then(|s| DateTime::parse_from_rfc3339(s).ok());
+        clock.observe(&root,agent,replaying,&mut normalized);
         if agent == "qwen" {
             if root["type"] != "assistant" || !root["usageMetadata"].is_object() { if eof { break; } continue; }
             let (tally, unclassified) = qwen_usage(&root["usageMetadata"]);
@@ -468,30 +585,43 @@ fn parse_reader(reader: &mut impl BufRead, agent: &str, session: &str, cancel: &
                 if id.as_ref().is_some_and(|id| !seen.insert(id.clone())) { if eof { break; } continue; }
                 // Missing ids use the complete fragment digest and ordinal below.
                 normalized.push(SpendRecord { agent: agent.into(), model: model.into(), day: local.format("%Y-%m-%d").to_string(), hour: chrono::Timelike::hour(&local),
-                    session: sid, project: project.clone(), tally, unclassified_tokens: unclassified, deduplication_id: id, aggregate_timing: false, source_timestamp: None, source_scope: None, cost: None, cost_breakdown: None, model_name: None });
+                    session: sid, project: project.clone(), tally, unclassified_tokens: unclassified, deduplication_id: id, aggregate_timing: false, source_timestamp: Some(timestamp.timestamp()), source_scope: None, cost: None, cost_breakdown: None, model_name: None, cache_savings:None,reply_timing:None });
                 emitted += 1;
             } else { notes.push("Qwen Code：实测计数缺少有效模型或时间，计数可能不完整".into()); }
             if emitted >= MAX_RECORDS { notes.push("Qwen Code：达到记录上限，计数可能不完整".into()); break; }
             if eof { break; } continue;
         }
+        let mut codex_identity=None;
         let tally = if agent == "claude" {
             let message = &root["message"]; let usage = &message["usage"];
             if root["type"] != "assistant" || !usage.is_object() { if eof { break; } continue; }
             let Some(named) = message["model"].as_str().filter(|m| *m != "<synthetic>") else { if eof { break; } continue; };
             model = Some(named.to_owned());
             if timestamp.is_none() { notes.push("Claude Code：缺少有效用量时间，计数可能不完整".into()); if eof { break; } continue; }
-            Tally { input: counter(&usage["input_tokens"]), output: counter(&usage["output_tokens"]), cache_write: counter(&usage["cache_creation_input_tokens"]), cache_read: counter(&usage["cache_read_input_tokens"]) }
+            let written=counter(&usage["cache_creation_input_tokens"]);
+            let context=counter(&usage["input_tokens"]).saturating_add(written).saturating_add(counter(&usage["cache_read_input_tokens"]));
+            Tally { input:counter(&usage["input_tokens"]),output:counter(&usage["output_tokens"]),cache_write:written,cache_read:counter(&usage["cache_read_input_tokens"]),cache_write_1h:counter(&usage["cache_creation"]["ephemeral_1h_input_tokens"]).min(written),replies_without_cache_fields:u64::from(usage.get("cache_read_input_tokens").is_none()&&usage.get("cache_creation_input_tokens").is_none()),..Default::default() }.request(context)
         } else {
             if let Some(named) = payload["model"].as_str() { model = Some(named.to_owned()); }
             let totals = &payload["info"]["total_token_usage"];
             if payload["type"] != "token_count" || !totals.is_object() { if eof { break; } continue; }
             let current = [counter(&totals["input_tokens"]), counter(&totals["cached_input_tokens"]), counter(&totals["cache_write_input_tokens"]), counter(&totals["output_tokens"])];
-            if previous.is_some_and(|p| current.iter().zip(p).any(|(now, old)| *now < old)) { notes.push("Codex：累计计数出现回退，计数可能不完整".into()); }
+            if previous.is_none()&&forked{
+                let last=&payload["info"]["last_token_usage"];
+                if !last.is_object(){notes.push("Codex：分叉首条缺少本次请求计数，继承量不计入；计数可能不完整".into());}
+                let own=[counter(&last["input_tokens"]),counter(&last["cached_input_tokens"]),counter(&last["cache_write_input_tokens"]),counter(&last["output_tokens"])];
+                previous=Some(std::array::from_fn(|i|current[i].saturating_sub(own[i])));
+            }
+            if previous.is_some_and(|p| current.iter().zip(p).any(|(now, old)| *now < old)) { notes.push("Codex：累计计数出现回退，计数可能不完整".into());codex_epoch=codex_epoch.saturating_add(1); }
             let mut delta = [0; 4]; for i in 0..4 { delta[i] = current[i].saturating_sub(previous.map(|p| p[i]).unwrap_or(0)); }
             previous = Some(current);
+            if replaying{if eof{break}continue}
+            let total=format!("{}:{}:{}:{}",current[0],current[1],current[3],counter(&totals["total_tokens"]));
+            let id=format!("codex:{codex_session}:{codex_epoch}:{total}");
+            codex_identity=Some((id,format!("codex-{}:{total}",if forked{"fork"}else{"original"})));
             if model.is_none() { notes.push("Codex：存在缺少模型的实测计数；使用未知模型且不计价".into()); model = Some("unknown".into()); }
             if delta[1] > delta[0] { notes.push("Codex：缓存计数超过输入差额，分类可能不完整".into()); }
-            Tally { input: delta[0].saturating_sub(delta[1]), output: delta[3], cache_write: delta[2], cache_read: delta[1] }
+            Tally { input: delta[0].saturating_sub(delta[1]), output: delta[3], cache_write: delta[2], cache_read: delta[1], ..Default::default() }.request(counter(&payload["info"]["last_token_usage"]["input_tokens"]))
         };
         if tally.total() == 0 { if eof { break; } continue; }
         if let (Some(timestamp), Some(model)) = (timestamp, model.as_ref()) {
@@ -505,20 +635,29 @@ fn parse_reader(reader: &mut impl BufRead, agent: &str, session: &str, cancel: &
                     let old:&mut SpendRecord=&mut normalized[index];
                     old.tally.input=old.tally.input.max(tally.input);old.tally.output=old.tally.output.max(tally.output);
                     old.tally.cache_write=old.tally.cache_write.max(tally.cache_write);old.tally.cache_read=old.tally.cache_read.max(tally.cache_read);
+                    old.tally.cache_write_1h=old.tally.cache_write_1h.max(tally.cache_write_1h);
+                    // A later fragment can disclose cache fields that the first
+                    // fragment omitted. The latest complete reply is evidence.
+                    old.tally.replies_without_cache_fields=tally.replies_without_cache_fields;
+                    let context=old.tally.input.saturating_add(old.tally.cache_write).saturating_add(old.tally.cache_read);
+                    old.tally.context_bands.clear();old.tally=old.tally.clone().request(context);
                 } else {
                     if let Some(id)=&id {claude_replies.insert(id.clone(),normalized.len());}
-                    normalized.push(SpendRecord{agent:agent.into(),model:model.clone(),day:local.format("%Y-%m-%d").to_string(),hour:chrono::Timelike::hour(&local),session:session.into(),project:project.clone(),tally,unclassified_tokens:0,deduplication_id:id,aggregate_timing:false,source_timestamp:Some(timestamp.timestamp()),source_scope:None,cost:None,cost_breakdown:None,model_name:None});
+                    normalized.push(SpendRecord{agent:agent.into(),model:model.clone(),day:local.format("%Y-%m-%d").to_string(),hour:chrono::Timelike::hour(&local),session:session.into(),project:project.clone(),tally,unclassified_tokens:0,deduplication_id:id,aggregate_timing:false,source_timestamp:Some(timestamp.timestamp()),source_scope:None,cost:None,cost_breakdown:None,model_name:None,cache_savings:None,reply_timing:None});
                 }
             } else {
-                let key = (local.format("%Y-%m-%d").to_string(), chrono::Timelike::hour(&local), model.clone(), timestamp.timestamp().div_euclid(900)*900);
-                grouped.entry(key).or_default().add(&tally);
+                let (id,scope)=codex_identity.unwrap();
+                if !seen.insert(id.clone()){if eof{break}continue}
+                normalized.push(SpendRecord{agent:agent.into(),model:model.clone(),day:local.format("%Y-%m-%d").to_string(),hour:chrono::Timelike::hour(&local),session:codex_session.clone(),project:project.clone(),tally,unclassified_tokens:0,deduplication_id:Some(id),aggregate_timing:false,source_timestamp:Some(timestamp.timestamp()),source_scope:Some(scope),cost:None,cost_breakdown:None,model_name:None,cache_savings:None,reply_timing:None});
+                let index=normalized.len()-1;clock.counted(index,&mut normalized[index]);
             }
         } else { notes.push(format!("{agent}：缺少有效用量时间，计数可能不完整")); }
-        if grouped.len()+normalized.len() >= MAX_RECORDS { notes.push(format!("{agent}：达到记录上限，计数可能不完整")); break; }
+        if normalized.len() >= MAX_RECORDS { notes.push(format!("{agent}：达到记录上限，计数可能不完整")); break; }
         if eof { break; }
     }
+    clock.finish();if agent=="claude"{for record in &mut normalized{record.reply_timing=record.deduplication_id.as_ref().and_then(|id|clock.timings.get(id).cloned());}}
     check(cancel)?; notes.sort(); notes.dedup();
-    let mut records: Vec<_> = grouped.into_iter().map(|((day, hour, model, timestamp), tally)| SpendRecord { agent: agent.into(), model, day, hour, session: session.into(), project: project.clone(), tally, unclassified_tokens: 0, deduplication_id: None, aggregate_timing: false, source_timestamp: Some(timestamp), source_scope: None, cost: None, cost_breakdown: None, model_name: None }).collect();
+    let mut records=Vec::new();
     let fragment = digest.finish();
     if agent=="qwen" {for (index, record) in normalized.iter_mut().enumerate() { if record.deduplication_id.is_none() { record.deduplication_id = Some(format!("qwen:{}:{fragment:016x}:{index}", record.session)); } }}
     records.extend(normalized);
@@ -534,11 +673,11 @@ fn qwen_usage(metadata: &Value) -> (Tally, u64) {
     let total = ["totalTokenCount", "total", "total_tokens"].iter().find_map(|key| metadata[*key].as_u64());
     if let Some(total) = total {
         let included = prompt.saturating_add(output); let disjoint = included.saturating_add(cached);
-        if total == included && cached <= prompt { return (Tally { input: prompt - cached, output, cache_read: cached, cache_write: 0 }, 0); }
-        if total == disjoint { return (Tally { input: prompt, output, cache_read: cached, cache_write: 0 }, 0); }
+        if total == included && cached <= prompt { return (Tally { input: prompt - cached, output, cache_read: cached, cache_write: 0, ..Default::default() }, 0); }
+        if total == disjoint { return (Tally { input: prompt, output, cache_read: cached, cache_write: 0, ..Default::default() }, 0); }
         return (Tally::default(), total);
     }
-    (Tally { input: prompt.saturating_sub(cached), output, cache_read: cached, cache_write: 0 }, 0)
+    (Tally { input: prompt.saturating_sub(cached), output, cache_read: cached, cache_write: 0, ..Default::default() }, 0)
 }
 
 #[cfg(test)]
@@ -573,8 +712,26 @@ mod tests {
     }
     #[test] fn codex_uses_cumulative_deltas_and_cached_input_is_not_double_counted() {
         let (records, notes) = parse(vec![json!({"payload":{"model":"gpt-test"}}), codex(100, 30, 20), codex(100, 30, 20), codex(180, 50, 30)], "codex");
-        assert!(notes.is_empty()); assert_eq!(records[0].tally, Tally { input: 130, cache_read: 50, cache_write: 0, output: 30 });
-        assert_eq!(records[0].tally.total(), 210);
+        assert!(notes.is_empty());let mut tally=Tally::default();for r in &records{tally.add(&r.tally)}
+        assert_eq!(tally,Tally { input:130,cache_read:50,cache_write:0,output:30,..Default::default() });assert_eq!(tally.total(),210);
+    }
+    #[test] fn codex_fork_first_read_counts_only_own_request_and_replay_turns_only_set_baseline(){
+        let header=json!({"type":"session_meta","payload":{"id":"child","forked_from_id":"parent"}});
+        let mut first=codex(1000,400,150);first["payload"]["info"]["last_token_usage"]=json!({"input_tokens":100,"cached_input_tokens":30,"output_tokens":20});
+        let (records,notes)=parse(vec![header.clone(),json!({"payload":{"model":"m"}}),first.clone(),codex(1100,450,180)],"codex");assert!(notes.is_empty());assert_eq!(records.iter().map(|r|r.tally.total()).sum::<u64>(),250);assert!(records.iter().all(|r|r.session=="child"));
+        let replay=json!({"payload":{"type":"task_started","turn_id":"rollout-1"}});let own=json!({"payload":{"type":"task_started","turn_id":"real-turn"}});
+        let (records,notes)=parse(vec![header,json!({"payload":{"model":"m"}}),replay,first,own,codex(1100,450,180)],"codex");assert!(notes.is_empty());assert_eq!(records.len(),1);assert_eq!(records[0].tally.total(),130);
+    }
+    #[test] fn codex_copies_and_forks_deduplicate_with_cached_and_deleted_parents(){
+        let f=Fixture::new();let original=vec![json!({"type":"session_meta","payload":{"id":"parent"}}),json!({"payload":{"model":"m"}}),codex(100,30,20)];
+        let mut copied=codex(100,30,20);copied["payload"]["info"]["last_token_usage"]=json!({"input_tokens":100,"cached_input_tokens":30,"output_tokens":20});
+        let fork=vec![json!({"type":"session_meta","payload":{"id":"child","forked_from_id":"parent"}}),json!({"payload":{"model":"m"}}),copied,codex(150,40,30)];
+        let file=|rows:Vec<Value>|rows.into_iter().map(|v|v.to_string()).collect::<Vec<_>>().join("\n");
+        let parent=f.dir.join("logs/z-parent.jsonl");fs::write(&parent,file(original.clone())).unwrap();fs::write(f.dir.join("logs/a-child.jsonl"),file(fork)).unwrap();fs::write(f.dir.join("logs/mirror.jsonl"),file(original)).unwrap();
+        let scan=||scan_roots(&f.dir.join("cache"),&Prices::new(),&AtomicBool::new(false),|_,_|{},|a|if a=="codex"{vec![f.dir.join("logs")]}else{vec![]}).unwrap();
+        for _ in 0..2{let s=scan();assert!(s.notes.is_empty());assert_eq!(s.records.iter().map(|r|r.tally.total()).sum::<u64>(),180);}
+        fs::remove_file(parent).unwrap();let s=scan();assert_eq!(s.records.iter().map(|r|r.tally.total()).sum::<u64>(),180);
+        fs::remove_file(f.dir.join("logs/mirror.jsonl")).unwrap();let s=scan();assert_eq!(s.records.iter().map(|r|r.tally.total()).sum::<u64>(),180);
     }
     #[test] fn model_changes_receive_their_own_delta() {
         let (records, _) = parse(vec![json!({"payload":{"model":"one"}}), codex(100, 0, 20), json!({"payload":{"model":"two"}}), codex(150, 0, 30)], "codex");
@@ -618,6 +775,107 @@ mod tests {
         let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../test-results").canonicalize();
         if let (Ok(base), Ok(target)) = (base, self.dir.canonicalize()) { if target.starts_with(base) { let _ = fs::remove_dir_all(target); } }
     } }
+    #[test] fn aggregate_databases_track_growth_wal_and_pruning_without_reading_bodies(){
+        for agent in ["goose","hermes"] {
+            let f=Fixture::new();let database=f.dir.join("logs").join(if agent=="goose"{"sessions.db"}else{"state.db"});
+            let db=rusqlite::Connection::open(&database).unwrap();db.execute_batch("PRAGMA journal_mode=WAL;").unwrap();
+            if agent=="goose"{db.execute_batch("CREATE TABLE sessions(id TEXT,model_config_json TEXT,created_at TEXT,input_tokens INTEGER,output_tokens INTEGER,private_body TEXT); INSERT INTO sessions VALUES('s','{\"model_name\":\"m\"}','2026-10-11 08:00:00',100,20,'PRIVATE_AGGREGATE_SENTINEL');").unwrap();}
+            else{db.execute_batch("CREATE TABLE sessions(id TEXT,model TEXT,started_at INTEGER,input_tokens INTEGER,output_tokens INTEGER,private_body TEXT); INSERT INTO sessions VALUES('s','m',1791705600,100,20,'PRIVATE_AGGREGATE_SENTINEL');").unwrap();}
+            let scan=||scan_roots(&f.dir.join("cache"),&Prices::new(),&AtomicBool::new(false),|_,_|{},|id|if id==agent{vec![database.clone()]}else{vec![]}).unwrap();
+            let first=scan();assert_eq!(first.records.len(),1,"{agent}");assert_eq!(first.records[0].tally.total(),120);
+            assert_eq!(scan().sources.iter().find(|s|s.id==agent).unwrap().cached_files,1);
+            db.execute("UPDATE sessions SET input_tokens=150",[]).unwrap();let grew=scan();assert_eq!(grew.records.len(),1);assert_eq!(grew.records[0].tally.total(),170);assert_eq!(grew.sources.iter().find(|s|s.id==agent).unwrap().cached_files,0);
+            db.execute("DELETE FROM sessions",[]).unwrap();let pruned=scan();assert_eq!(pruned.records.len(),1);assert_eq!(pruned.records[0].tally.total(),170);
+            for file in fs::read_dir(f.dir.join("cache")).unwrap(){assert!(!fs::read_to_string(file.unwrap().path()).unwrap().contains("PRIVATE_AGGREGATE_SENTINEL"));}
+            assert!(parse_file(&database,agent,&AtomicBool::new(true)).is_err());
+        }
+    }
+    #[test] fn zed_compressed_sqlite_keeps_only_native_counters_and_reports_corruption(){
+        let f=Fixture::new();let database=f.dir.join("logs/threads.db");let db=rusqlite::Connection::open(&database).unwrap();db.execute_batch("PRAGMA journal_mode=WAL;CREATE TABLE threads(id TEXT,updated_at TEXT,data_type TEXT,data BLOB,folder_paths TEXT);").unwrap();
+        let value=json!({"model":{"provider":"zed.dev","model":"m"},"request_token_usage":[{"input_tokens":100,"output_tokens":20,"cache_read_input_tokens":30}],"private_body":"ZED_PRIVATE_SENTINEL"});let raw=serde_json::to_vec(&value).unwrap();let zipped=zstd::stream::encode_all(&raw[..],1).unwrap();db.execute("INSERT INTO threads VALUES('native','1791705600000','json',?1,'project')",[zipped]).unwrap();let mut imported=value.clone();imported["imported"]=json!(true);db.execute("INSERT INTO threads VALUES('imported','1791705600','json',?1,NULL)",[serde_json::to_vec(&imported).unwrap()]).unwrap();
+        let scan=||scan_roots(&f.dir.join("cache"),&Prices::new(),&AtomicBool::new(false),|_,_|{},|id|if id=="zed"{vec![database.clone()]}else{vec![]}).unwrap();let first=scan();assert_eq!(first.records.len(),1);assert_eq!(first.records[0].tally.total(),150);assert!(first.records[0].aggregate_timing);assert!(first.notes.is_empty());assert_eq!(scan().sources.iter().find(|s|s.id=="zed").unwrap().cached_files,1);
+        db.execute("INSERT INTO threads VALUES('corrupt','1791705600','zstd',?1,NULL)",[b"bad".to_vec()]).unwrap();let partial=scan();assert_eq!(partial.records.len(),1);assert!(partial.notes.iter().any(|n|n.contains("Zed")));db.execute("DELETE FROM threads",[]).unwrap();let pruned=scan();assert_eq!(pruned.records.len(),1);assert_eq!(pruned.records[0].tally.total(),150);
+        for file in fs::read_dir(f.dir.join("cache")).unwrap(){assert!(!fs::read_to_string(file.unwrap().path()).unwrap().contains("ZED_PRIVATE_SENTINEL"));}assert!(parse_file(&database,"zed",&AtomicBool::new(true)).is_err());
+    }
+    #[test] fn crush_is_recognized_without_turning_money_into_tokens(){let f=Fixture::new();let registry=f.dir.join("logs/projects.json");fs::write(&registry,json!({"projects":[],"cost":123,"input_tokens":1000}).to_string()).unwrap();let result=scan_roots(&f.dir.join("cache"),&Prices::new(),&AtomicBool::new(false),|_,_|{},|id|if id=="crush"{vec![registry.clone()]}else{vec![]}).unwrap();assert!(result.records.is_empty());let source=result.sources.iter().find(|s|s.id=="crush").unwrap();assert_eq!(source.status,"no-data");assert_eq!(source.files,0);}
+    #[test] fn enumeration_caps_depth_and_accepts_explicit_native_files(){
+        let f=Fixture::new();let file=f.dir.join("logs/state.db");fs::write(&file,"fixture").unwrap();let mut files=vec![];let mut notes=vec![];enumerate(&file,"hermes",&mut files,&AtomicBool::new(false),&mut notes).unwrap();assert_eq!(files,vec![file]);
+        let mut root=f.dir.join("logs");for _ in 0..34{root=root.join("d");fs::create_dir_all(&root).unwrap();}fs::write(root.join("state.db"),"deep").unwrap();files.clear();enumerate(&f.dir.join("logs"),"hermes",&mut files,&AtomicBool::new(false),&mut notes).unwrap();assert_eq!(files.len(),1);assert!(notes.iter().any(|n|n.contains("深度")));
+    }
+    #[test] fn pi_family_forks_cache_and_deleted_history_keep_one_counter_without_message_text(){
+        for agent in ["pi","omp","kimchi"] {
+            let f=Fixture::new(); let root=f.dir.join("logs");let a=root.join("a.jsonl");let b=root.join("b.jsonl");
+            let header=json!({"type":"session","id":"same-session","cwd":"project"});
+            let mut reply=json!({"type":"message","id":"reply","timestamp":"2026-10-02T12:00:00Z","message":{"role":"assistant","model":"m","content":"SENSITIVE_TEST_MESSAGE","usage":{"input":100,"output":20,"cacheRead":30,"cacheWrite":5,"totalTokens":155}}});
+            if agent!="kimchi"{reply["message"]["responseId"]=json!("response-shared");}
+            fs::write(&a,format!("{header}\n{reply}")).unwrap();fs::write(&b,format!("{header}\n{reply}")).unwrap();
+            let scan=||scan_roots(&f.dir.join("cache"),&Prices::new(),&AtomicBool::new(false),|_,_|{},|id|if id==agent{vec![root.clone()]}else{vec![]}).unwrap();
+            let first=scan();assert_eq!(first.records.len(),1,"{agent}");assert_eq!(first.records[0].tally.total(),155);
+            let cached=scan();assert_eq!(cached.sources.iter().find(|s|s.id==agent).unwrap().cached_files,2);
+            fs::remove_file(&a).unwrap();assert_eq!(scan().records.len(),1);fs::remove_file(&b).unwrap();let kept=scan();assert_eq!(kept.records.len(),1);assert_eq!(kept.records[0].tally,first.records[0].tally);
+            for entry in fs::read_dir(f.dir.join("cache")).unwrap(){assert!(!fs::read_to_string(entry.unwrap().path()).unwrap().contains("SENSITIVE_TEST_MESSAGE"));}
+        }
+    }
+    #[test] fn pi_header_validation_and_malformed_rows_do_not_create_complete_history(){
+        let f=Fixture::new();let path=f.dir.join("logs/invalid.jsonl");let msg=json!({"type":"message","id":"r","timestamp":"2026-10-02T00:00:00Z","message":{"role":"assistant","model":"m","usage":{"input":10}}});
+        fs::write(&path,msg.to_string()).unwrap();let cancel=AtomicBool::new(false);let (r,n)=parse_file(&path,"pi",&cancel).unwrap();assert!(r.is_empty());assert!(!n.is_empty());
+        fs::write(&path,format!("{{\"type\":\"session\",\"id\":\"s\"}}\n{msg}\n{{broken" )).unwrap();
+        let snapshot=scan_roots(&f.dir.join("cache"),&Prices::new(),&cancel,|_,_|{},|id|if id=="pi"{vec![f.dir.join("logs")]}else{vec![]}).unwrap();assert_eq!(snapshot.records.len(),1);assert!(!snapshot.notes.is_empty());assert!(!f.dir.join("cache").exists());
+        assert!(parse_file(&path,"pi",&AtomicBool::new(true)).is_err());
+    }
+    #[test] fn amp_native_document_reconciles_ledger_and_retains_after_deletion(){
+        let f=Fixture::new();let path=f.dir.join("logs/T-session.json");
+        let root=json!({"id":"T-session","created":1790899200000i64,"messages":[{"role":"assistant","messageId":1,"content":"SENSITIVE_TEST_MESSAGE","usage":{"model":"m","inputTokens":100,"outputTokens":20}}],"usageLedger":{"events":[{"toMessageId":1,"timestamp":"2026-10-02T00:00:01Z","model":"m","tokens":{"input":100,"output":20}}]}});
+        fs::write(&path,root.to_string()).unwrap();fs::write(f.dir.join("logs/not-a-thread.json"),root.to_string()).unwrap();
+        let scan=||scan_roots(&f.dir.join("cache"),&Prices::new(),&AtomicBool::new(false),|_,_|{},|id|if id=="amp"{vec![f.dir.join("logs")]}else{vec![]}).unwrap();
+        let first=scan();assert_eq!(first.records.len(),1);assert_eq!(first.records[0].tally.total(),120);assert_eq!(first.sources.iter().find(|s|s.id=="amp").unwrap().files,1);
+        fs::remove_file(path).unwrap();let kept=scan();assert_eq!(kept.records.len(),1);assert_eq!(kept.records[0].tally,first.records[0].tally);assert!(!fs::read_to_string(f.dir.join("cache/history-amp.json")).unwrap().contains("SENSITIVE_TEST_MESSAGE"));
+    }
+    #[test] fn droid_session_total_replaces_prior_total_and_sibling_model_invalidates_cache(){
+        let f=Fixture::new();let path=f.dir.join("logs/s.settings.json");let transcript=f.dir.join("logs/s.jsonl");
+        let mut settings=json!({"providerLockTimestamp":"2026-10-02T12:00:00Z","tokenUsage":{"inputTokens":100,"outputTokens":20,"cacheReadTokens":30,"totalTokens":150}});
+        fs::write(&path,settings.to_string()).unwrap();fs::write(&transcript,json!({"message":{"content":"Model: claude-opus-4.5 SENSITIVE_TEXT"}}).to_string()).unwrap();
+        let scan=||scan_roots(&f.dir.join("cache"),&Prices::new(),&AtomicBool::new(false),|_,_|{},|id|if id=="droid"{vec![f.dir.join("logs")]}else{vec![]}).unwrap();
+        let first=scan();assert!(first.notes.is_empty());assert_eq!(first.records.len(),1);assert_eq!(first.records[0].model,"claude-opus-4.5");assert_eq!(first.records[0].tally.total(),150);assert!(first.records[0].aggregate_timing);
+        assert_eq!(scan().sources.iter().find(|s|s.id=="droid").unwrap().cached_files,1);
+        fs::write(&transcript,json!({"message":{"content":"Model: GPT-5.6 SENSITIVE_TEXT"}}).to_string()).unwrap();let refreshed=scan();assert_eq!(refreshed.records[0].model,"GPT-5.6");assert_eq!(refreshed.sources.iter().find(|s|s.id=="droid").unwrap().cached_files,0);
+        settings["tokenUsage"]["inputTokens"]=json!(200);settings["tokenUsage"]["totalTokens"]=json!(250);fs::write(&path,settings.to_string()).unwrap();assert_eq!(scan().records[0].tally.total(),250);
+        fs::remove_file(path).unwrap();let kept=scan();assert_eq!(kept.records.len(),1);assert_eq!(kept.records[0].tally.total(),250);assert!(!fs::read_to_string(f.dir.join("cache/history-droid.json")).unwrap().contains("SENSITIVE_TEXT"));
+    }
+    #[test] fn reply_timing_delayed_codex_counter_and_ttft_survive_file_cache_and_retention(){
+        let f=Fixture::new();let path=f.dir.join("logs/timing.jsonl");let lines=vec![
+            json!({"type":"session_meta","timestamp":"2026-10-02T12:00:00Z","payload":{"id":"timing"}}),
+            json!({"type":"turn_context","timestamp":"2026-10-02T12:00:00Z","payload":{"model":"gpt-5.6"}}),
+            json!({"type":"response_item","timestamp":"2026-10-02T12:00:00Z","payload":{"type":"message","role":"user"}}),
+            json!({"type":"response_item","timestamp":"2026-10-02T12:00:04Z","payload":{"type":"message","role":"assistant"}}),
+            json!({"type":"response_item","timestamp":"2026-10-02T12:00:05Z","payload":{"type":"function_call_output"}}),
+            json!({"type":"event_msg","timestamp":"2026-10-02T12:00:05Z","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"output_tokens":200},"last_token_usage":{"input_tokens":100,"output_tokens":200}}}}),
+            json!({"type":"event_msg","timestamp":"2026-10-02T12:00:06Z","payload":{"type":"task_complete","turn_id":"t","time_to_first_token_ms":1500}}),
+            json!({"type":"event_msg","timestamp":"2026-10-02T12:00:07Z","payload":{"type":"task_complete","turn_id":"t","time_to_first_token_ms":1500}})
+        ];fs::write(&path,lines.iter().map(Value::to_string).collect::<Vec<_>>().join("\n")).unwrap();
+        let scan=||scan_roots(&f.dir.join("cache"),&Prices::new(),&AtomicBool::new(false),|_,_|{},|id|if id=="codex"{vec![f.dir.join("logs")]}else{vec![]}).unwrap();
+        for snap in [scan(),scan()]{let t=snap.records[0].reply_timing.as_ref().unwrap();assert_eq!((t.output_tokens,t.seconds,t.replies),(200,4.,1));assert_eq!((t.first_token_seconds,t.first_token_turns),(1.5,1));}
+        fs::remove_file(path).unwrap();let snap=scan();assert_eq!(snap.records[0].reply_timing.as_ref().unwrap().first_token_turns,1);
+    }
+    #[test]fn claude_reply_timing_uses_final_stream_fragment_and_keeps_ttft_unknown(){
+        let (r,n)=parse(vec![json!({"type":"user","timestamp":"2026-10-02T12:00:00Z"}),claude("timed","2026-10-02T12:00:01Z","m",100,110),claude("timed","2026-10-02T12:00:04Z","m",100,200)],"claude");assert!(n.is_empty());assert_eq!(r.len(),1);let t=r[0].reply_timing.as_ref().unwrap();assert_eq!((t.output_tokens,t.seconds,t.first_token_turns),(200,4.,0));
+    }
+    #[test]fn damaged_context_metadata_preserves_existing_history_journal(){
+        let f=Fixture::new();let path=f.dir.join("logs/a.jsonl");fs::write(&path,claude("test","2026-10-02T12:00:00Z","m",100,20).to_string()).unwrap();f.scan(&Prices::new(),&AtomicBool::new(false)).unwrap();
+        let journal=f.dir.join("cache/history-claude.json");let mut v:Value=serde_json::from_slice(&fs::read(&journal).unwrap()).unwrap();let entry=v["files"].as_object_mut().unwrap().values_mut().next().unwrap();entry["records"][0]["tally"]["contextBands"]=json!({"200000":{"input":999,"output":0,"cacheRead":0,"cacheWrite":0}});fs::write(&journal,v.to_string()).unwrap();let original=fs::read(&journal).unwrap();
+        let result=f.scan(&Prices::new(),&AtomicBool::new(false)).unwrap();assert_eq!(result.records.len(),1);assert!(result.notes.iter().any(|s|s.contains("历史文件损坏")));assert_eq!(fs::read(journal).unwrap(),original);
+    }
+    #[test]fn openclaw_sqlite_jsonl_wal_forks_and_pruning_are_one_counted_store(){
+        use rusqlite::Connection;let f=Fixture::new();fs::create_dir_all(f.dir.join("logs/sessions")).unwrap();let database=f.dir.join("logs/openclaw-agent.sqlite");let conn=Connection::open(&database).unwrap();conn.execute_batch("PRAGMA journal_mode=WAL;PRAGMA wal_autocheckpoint=0;CREATE TABLE transcript_events(session_id TEXT,seq INTEGER,event_json TEXT);CREATE TABLE session_windows(session_id TEXT,model TEXT);INSERT INTO session_windows VALUES('s','gpt-5.6');").unwrap();
+        let m=json!({"type":"message","id":"event-one","timestamp":"2026-10-11T00:00:00Z","message":{"role":"assistant","model":"gpt-5.6","content":"SENSITIVE_SENTINEL","usage":{"input":100,"output":20,"cacheRead":30,"cacheWrite":5}}});conn.execute("INSERT INTO transcript_events VALUES('s',1,?1)",[m.to_string()]).unwrap();let jsonl=f.dir.join("logs/sessions/s.jsonl");fs::write(&jsonl,m.to_string()).unwrap();fs::write(f.dir.join("logs/sessions/fork.jsonl.deleted.2026"),m.to_string()).unwrap();
+        let scan=||scan_roots(&f.dir.join("cache"),&Prices::new(),&AtomicBool::new(false),|_,_|{},|id|if id=="openclaw"{vec![f.dir.join("logs")]}else{vec![]}).unwrap();let original=fs::read(&database).unwrap();let first=scan();assert!(first.notes.is_empty());assert_eq!(first.records.len(),1);assert_eq!(first.records[0].tally.total(),155);assert_eq!(scan().sources.iter().find(|s|s.id=="openclaw").unwrap().cached_files,3);
+        let mut more=m.clone();more["id"]=json!("event-two");more["message"].as_object_mut().unwrap().remove("model");conn.execute("INSERT INTO transcript_events VALUES('s',2,?1)",[more.to_string()]).unwrap();assert_eq!(fs::read(&database).unwrap(),original);let appended=scan();assert_eq!(appended.records.len(),2);assert_eq!(appended.sources.iter().find(|s|s.id=="openclaw").unwrap().cached_files,2);
+        conn.execute("DELETE FROM transcript_events WHERE seq=1",[]).unwrap();fs::remove_file(jsonl).unwrap();fs::remove_file(f.dir.join("logs/sessions/fork.jsonl.deleted.2026")).unwrap();let kept=scan();assert_eq!(kept.records.iter().map(|r|r.tally.total()).sum::<u64>(),310);assert_eq!(scan().records.iter().map(|r|r.tally.total()).sum::<u64>(),310);
+        for file in fs::read_dir(f.dir.join("cache")).unwrap(){assert!(!fs::read_to_string(file.unwrap().path()).unwrap().contains("SENSITIVE_SENTINEL"));}assert!(parse_file(&database,"openclaw",&AtomicBool::new(true)).is_err());
+    }
+    #[test]fn openclaw_missing_model_and_time_keep_valid_rows_with_partial_note(){
+        let f=Fixture::new();fs::create_dir_all(f.dir.join("logs/sessions")).unwrap();let file=f.dir.join("logs/sessions/s.jsonl");let good=json!({"type":"message","id":"good","timestamp":"2026-10-11T00:00:00Z","message":{"role":"assistant","model":"gpt-5.6","usage":{"input":10,"output":5}}});let mut bad=good.clone();bad["id"]=json!("bad");bad["timestamp"]=Value::Null;fs::write(&file,format!("{bad}\n{good}")).unwrap();let(r,n)=parse_file(&file,"openclaw",&AtomicBool::new(false)).unwrap();assert_eq!(r.len(),1);assert_eq!(n.len(),1);
+    }
     #[test] fn file_cache_reuses_unchanged_and_reprices_without_preserving_text() {
         let fixture = Fixture::new(); let file = fixture.dir.join("logs/session.jsonl");
         fs::write(&file, claude("one", "2026-10-02T12:00:00Z", "measured", 100, 20).to_string()).unwrap();
@@ -637,6 +895,46 @@ mod tests {
         let result = fixture.scan(&Prices::new(), &AtomicBool::new(false)).unwrap();
         assert_eq!(result.records[0].tally.total(), 125); assert!(!result.notes.is_empty());
         assert!(!fixture.dir.join("cache").exists());
+    }
+    #[test] fn one_hour_cache_is_a_subset_and_prices_at_twice_input(){
+        let prices=parse_prices(&json!({"anthropic":{"models":{"m":{"cost":{"input":2,"output":8,"cache_write":2.5,"cache_read":0.2}}}}}));
+        let tally=Tally{input:1_000_000,output:1_000_000,cache_write:1_000_000,cache_write_1h:600_000,cache_read:1_000_000,..Default::default()};
+        assert_eq!(tally.total(),4_000_000);assert_eq!(tally.cost_breakdown(&prices["m"]),[2.,8.,3.4,0.2]);
+        let over=Tally{cache_write:100,cache_write_1h:999,..Default::default()};assert!((over.cost_breakdown(&prices["m"])[2]-0.0004).abs()<1e-12);
+    }
+    #[test] fn context_tiers_price_whole_requests_and_do_not_apply_early(){
+        let root=json!({"openai":{"models":{"m":{"cost":{"input":5,"output":30,"cache_read":0.5,"tiers":[{"input":10,"output":45,"cache_read":1,"tier":{"type":"context","size":272001}}]}}}}});
+        let prices=parse_prices(&root);let p=&prices["m"];assert_eq!(p.tiers[0].threshold,272000);
+        let short=Tally{input:1_000_000,..Default::default()}.request(272000);let long=Tally{input:1_000_000,..Default::default()}.request(300000);
+        assert_eq!(short.cost_breakdown(p)[0],5.);assert_eq!(long.cost_breakdown(p)[0],10.);let mut sum=short;sum.add(&long);assert_eq!(sum.cost_breakdown(p)[0],15.);assert_eq!(sum.total(),2_000_000);
+        let mut odd=p.clone();odd.tiers[0].threshold=262144;assert_eq!(Tally{input:1_000_000,..Default::default()}.request(260000).cost_breakdown(&odd)[0],5.);
+        assert_eq!(parse_tiers(&json!({"tiers":[{"input":9,"output":9,"tier":{"type":"context","size":272000}}]}))[0].threshold,272000);
+        assert_eq!(parse_tiers(&json!({"context_over_200k":{"input":6,"output":22.5}}))[0].threshold,200000);
+    }
+    #[test] fn parsed_hour_cache_and_context_bands_survive_cache_and_deleted_source(){
+        let f=Fixture::new();let path=f.dir.join("logs/hour.jsonl");let mut line=claude("hour","2026-10-02T12:00:00Z","m",300000,20);
+        line["message"]["usage"]["cache_creation_input_tokens"]=json!(100);line["message"]["usage"]["cache_creation"]=json!({"ephemeral_1h_input_tokens":80});fs::write(&path,line.to_string()).unwrap();
+        let prices=parse_prices(&json!({"anthropic":{"models":{"m":{"cost":{"input":2,"output":8,"cache_write":2.5}}}}}));
+        let first=f.scan(&prices,&AtomicBool::new(false)).unwrap();assert_eq!(first.records[0].tally.cache_write_1h,80);assert_eq!(first.records[0].tally.context_bands[&272000].cache_write_1h,80);
+        let cached=f.scan(&prices,&AtomicBool::new(false)).unwrap();assert_eq!(cached.records[0].tally,first.records[0].tally);fs::remove_file(path).unwrap();let kept=f.scan(&prices,&AtomicBool::new(false)).unwrap();assert_eq!(kept.records[0].cost,first.records[0].cost);assert_eq!(kept.records[0].tally,first.records[0].tally);
+    }
+    #[test] fn missing_cache_fields_are_absence_and_later_fragments_can_disclose_them(){
+        let f=Fixture::new();let mut line=claude("reply","2026-10-02T12:00:00Z","m",100,20);line["message"]["usage"].as_object_mut().unwrap().remove("cache_creation_input_tokens");line["message"]["usage"].as_object_mut().unwrap().remove("cache_read_input_tokens");
+        let path=f.dir.join("logs/reply.jsonl");fs::write(&path,line.to_string()).unwrap();assert_eq!(f.scan(&Prices::new(),&AtomicBool::new(false)).unwrap().records[0].tally.replies_without_cache_fields,1);
+        let mut final_line=line.clone();final_line["message"]["usage"]["cache_read_input_tokens"]=json!(0);fs::write(path,format!("{line}\n{final_line}")).unwrap();assert_eq!(f.scan(&Prices::new(),&AtomicBool::new(false)).unwrap().records[0].tally.replies_without_cache_fields,0);
+    }
+    #[test] fn serialized_huge_token_counters_keep_an_exact_native_to_js_representation(){
+        let f=Fixture::new();let path=f.dir.join("logs/huge.jsonl");let line=claude("huge","2026-10-02T12:00:00Z","m",9_007_199_254_740_993,20);fs::write(path,line.to_string()).unwrap();
+        let record=f.scan(&Prices::new(),&AtomicBool::new(false)).unwrap().records.remove(0);let wire=serde_json::to_value(&record).unwrap();assert_eq!(wire["exactTally"]["input"],"9007199254740993");let read:SpendRecord=serde_json::from_value(wire).unwrap();assert_eq!(read.tally.input,record.tally.input);
+    }
+    #[test] fn legacy_history_millisecond_timestamps_migrate_without_recounting(){
+        let f=Fixture::new();let path=f.dir.join("logs/one.jsonl");fs::write(&path,claude("one","2026-10-02T12:00:00Z","m",100,20).to_string()).unwrap();let mut record=f.scan(&Prices::new(),&AtomicBool::new(false)).unwrap().records.remove(0);
+        let at=record.source_timestamp.unwrap();record.agent="gemini".into();record.source_timestamp=Some(at*1000);let cache=f.dir.join("cache");
+        fs::write(cache.join("history-gemini.json"),json!({"format":1,"files":{"old":{"readings":6,"records":[record.clone()]}}}).to_string()).unwrap();
+        let mut notes=vec![];let mut journal=history::History::load(&cache,"gemini",&mut notes).unwrap();let (records,retained)=journal.reconcile(vec![],true,&mut HashSet::new(),&AtomicBool::new(false)).unwrap();assert!(notes.is_empty());assert_eq!(retained,1);assert_eq!(records[0].source_timestamp,Some(at));journal.save(&AtomicBool::new(false)).unwrap();
+        let bytes:Value=serde_json::from_slice(&fs::read(cache.join("history-gemini.json")).unwrap()).unwrap();assert_eq!(bytes["format"],2);
+        record.agent="cursor".into();fs::write(cache.join("history-store-cursor.json"),json!({"format":1,"readings":6,"offset":Local::now().offset().local_minus_utc(),"records":[record.clone()]}).to_string()).unwrap();
+        let mut journal=history::StoreHistory::load(&cache,"cursor",&mut notes).unwrap();let mut records=vec![];assert_eq!(journal.reconcile(&mut records,true,&AtomicBool::new(false)).unwrap(),1);assert_eq!(records[0].source_timestamp,Some(at));assert_eq!(records[0].day,record.day);
     }
     #[test] fn deleted_transcript_survives_repeated_scans_and_is_repriced(){
         let f=Fixture::new();let path=f.dir.join("logs/session.jsonl");
@@ -733,9 +1031,9 @@ mod tests {
     }
     #[test] fn qwen_cache_overlap_and_reasoning_follow_reported_total() {
         let (inside, remainder) = qwen_usage(&json!({"promptTokenCount":100,"candidatesTokenCount":20,"thoughtsTokenCount":5,"cachedContentTokenCount":30,"totalTokenCount":125}));
-        assert_eq!(inside, Tally { input:70, output:25, cache_read:30, cache_write:0 }); assert_eq!(remainder, 0);
+        assert_eq!(inside, Tally { input:70, output:25, cache_read:30, cache_write:0, ..Default::default() }); assert_eq!(remainder, 0);
         let (beside, remainder) = qwen_usage(&json!({"promptTokenCount":100,"candidatesTokenCount":20,"thoughtsTokenCount":5,"cachedContentTokenCount":30,"totalTokenCount":155}));
-        assert_eq!(beside, Tally { input:100, output:25, cache_read:30, cache_write:0 }); assert_eq!(remainder, 0);
+        assert_eq!(beside, Tally { input:100, output:25, cache_read:30, cache_write:0, ..Default::default() }); assert_eq!(remainder, 0);
     }
     #[test] fn qwen_bare_or_inconsistent_total_is_unclassified_never_fabricated_input() {
         for usage in [json!({"totalTokenCount":999}), json!({"promptTokenCount":100,"candidatesTokenCount":20,"totalTokenCount":999})] {

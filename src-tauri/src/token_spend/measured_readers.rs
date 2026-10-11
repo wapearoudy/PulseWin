@@ -35,14 +35,14 @@ fn gemini_chat_path(path: &Path) -> bool {
     let pieces: Vec<_> = path.components().map(|v| v.as_os_str().to_string_lossy()).collect();
     pieces.len() >= 4 && pieces[pieces.len()-2] == "chats" && pieces[pieces.len()-4] == "tmp"
 }
-fn text(value: &Value) -> Option<String> { value.as_str().map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned) }
+pub(super) fn text(value: &Value) -> Option<String> { value.as_str().map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned) }
 fn count_value(value: &Value) -> Option<u64> {
     if let Some(raw) = value.as_str() { return raw.trim().parse::<u64>().ok().filter(|v| *v <= i64::MAX as u64); }
     if let Some(raw) = value.as_u64() { return (raw <= i64::MAX as u64).then_some(raw); }
     value.as_f64().filter(|v| v.is_finite() && *v >= 0. && v.fract() == 0. && *v < 9_223_372_036_854_775_808.).map(|v| v as u64)
 }
-fn count(value: &Value) -> u64 { count_value(value).unwrap_or(0) }
-fn timestamp(value: &Value, milliseconds: bool) -> Option<DateTime<Utc>> {
+pub(super) fn count(value: &Value) -> u64 { count_value(value).unwrap_or(0) }
+pub(super) fn timestamp(value: &Value, milliseconds: bool) -> Option<DateTime<Utc>> {
     if let Some(iso) = value.as_str().and_then(|s| DateTime::parse_from_rfc3339(s).ok()) { return Some(iso.with_timezone(&Utc)); }
     let number = value.as_f64().or_else(|| value.as_str().and_then(|s| s.trim().parse::<f64>().ok()))?;
     if !number.is_finite() { return None; }
@@ -50,12 +50,12 @@ fn timestamp(value: &Value, milliseconds: bool) -> Option<DateTime<Utc>> {
     if millis >= i64::MAX as f64 || millis <= i64::MIN as f64 { return None; }
     DateTime::from_timestamp_millis(millis as i64)
 }
-fn record(agent: &str, model: String, at: DateTime<Utc>, session: String, tally: Tally, unclassified: u64, id: Option<String>) -> SpendRecord {
+pub(super) fn record(agent: &str, model: String, at: DateTime<Utc>, session: String, tally: Tally, unclassified: u64, id: Option<String>) -> SpendRecord {
     let local = at.with_timezone(&Local);
     SpendRecord { agent: agent.into(), model, day: local.format("%Y-%m-%d").to_string(), hour: chrono::Timelike::hour(&local),
         session, project: None, tally, unclassified_tokens: unclassified, deduplication_id: id,
-        aggregate_timing: false, source_timestamp: Some(at.timestamp_millis()), source_scope: None,
-        cost: None, cost_breakdown: None, model_name: None }
+        aggregate_timing: false, source_timestamp: Some(at.timestamp()), source_scope: None,
+        cost: None, cost_breakdown: None, model_name: None, cache_savings:None,reply_timing:None }
 }
 fn bounded_bytes(path: &Path, cancel: &AtomicBool) -> Result<Vec<u8>, String> {
     let mut file = File::open(path).map_err(|e| format!("无法读取 {}：{e}", path.display()))?;
@@ -68,14 +68,14 @@ fn bounded_bytes(path: &Path, cancel: &AtomicBool) -> Result<Vec<u8>, String> {
     }
     check(cancel)?; Ok(bytes)
 }
-fn document<T: DeserializeOwned>(path: &Path, cancel: &AtomicBool) -> Result<T, String> {
+pub(super) fn document<T: DeserializeOwned>(path: &Path, cancel: &AtomicBool) -> Result<T, String> {
     let bytes = bounded_bytes(path, cancel)?;
     let data = bytes.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(&bytes);
     let decoded = serde_json::from_slice(data).map_err(|e| format!("无法解码 {}：{e}；计数可能不完整", path.display()))?;
     check(cancel)?; Ok(decoded)
 }
 /// Bounded, cancellable JSONL. Bad/oversize lines do not hide subsequent usage.
-fn lines(reader: &mut impl BufRead, cancel: &AtomicBool, notes: &mut Vec<String>, mut visit: impl FnMut(Value, usize) -> Result<(), String>) -> Result<(), String> {
+pub(super) fn lines(reader: &mut impl BufRead, cancel: &AtomicBool, notes: &mut Vec<String>, mut visit: impl FnMut(Value, usize) -> Result<(), String>) -> Result<(), String> {
     let mut ordinal = 0;
     loop {
         check(cancel)?; let mut line = Vec::new(); let mut over = false; let mut eof = false;
@@ -158,7 +158,7 @@ fn gemini_usage(value: &Value, headless: bool, wrapper: bool) -> (Tally, u64) {
     let included = if headless { wrapper || key.is_some_and(|k| k != "input") } else if total_key.is_some() {
         total == raw.saturating_add(output) && total != raw.saturating_add(output).saturating_add(cached)
     } else { key.is_some_and(|k| k != "input") };
-    (Tally { input: if included { raw.saturating_sub(cached) } else { raw }, output, cache_write: 0, cache_read: cached }, 0)
+    (Tally { input: if included { raw.saturating_sub(cached) } else { raw }, output, cache_write: 0, cache_read: cached, ..Default::default() }, 0)
 }
 fn gemini_headless(reader: &mut impl BufRead, stem: &str, cancel: &AtomicBool) -> Result<(Vec<SpendRecord>, Vec<String>), String> {
     let mut records = Vec::new(); let mut io_notes = Vec::new(); let mut notes = Vec::new();
@@ -201,7 +201,7 @@ fn antigravity(reader: &mut impl BufRead, cancel: &AtomicBool) -> Result<(Vec<Sp
     lines(reader, cancel, &mut io_notes, |line, _| {
         if line["type"] == "session_meta" { model = text(&line["modelId"]); return Ok(()); }
         if line["type"] != "usage" { return Ok(()); }
-        let tally = Tally { input: count(&line["input"]), output: count(&line["output"]), cache_read: count(&line["cacheRead"]), cache_write: count(&line["cacheWrite"]) };
+        let tally = Tally { input: count(&line["input"]), output: count(&line["output"]), cache_read: count(&line["cacheRead"]), cache_write: count(&line["cacheWrite"]), ..Default::default() };
         if tally.total() == 0 { return Ok(()); }
         let named = text(&line["modelId"]).or_else(|| model.clone()).filter(|s| !s.to_ascii_lowercase().starts_with("model_placeholder_"));
         if let (Some(named), Some(sid), Some(at)) = (named, text(&line["sessionId"]), timestamp(&line["timestamp"], true).filter(|at| at.timestamp_millis() > 0)) {
@@ -217,7 +217,7 @@ fn hindsight(reader: &mut impl BufRead, cancel: &AtomicBool) -> Result<(Vec<Spen
     let mut records = Vec::new(); let mut io_notes = Vec::new(); let mut notes = Vec::new();
     lines(reader, cancel, &mut io_notes, |line, _| {
         if count_value(&line["total_tokens"]) == Some(0) { return Ok(()); }
-        let tally = Tally { input: count(&line["input_tokens"]), output: count(&line["output_tokens"]), cache_read: count(&line["cached_tokens"]), cache_write: 0 };
+        let tally = Tally { input: count(&line["input_tokens"]), output: count(&line["output_tokens"]), cache_read: count(&line["cached_tokens"]), cache_write: 0, ..Default::default() };
         if tally.input == 0 && tally.output == 0 { return Ok(()); }
         if let (Some(id), Some(model), Some(at)) = (text(&line["id"]), text(&line["model"]), timestamp(&line["started_at"], false)) {
             let sid = text(&line["trace_id"]).unwrap_or_else(|| id.clone());
@@ -238,7 +238,7 @@ fn mcode(reader: &mut impl BufRead, cancel: &AtomicBool) -> Result<(Vec<SpendRec
             if message["role"] != "assistant" { return Ok(()); }
             let Some(turn) = text(&message["turnId"]) else { return Ok(()); };
             let usage = &message["usage"]; if !usage.is_object() { return Ok(()); }
-            let tally = Tally { input: count(&usage["inputTokens"]), output: count(&usage["outputTokens"]), cache_write: count(&usage["cacheWriteTokens"]), cache_read: count(&usage["cacheReadTokens"]) };
+            let tally = Tally { input: count(&usage["inputTokens"]), output: count(&usage["outputTokens"]), cache_write: count(&usage["cacheWriteTokens"]), cache_read: count(&usage["cacheReadTokens"]), ..Default::default() };
             let unclassified = if tally.total() == 0 { count(&usage["totalTokens"]) } else { 0 };
             if tally.total() == 0 && unclassified == 0 { return Ok(()); }
             let raw_time = message["timestamp"].as_f64().or_else(|| message["timestamp"].as_str().and_then(|s| s.parse::<f64>().ok()));
@@ -298,7 +298,7 @@ fn cursor_file(path: &Path, cancel: &AtomicBool) -> Result<(Vec<SpendRecord>, Ve
             if row.len() <= widest { notes.push("Cursor CSV：一条记录列数不足，计数可能不完整".into()); continue; }
             let at = csv_date(row[columns[0]].trim()); let model = row[columns[1]].trim();
             let cell = |index: usize| count(&Value::String(row[columns[index]].replace(',', "")));
-            let tally = Tally { input: cell(2), cache_write: cell(3), cache_read: cell(4), output: cell(5) };
+            let tally = Tally { input: cell(2), cache_write: cell(3), cache_read: cell(4), output: cell(5), ..Default::default() };
             if tally.total() == 0 { continue; }
             if let Some(at) = at.filter(|at| !model.is_empty() && at.timestamp_millis() > 0) {
                 let sid = cloud.and_then(|i| row.get(i)).filter(|s| !s.trim().is_empty()).map(|s| format!("cursor:{account}:cloud:{}", s.trim())).unwrap_or_default();
@@ -310,7 +310,7 @@ fn cursor_file(path: &Path, cancel: &AtomicBool) -> Result<(Vec<SpendRecord>, Ve
         let root: CursorExport = document(path, cancel)?;
         for event in root.usage_events_display.unwrap_or_default() {
             check(cancel)?; let usage = event.token_usage.unwrap_or(Value::Null);
-            let tally = Tally { input: count(&usage["inputTokens"]), output: count(&usage["outputTokens"]), cache_write: count(&usage["cacheWriteTokens"]), cache_read: count(&usage["cacheReadTokens"]) };
+            let tally = Tally { input: count(&usage["inputTokens"]), output: count(&usage["outputTokens"]), cache_write: count(&usage["cacheWriteTokens"]), cache_read: count(&usage["cacheReadTokens"]), ..Default::default() };
             if tally.total() == 0 { continue; }
             if let (Some(model),Some(at)) = (event.model.as_ref().and_then(text), event.timestamp.as_ref().and_then(|v| timestamp(v,true)).filter(|at| at.timestamp_millis() > 0)) {
                 let sid = event.conversation_id.as_ref().and_then(text).map(|s| format!("cursor:{account}:{s}")).unwrap_or_default();
@@ -436,14 +436,14 @@ mod tests {
         assert_eq!(roots(home,"mcode",&env)[0],PathBuf::from("fixture-cache/headless/mcode"));
         assert_eq!(roots(home,"hindsight",&env)[0],PathBuf::from("fixture-hindsight/usage"));
         assert!(roots(home,"warp",&env).is_empty());
-        assert_eq!(AGENTS.len(),12);
+        assert_eq!(AGENTS.len(),22);
     }
     #[test] fn gemini_session_cache_overlap_tool_and_reasoning_are_disjoint() {
         let fixture = Fixture::new();
         let file = fixture.write("tmp/work/chats/new-name.json",json!({"sessionId":"real-session","messages":[{"type":"user","content":"SECRET USER BODY"},gemini_message("a")]}).to_string());
         let (records,notes) = parse_file(&file,"gemini",&AtomicBool::new(false)).unwrap();
         assert!(notes.is_empty()); assert_eq!(records.len(),1);
-        assert_eq!(records[0].tally,Tally { input:80,output:25,cache_read:30,cache_write:0 });
+        assert_eq!(records[0].tally,Tally { input:80,output:25,cache_read:30,cache_write:0, ..Default::default() });
         assert_eq!(records[0].session,"real-session"); assert!(!serde_json::to_string(&records).unwrap().contains("SECRET"));
     }
     #[test] fn gemini_session_without_total_prompt_and_net_input_differ() {
@@ -474,7 +474,7 @@ mod tests {
             json!({"id":"stats","timestamp":"2026-10-03T12:01:00Z","result":{"stats":{"models":{"another-model":{"input":10,"output":2,"cached":3},"bare-model":{"total":17}}}}})];
         let (records,notes) = gemini_headless(&mut Cursor::new(encoded(rows)),"capture",&AtomicBool::new(false)).unwrap();
         assert!(notes.is_empty()); assert_eq!(records.len(),3);
-        assert_eq!(records[0].tally,Tally { input:100,output:25,cache_read:40,cache_write:0 });
+        assert_eq!(records[0].tally,Tally { input:100,output:25,cache_read:40,cache_write:0, ..Default::default() });
         assert!(records.iter().any(|r|r.model=="another-model" && r.tally.input==10));
         assert!(records.iter().any(|r|r.model=="bare-model" && r.unclassified_tokens==17 && r.tally.total()==0));
         assert!(records.iter().all(|r|r.session=="headless-session"));
@@ -514,7 +514,7 @@ mod tests {
         let file = fixture.write("usage.alice.csv",csv);
         let (records,notes) = cursor_file(&file,&AtomicBool::new(false)).unwrap();
         assert!(notes.is_empty()); assert_eq!(records.len(),1); assert_eq!(records[0].model,"model,one");
-        assert_eq!(records[0].tally,Tally { input:1000,output:20,cache_write:30,cache_read:40 });
+        assert_eq!(records[0].tally,Tally { input:1000,output:20,cache_write:30,cache_read:40, ..Default::default() });
         assert!(records[0].aggregate_timing); assert_eq!(records[0].day,"2026-10-03"); assert_eq!(records[0].session,"cursor:alice:cloud:cloud-1");
         assert!(records[0].cost.is_none());
         let unrelated = fixture.write("unknown.csv","Date,Model,Total Tokens\n2026-10-03,m,999\n");

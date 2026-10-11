@@ -11,13 +11,20 @@ commit; this documentation sync does not establish parity with the new release.
 0.1.15 implementation is in progress and publication is explicitly held by
 [release-progress.json](release-progress.json). Light assistant surfaces,
 horizontal floating/bottom docking and durable counter history are now implemented.
-Rust: 906 passed, 2 explicitly ignored real-account checks. Frontend: 190 passed.
-Browser: 64 full-suite checks plus a subsequent affected-pane run (24 passed,
-including a new history-retention UI check). The isolated native WebView2 smoke
-verified saved light appearance, bottom work-area geometry, obsolete-layout
-rejection and horizontal facing after reload using synthetic display figures.
-See the updated upstream inventory for remaining gaps; these checks do not
-establish complete parity or live-account acceptance.
+The continuing checkpoint is recorded in [release-progress.json](release-progress.json):
+972 Rust checks passed, 2 real-account checks explicitly ignored; 205 frontend
+unit checks and 78 synthetic browser checks passed. Status history, activity,
+recap logic, local Codex evidence, cache timing, accurate pricing/counters and
+additional native readers have running implementations. DeepSeek console,
+recap visual/native flow, detailed-card integration and authenticated billing
+remain partial. The latest Windows binary passed both isolated native suites, including eleven
+synthetic source fixtures and native PNG export. Interactive clipboard/dialogs
+and real-account acceptance remain unrun.
+The Token source catalog now declares 22 integrations (Crush recognizes a
+cost-only store and intentionally emits no token records); 32 source entries
+remain unported. This is a source inventory, not an overall parity percentage.
+No update feed promotion or release is authorized until the remaining work is
+implemented and acceptance succeeds.
 
 ## Acceptance inventory
 

@@ -3,6 +3,15 @@ import { agentName, amounts, formatCost, shortTokens, sortDays, spanDays, summar
 import type { SpendRecord } from './types'
 const record = (patch: Partial<SpendRecord> = {}): SpendRecord => ({ agent: 'claude', model: 'model-one', modelName: null, day: '2026-10-03', hour: 9, session: 's1', project: 'E:\\work', tally: { input: 100, output: 20, cacheWrite: 10, cacheRead: 70 }, cost: 0.02, costBreakdown: [0.01, 0.004, 0.002, 0.004], ...patch })
 describe('Token Spend calendar and measured totals', () => {
+  it('sorts adjacent counters beyond Number precision by their native decimal strings',()=>{
+    const a=record({day:'2026-10-02',tally:{input:9007199254740992,output:0,cacheWrite:0,cacheRead:0},exactTally:{input:'9007199254740993',output:'0',cacheWrite:'0',cacheRead:'0'},cost:null,costBreakdown:null})
+    const b=record({...a,day:'2026-10-03',exactTally:{input:'9007199254740992',output:'0',cacheWrite:'0',cacheRead:'0'}})
+    const s=summarize([a,b],'week',new Date(2026,9,3));expect(s.exactTokens).toBe('18014398509481985');expect(sortDays(s.days,'tokens',true).slice(0,2).map(d=>d.day)).toEqual(['2026-10-02','2026-10-03']);expect(s.models[0].exactTokens).toBe(s.exactTokens)
+  })
+  it('keeps an unknown cache distinct from an explicit zero cache',()=>{
+    expect(amounts([record({tally:{input:100,output:20,cacheRead:0,cacheWrite:0,repliesWithoutCacheFields:1}})]).repliesWithoutCacheFields).toBe(1)
+    expect(amounts([record({tally:{input:100,output:20,cacheRead:0,cacheWrite:0}})]).repliesWithoutCacheFields).toBe(0)
+  })
   it('defaults to seven calendar dates and pads quiet days', () => {
     const now = new Date(2026, 9, 3, 12); expect(spanDays('week', now)).toHaveLength(7)
     const summary = summarize([record()], 'week', now)

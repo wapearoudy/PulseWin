@@ -8,6 +8,8 @@ use std::collections::HashMap;
 pub struct AlertPreferences {
     pub threshold: Option<u32>, pub on_reset: bool, pub on_failure: bool,
     pub low_balance: HashMap<String,f64>,
+    pub on_service_outage: bool,
+    pub on_recap:bool,
 }
 impl AlertPreferences {
     pub fn normalize(&mut self,known:&[String]) {

@@ -1,0 +1,11 @@
+import {useEffect,useState} from 'react'
+import {invoke} from '@tauri-apps/api/core'
+interface Session{id:string;title:string;project:string|null;lastRequest:string;expiresAt:string;lifetime:number;isMinimum:boolean}
+interface Reading{live:Session[];lastLapsed:Session|null;notes:string[]}
+export function PromptCacheGroup({provider,enabled}:{provider:string;enabled:boolean}){
+ const [reading,setReading]=useState<Reading|null>(null),[error,setError]=useState<string|null>(null),[now,setNow]=useState(Date.now())
+ useEffect(()=>{let live=true;setReading(null);setError(null);const read=async()=>{try{const value=await invoke<Reading>('get_prompt_cache',{provider});if(live){setReading(value);setError(null)}}catch(e){if(live){setReading(null);setError(String(e))}}};if(enabled)void read();const poll=enabled?setInterval(()=>{void read()},30000):null,tick=enabled?setInterval(()=>setNow(Date.now()),1000):null;return()=>{live=false;if(poll)clearInterval(poll);if(tick)clearInterval(tick)}},[provider,enabled])
+ const sessions=reading?.live.filter(s=>Date.parse(s.expiresAt)>now)??[],last=reading?.lastLapsed??(!sessions.length?reading?.live[reading.live.length-1]:null)
+ return <section className="group-wrap" aria-label="提示词缓存"><h2>提示词缓存</h2><div className="settings-group">{!enabled?<p className="group-copy">开启本机 Token 记录读取后可查看缓存会话。</p>:error?<p className="group-copy" role="alert">{error}</p>:!reading?<p className="group-copy" role="status">正在读取缓存记录…</p>:sessions.length?sessions.map(s=><div className="setting-row" key={s.id}><div><strong>{s.title}</strong><small>{s.project??'本机会话'} · {s.lifetime/60} 分钟{s.isMinimum?'保证下限':''}</small></div><span title={new Date(s.expiresAt).toLocaleString()}>{s.isMinimum?'至少 ':''}{Math.floor(Math.max(0,Date.parse(s.expiresAt)-now)/60000)}分 {Math.floor(Math.max(0,Date.parse(s.expiresAt)-now)/1000)%60}秒</span></div>):<p className="group-copy">{last?`最近一份缓存的${last.isMinimum?'保证时间':'记录时限'}已结束。`:'没有可计时的缓存记录；缺少模型或写入档位时无法推断。'}</p>}
+ <p className="group-copy">{provider==='codex'?'GPT-5.6 及之后的型号显示最近请求后至少 30 分钟的保证时段；更早型号不推断时限。保证时间结束不代表缓存一定被清除。':'Claude 使用记录中的 5 分钟或 1 小时缓存写入档位，并以最近复用请求为起点。缺少档位时不猜测。'}缓存命中仍受服务端路由影响。</p>{reading?.notes.length? <p className="group-copy" role="alert">{reading.notes.join(' ')}</p>:null}</div></section>
+}

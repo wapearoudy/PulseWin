@@ -33,7 +33,7 @@ fn text(value: &Value) -> Option<&str> { value.as_str().map(str::trim).filter(|s
 fn tally(usage: &Value) -> Option<Tally> {
     let optional = |key| if usage.get(key).is_none() { Some(0) } else { integer(&usage[key]) };
     let result = Tally { input: integer(&usage["inputTokens"])?, output: integer(&usage["outputTokens"])?,
-        cache_read: optional("cacheReadTokens")?, cache_write: optional("cacheWriteTokens")? };
+        cache_read: optional("cacheReadTokens")?, cache_write: optional("cacheWriteTokens")?, ..Default::default() };
     if optional("reasoningTokens")? > result.output { return None; }
     // Provider total includes the disjoint cache buckets. Reasoning is already
     // part of output. Reject inconsistent totals rather than fabricate costs.
@@ -162,8 +162,8 @@ fn parse(reader: &mut dyn BufRead, path: &Path, cancel: &AtomicBool) -> Result<(
         let local = at.with_timezone(&Local);
         let record = SpendRecord { agent: "dsh".into(), model: model.into(), day: local.format("%Y-%m-%d").to_string(),
             hour: chrono::Timelike::hour(&local), session: session.clone(), project: project.clone(), tally,
-            unclassified_tokens: 0, deduplication_id: Some(id), aggregate_timing: false, source_timestamp: Some(at.timestamp_millis()),
-            source_scope: None, cost: None, cost_breakdown: None, model_name: None };
+            unclassified_tokens: 0, deduplication_id: Some(id), aggregate_timing: false, source_timestamp: Some(at.timestamp()),
+            source_scope: None, cost: None, cost_breakdown: None, model_name: None, cache_savings:None,reply_timing:None };
         let replacement = if assistant { last.filter(|(turn, step, _)| Some((*turn, *step)) == step_key).map(|(_, _, i)| i) } else { None };
         let index = if let Some(index) = replacement { records[index] = (seq, record); index }
             else { records.push((seq, record)); records.len() - 1 };
@@ -254,7 +254,10 @@ mod tests {
         let mut h=header(4);h["isSeeded"]=json!(true);
         let marker=|seq,inherited|json!({"type":"session/end-seed","seq":seq,"data":if inherited {json!({"inherited":true})}else{json!({})}});
         let (records,notes)=parse_events(&[h,message(1),marker(2,true),message(3),marker(4,true),message(5),marker(6,false),message(7)]);
-        assert!(notes.is_empty());assert_eq!(records.len(),2);assert!(records.iter().all(|r|r.source_timestamp.unwrap()>=1_790_000_000_005));
+        assert!(notes.is_empty());assert_eq!(records.len(),2);
+        assert!(records.iter().all(|r|r.source_timestamp==Some(1_790_000_000)));
+        assert!(records.iter().any(|r|r.deduplication_id.as_deref().unwrap().contains("message-5")));
+        assert!(records.iter().any(|r|r.deduplication_id.as_deref().unwrap().contains("message-7")));
     }
     #[test] fn ambiguous_seed_and_future_version_fail_instead_of_double_counting() {
         let mut h=header(4);h["isSeeded"]=json!(true);
@@ -297,20 +300,20 @@ mod tests {
         let next=zstd::stream::encode_all(Cursor::new(bytes(&[message(2)])),1).unwrap();content.extend_from_slice(&next[..next.len()/2]);
         let path=f.file("session.v4.jsonl.zstd",&content);
         let (records,notes)=read(&path,&AtomicBool::new(false)).unwrap();assert_eq!(records.len(),1);assert!(!notes.is_empty());
-        let first=f.scan(&Prices::new());let second=f.scan(&Prices::new());assert_eq!(first.records.len(),1);assert_eq!(second.sources.last().unwrap().cached_files,0);
+        let first=f.scan(&Prices::new());let second=f.scan(&Prices::new());assert_eq!(first.records.len(),1);assert_eq!(second.sources.iter().find(|s|s.id=="dsh").unwrap().cached_files,0);
     }
     #[test] fn malformed_line_is_not_cached_and_does_not_hide_later_records() {
         let f=Fixture::new();let mut content=bytes(&[header(4),message(1)]);content.extend_from_slice(b"{\"type\":\"assistant/message\",oops}\n");content.extend(bytes(&[message(2)]));
-        f.file("session.jsonl",&content);let scan=f.scan(&Prices::new());assert_eq!(scan.records.len(),2);assert!(!scan.notes.is_empty());assert_eq!(f.scan(&Prices::new()).sources.last().unwrap().cached_files,0);
+        f.file("session.jsonl",&content);let scan=f.scan(&Prices::new());assert_eq!(scan.records.len(),2);assert!(!scan.notes.is_empty());assert_eq!(f.scan(&Prices::new()).sources.iter().find(|s|s.id=="dsh").unwrap().cached_files,0);
     }
     #[test] fn migration_copies_and_appended_records_reconcile_on_cache_hits() {
         let f=Fixture::new();let mut migrated=message(1);migrated["seq"]=json!(900);
         f.file("session.jsonl",&bytes(&[header(0),message(1)]));f.file("session.v4.jsonl.zstd",&zstd::stream::encode_all(Cursor::new(bytes(&[header(4),migrated])),1).unwrap());
         let prices=parse_prices(&json!({"deepseek":{"models":{"deepseek-chat":{"cost":{"input":1,"output":2,"cache_read":0.1,"cache_write":1}}}}}));
         let first=f.scan(&prices);assert!(first.notes.is_empty());assert_eq!(first.records.len(),1);assert!((first.records[0].cost.unwrap()-0.00021).abs()<1e-10);
-        assert_eq!(f.scan(&prices).sources.last().unwrap().cached_files,2);
+        assert_eq!(f.scan(&prices).sources.iter().find(|s|s.id=="dsh").unwrap().cached_files,2);
         f.file("session.jsonl",&bytes(&[header(0),message(1),message(2)]));
-        let next=f.scan(&prices);assert_eq!(next.records.len(),2);assert_eq!(next.sources.last().unwrap().cached_files,1);
+        let next=f.scan(&prices);assert_eq!(next.records.len(),2);assert_eq!(next.sources.iter().find(|s|s.id=="dsh").unwrap().cached_files,1);
     }
     #[test] fn cancelling_precedes_io_and_no_content_enters_normalized_cache() {
         assert!(read(Path::new("missing/session.jsonl"),&AtomicBool::new(true)).is_err());
@@ -347,7 +350,7 @@ mod tests {
         // Private verification artifact contains counters only, no user paths,
         // session IDs, projects, messages, credentials, or source transcript.
         fs::write(result,serde_json::to_vec_pretty(&json!({"files":files.len(),"records":snapshot.records.len(),"tally":tally,
-            "notes":snapshot.notes,"cachedFiles":again.sources.last().unwrap().cached_files,"readOnlyVerified":true})).unwrap()).unwrap();
+            "notes":snapshot.notes,"cachedFiles":again.sources.iter().find(|s|s.id=="dsh").unwrap().cached_files,"readOnlyVerified":true})).unwrap()).unwrap();
         assert!(!snapshot.records.is_empty());
     }
 }

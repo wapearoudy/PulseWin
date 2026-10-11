@@ -4,7 +4,7 @@ test.beforeEach(async({page})=>{
   await page.addInitScript(()=>{
     const w=window as any;let sequence=0
     const callbacks:Record<number,Function>={},listeners:Record<number,any>={}
-    w.updateState={currentVersion:'0.1.4',settings:{source:'E:/updates',automatic:true},phase:'idle',version:null,notes:null,downloaded:0,total:null,checkedAt:null,error:null}
+    w.updateState={currentVersion:'0.1.4',settings:{source:'E:/updates',automatic:true,backupAutomatic:true,notesLanguage:'auto'},phase:'idle',version:null,notes:null,notesByLanguage:{},downloaded:0,total:null,checkedAt:null,error:null}
     w.updateCommands=[];w.updateAvailable=false;w.updateSignatureFailure=false
     w.updateEmit=(patch:any)=>{Object.assign(w.updateState,patch);Object.values(listeners).filter(x=>x.event==='update-status').forEach(x=>callbacks[x.handler]?.({event:'update-status',payload:structuredClone(w.updateState)}))}
     w.__TAURI_EVENT_PLUGIN_INTERNALS__={unregisterListener:(_:string,id:number)=>delete listeners[id]}
@@ -24,7 +24,7 @@ test.beforeEach(async({page})=>{
       }
       if(cmd==='save_update_settings'){
         if(args.settings.source.startsWith('http://'))throw new Error('不支持普通 HTTP')
-        w.updateEmit({settings:args.settings,phase:'idle',version:null,error:null});return structuredClone(w.updateState)
+        w.updateEmit(args.settings.source===w.updateState.settings.source?{settings:args.settings}:{settings:args.settings,phase:'idle',version:null,error:null});return structuredClone(w.updateState)
       }
       if(cmd==='install_app_update'){
         w.updateEmit({phase:'downloading',downloaded:512,total:1024});await new Promise(r=>setTimeout(r,250))
@@ -37,6 +37,19 @@ test.beforeEach(async({page})=>{
   await expect(page.getByRole('button',{name:'检查更新',exact:true})).toBeEnabled()
 })
 const updater=(page:Page)=>page.getByRole('region',{name:'软件更新'})
+
+test('backup and release-note language persist without removing an available update',async({page})=>{
+  await page.evaluate(()=>{const w=window as any;w.updateEmit({phase:'available',version:'0.1.5',notes:'原文',notesByLanguage:{en:'Translated release notes'},checkedSource:'github-api'})})
+  await expect(updater(page)).toContainText('GitHub 官方 API 备用通道')
+  await page.getByRole('combobox',{name:'发布说明语言'}).selectOption('en')
+  await expect(updater(page)).toContainText('Translated release notes')
+  await expect(page.getByRole('button',{name:'更新并重启'})).toBeEnabled()
+  await page.getByRole('switch',{name:'自动尝试备用通道'}).uncheck()
+  await page.getByRole('combobox',{name:'发布说明语言'}).selectOption('ja')
+  await expect(updater(page)).toContainText('所选语言未提供，显示原文')
+  expect(await page.evaluate(()=>(window as any).updateState.settings)).toEqual({source:'E:/updates',automatic:true,backupAutomatic:false,notesLanguage:'ja'})
+  expect(await page.evaluate(()=>(window as any).updateCommands.filter((x:any)=>x.cmd==='install_app_update'))).toHaveLength(0)
+})
 test('automatic checks and manual no-update checks never install or change accounts',async({page})=>{
   await expect(page.getByRole('switch',{name:'自动检查更新'})).toBeChecked()
   await page.getByRole('button',{name:'检查更新',exact:true}).click()

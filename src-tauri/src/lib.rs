@@ -25,6 +25,12 @@ pub mod application;
 pub mod tray_usage;
 pub mod tray_dashboard;
 pub mod updates;
+pub mod service_status;
+pub mod recap_export;
+pub mod recap_notice;
+pub mod deepseek_console;
+pub mod codex_signals;
+pub mod prompt_cache;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -459,7 +465,11 @@ async fn apply_preferences(app: AppHandle, state: &AppState, mut value: preferen
         token_spend::spend_clear_snapshot();
     }
     let _ = app.emit("preferences-changed", &value);
+    if value.alerts.on_service_outage!=previous.alerts.on_service_outage || value.enabled_providers!=previous.enabled_providers || value.accounts!=previous.accounts {service_status::preferences_changed(&app);}
     if previous.token_spend_enabled && !value.token_spend_enabled { token_spend::spend_clear_snapshot(); token_spend::cancel_card_reads(); }
+    if !value.token_spend_enabled{token_spend::forget_kept();codex_signals::clear();}
+    if value.token_spend_enabled!=previous.token_spend_enabled||network_changed{token_spend::reading_changed();}
+    if value.alerts.on_recap!=previous.alerts.on_recap{recap_notice::check(&app);}
     if value.alerts!=previous.alerts {
         let current=state.snapshot.lock().await.clone();
         let mut memory=state.alert_memory.lock().unwrap();
@@ -1428,8 +1438,15 @@ pub fn run() {
         .manage(AppState::new(ctx))
         .manage(application::ApplicationState::default())
         .manage(updates::UpdateState::default())
+        .manage(service_status::StatusState::default())
         .invoke_handler(tauri::generate_handler![
             get_snapshot,
+            deepseek_console::get_deepseek_console_connection,
+            deepseek_console::begin_deepseek_console_login,
+            deepseek_console::finish_deepseek_console_login,
+            deepseek_console::remove_deepseek_console_login,
+            deepseek_console::get_deepseek_console_history,
+            service_status::get_service_status,
             set_panel_visible,
             tray_dashboard::get_usage_pages,
             tray_dashboard::resize_usage_dashboard,
@@ -1464,7 +1481,12 @@ pub fn run() {
             token_spend::spend_begin_scan,
             token_spend::spend_get_scan,
             token_spend::spend_cancel_scan,
-            token_spend::spend_clear_snapshot
+            token_spend::spend_clear_snapshot,
+            token_spend::spend_kept_snapshot,
+            recap_export::recap_export
+            ,codex_signals::get_codex_signals
+            ,codex_signals::cancel_codex_signal_read
+            ,prompt_cache::get_prompt_cache
             ,token_spend::spend_card_history
             ,application::get_application_settings
             ,application::set_application_shortcut
@@ -1478,6 +1500,9 @@ pub fn run() {
         .setup(|app| {
             application::apply(app.handle());
             updates::watch(app.handle().clone());
+            service_status::watch(app.handle().clone());
+            recap_notice::watch(app.handle().clone());
+            token_spend::watch(app.handle().clone());
             // A missing icon set makes tray creation fail; that must not take the
             // whole app down, since the panel still opens on launch.
             if let Err(e) = build_tray(app) {

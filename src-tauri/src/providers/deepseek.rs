@@ -59,7 +59,7 @@ impl Provider for DeepSeek {
     /// provider also honours are settings on top of a key, never a way in
     /// without one.
     fn is_configured(&self) -> bool {
-        super::provider_key(self.id()).is_some()
+        super::provider_key(self.id()).is_some()||crate::deepseek_console::token().is_some()
     }
 
     fn fetch(&self, ctx: Arc<Ctx>) -> FetchFuture {
@@ -97,7 +97,8 @@ async fn fetch_inner(ctx: Arc<Ctx>) -> ProviderUsage {
 
     let key = match super::provider_key(ID) {
         Some(key) => key,
-        None => return ProviderUsage::failed(ID, NAME, super::missing_key(ID, "")),
+        None if crate::deepseek_console::token().is_none()=>return ProviderUsage::failed(ID,NAME,super::missing_key(ID,"")),
+        None => return match crate::deepseek_console::balance(&ctx).await{Ok(json)=>balance_usage(&json),Err(error)=>ProviderUsage::failed(ID,NAME,error)},
     };
 
     let response = ctx
@@ -141,7 +142,11 @@ async fn fetch_inner(ctx: Arc<Ctx>) -> ProviderUsage {
 
     super::claude_code::debug_dump(ID, &json);
 
-    let purse = match choose_purse(&purses(&json), configured_currency().as_deref()) {
+    balance_usage(&json)
+}
+fn balance_usage(json:&Value)->ProviderUsage{
+    const ID:&str="deepseek";const NAME:&str="DeepSeek";
+    let purse = match choose_purse(&purses(json), configured_currency().as_deref()) {
         Some(p) => p,
         None => return ProviderUsage::failed(ID, NAME, "no balance in response"),
     };

@@ -81,7 +81,7 @@ pub(super) fn read(path: &Path, agent: &str, cancel: &AtomicBool) -> Result<(Vec
         if counts.iter().any(Option::is_none) {notes.push(format!("{agent}：Token 计数无效，计数可能不完整"));continue;}
         let values=counts.map(Option::unwrap);
         let named=fields.iter().any(|v|!v.is_null());
-        let tally=Tally{input:values[0],output:values[1].saturating_add(values[2]),cache_write:values[3],cache_read:values[4]};
+        let tally=Tally {input:values[0],output:values[1].saturating_add(values[2]),cache_write:values[3],cache_read:values[4], ..Default::default() };
         let unclassified=if named {0}else{count(&tokens["total"]).unwrap_or(0)};
         if tally.total()==0 && unclassified==0 {continue;}
         let Some((model,time))=text(&payload["modelID"]).zip(at(&payload["time"]["created"])) else {
@@ -95,7 +95,7 @@ pub(super) fn read(path: &Path, agent: &str, cancel: &AtomicBool) -> Result<(Vec
         let project=if agent=="micode" {text(&payload["path"]["root"]).map(str::to_owned).or_else(||row.get::<_,Option<String>>(3).ok().flatten())}else{row.get::<_,Option<String>>(3).ok().flatten()};
         records.push(SpendRecord{agent:agent.into(),model:model.into(),day:local.format("%Y-%m-%d").to_string(),hour:local.hour(),
             session:sid.into(),project,tally,unclassified_tokens:unclassified,deduplication_id:Some(identity),aggregate_timing:false,
-            source_timestamp:Some(time.timestamp()),source_scope:None,cost:None,cost_breakdown:None,model_name:None});
+            source_timestamp:Some(time.timestamp()),source_scope:None,cost:None,cost_breakdown:None,model_name:None,cache_savings:None,reply_timing:None});
     }
     check(cancel)?; notes.sort();notes.dedup();Ok((records,notes))
 }
@@ -130,7 +130,7 @@ pub(super) fn read(path: &Path, agent: &str, cancel: &AtomicBool) -> Result<(Vec
         insert(&conn,"u1",&json!({"role":"user","tokens":{"input":999}}));drop(conn);
         let before=fs::read(f.dir.join("opencode.db")).unwrap();let scan=f.scan("opencode",&Prices::new());
         assert!(scan.notes.is_empty());assert_eq!(scan.records.len(),1);
-        assert_eq!(scan.records[0].tally,Tally{input:100,output:25,cache_write:7,cache_read:30});
+        assert_eq!(scan.records[0].tally,Tally {input:100,output:25,cache_write:7,cache_read:30, ..Default::default() });
         assert_eq!(scan.records[0].project.as_deref(),Some("C:/project"));assert!(scan.records[0].cost.is_none());
         assert_eq!(fs::read(f.dir.join("opencode.db")).unwrap(),before);
         let normalized=serde_json::to_string(&scan).unwrap();assert!(!normalized.contains("SENSITIVE"));assert!(!normalized.contains("999"));
@@ -183,7 +183,7 @@ pub(super) fn read(path: &Path, agent: &str, cancel: &AtomicBool) -> Result<(Vec
             let f=Fixture::new();let conn=f.db(name);insert(&conn,"m1",&payload());drop(conn);
             let scan=f.scan(agent,&prices);assert_eq!(scan.records.len(),1);assert!((scan.records[0].cost.unwrap()-expected).abs()<1e-10);
         }
-        let mut primary=prices;primary.insert("model-only-on-plan".into(),Price{input:1.,output:3.,cache_read:None,cache_write:None,name:None});
+        let mut primary=prices;primary.insert("model-only-on-plan".into(),Price{input:1.,output:3.,cache_read:None,cache_write:None,name:None,tiers:vec![]});
         assert_eq!(price_for_agent("model-only-on-plan","opencode",&primary).unwrap().input,1.);
     }
     #[test] fn micode_mirrors_fold_by_embedded_identity_and_support_both_epochs() {

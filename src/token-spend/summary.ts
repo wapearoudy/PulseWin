@@ -12,13 +12,26 @@ export function spanDays(span: SpendSpan, now = new Date()): string[] {
 export function totalTokens(record: SpendRecord): number {
   return record.tally.input + record.tally.output + record.tally.cacheWrite + record.tally.cacheRead + (record.unclassifiedTokens ?? 0)
 }
+function exactCounter(value:number,exact?:string):bigint|null{
+  if(exact!==undefined&&/^\d+$/.test(exact))return BigInt(exact)
+  return Number.isSafeInteger(value)&&value>=0?BigInt(value):null
+}
+export function exactRecordTokens(record:SpendRecord):bigint|null{
+  const counts=[exactCounter(record.tally.input,record.exactTally?.input),exactCounter(record.tally.output,record.exactTally?.output),exactCounter(record.tally.cacheWrite,record.exactTally?.cacheWrite),exactCounter(record.tally.cacheRead,record.exactTally?.cacheRead),exactCounter(record.unclassifiedTokens??0,record.exactUnclassifiedTokens)]
+  return counts.some(n=>n===null)?null:counts.reduce<bigint>((sum,n)=>sum+n!,BigInt(0))
+}
+export const exactTokenText=(value:number,exact?:string)=>exact!==undefined?BigInt(exact).toLocaleString('zh-CN'):value.toLocaleString('zh-CN')
 export function amounts(records: SpendRecord[]): SpendAmounts {
   const result: SpendAmounts = { tokens: 0, tally: { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }, cost: records.length ? null : 0, costBreakdown: records.length ? null : [0, 0, 0, 0], unpricedTokens: 0, unclassifiedTokens: 0 }
+  let exact:bigint|null=BigInt(0),unclassified:bigint|null=BigInt(0)
   for (const record of records) {
     const tokens = totalTokens(record); result.tokens += tokens
     result.unclassifiedTokens += record.unclassifiedTokens ?? 0
     result.tally.input += record.tally.input; result.tally.output += record.tally.output
     result.tally.cacheWrite += record.tally.cacheWrite; result.tally.cacheRead += record.tally.cacheRead
+    const count=exactRecordTokens(record),bare=exactCounter(record.unclassifiedTokens??0,record.exactUnclassifiedTokens)
+    exact=exact===null||count===null?null:exact+count;unclassified=unclassified===null||bare===null?null:unclassified+bare
+    result.repliesWithoutCacheFields=(result.repliesWithoutCacheFields??0)+(record.tally.repliesWithoutCacheFields??0)
     if (record.cost === null || record.costBreakdown === null) result.unpricedTokens += tokens
     else {
       result.unpricedTokens += record.unclassifiedTokens ?? 0
@@ -27,6 +40,8 @@ export function amounts(records: SpendRecord[]): SpendAmounts {
       result.costBreakdown = breakdown.map((n, i) => n + record.costBreakdown![i]) as [number, number, number, number]
     }
   }
+  if(exact!==null)result.exactTokens=exact.toString()
+  if(unclassified!==null)result.exactUnclassifiedTokens=unclassified.toString()
   return result
 }
 function groups(records: SpendRecord[], key: (record: SpendRecord) => string | null, name: (record: SpendRecord) => string): SpendGroup[] {
@@ -35,9 +50,9 @@ function groups(records: SpendRecord[], key: (record: SpendRecord) => string | n
     const id = key(record); if (id === null) continue
     const bucket = buckets.get(id) ?? { name: name(record), records: [] }; bucket.records.push(record); buckets.set(id, bucket)
   }
-  return [...buckets].map(([id, bucket]) => ({ id, ...bucket, ...amounts(bucket.records) })).sort((a, b) => b.tokens - a.tokens || a.name.localeCompare(b.name))
+  return [...buckets].map(([id, bucket]) => ({ id, ...bucket, ...amounts(bucket.records) })).sort((a, b) => compareTokens(b,a) || a.name.localeCompare(b.name))
 }
-const agentNames: Record<string, string> = { claude: 'Claude Code', codex: 'Codex', qwen: 'Qwen Code', gemini: 'Gemini CLI', cursor: 'Cursor', antigravity: 'Antigravity', hindsight: 'Hindsight', mcode: 'MCode', opencode: 'OpenCode', kilo: 'Kilo CLI', micode: 'MiMo Code', dsh: 'DeepSeek Harness' }
+const agentNames: Record<string, string> = { claude: 'Claude Code', codex: 'Codex', qwen: 'Qwen Code', gemini: 'Gemini CLI', cursor: 'Cursor', antigravity: 'Antigravity', hindsight: 'Hindsight', mcode: 'MCode', opencode: 'OpenCode', kilo: 'Kilo CLI', micode: 'MiMo Code', dsh: 'DeepSeek Harness',pi:'Pi',omp:'Oh My Pi',kimchi:'Kimchi',amp:'Amp',droid:'Droid',openclaw:'OpenClaw',goose:'Goose',hermes:'Hermes',zed:'Zed',crush:'Crush' }
 export const agentName = (id: string) => agentNames[id] ?? id
 export const modelKey = (record: SpendRecord) => record.modelName ?? record.model
 function projectKey(record: SpendRecord): string | null {
@@ -48,7 +63,15 @@ function projectKey(record: SpendRecord): string | null {
   return /^[a-z]:\//i.test(normalized) || normalized.startsWith('//') ? normalized.toLowerCase() : `${record.agent}:${normalized}`
 }
 export function summarize(all: SpendRecord[], span: SpendSpan, now = new Date(), agent?: string | null, model?: string | null): SpendSummary {
-  const days = spanDays(span, now), allowed = new Set(days)
+  return summarizeDays(all,spanDays(span,now),agent,model)
+}
+export function summarizeBetween(all:SpendRecord[],start:Date,end:Date,agent?:string|null,model?:string|null):SpendSummary{
+  const days:string[]=[]
+  for(let d=new Date(start.getFullYear(),start.getMonth(),start.getDate());d<end&&days.length<370;d=new Date(d.getFullYear(),d.getMonth(),d.getDate()+1))days.push(dayKey(d))
+  return summarizeDays(all,days,agent,model)
+}
+function summarizeDays(all:SpendRecord[],days:string[],agent?:string|null,model?:string|null):SpendSummary{
+  const allowed = new Set(days)
   const records = all.filter(record => allowed.has(record.day) && (!agent || record.agent === agent) && (!model || modelKey(record) === model))
   const dayRecords = new Map<string, SpendRecord[]>(); const hours = Array<number>(24).fill(0)
   const hasAggregateTiming = records.some(record => record.aggregateTiming)
@@ -71,11 +94,14 @@ export function formatCost(value: number | null): string {
   return `US$${value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 /** Unknown amounts stay last in either direction; date resolves numeric ties. */
-export function sortDays<T extends { day: string; tokens: number; cost: number | null }>(days: T[], key: 'day' | 'tokens' | 'cost', descending: boolean): T[] {
+function compareTokens(a:{tokens:number;exactTokens?:string},b:{tokens:number;exactTokens?:string}):number{
+  if(a.exactTokens!==undefined&&b.exactTokens!==undefined){const left=BigInt(a.exactTokens),right=BigInt(b.exactTokens);return left<right?-1:left>right?1:0}return a.tokens-b.tokens
+}
+export function sortDays<T extends { day: string; tokens: number; cost: number | null;exactTokens?:string }>(days: T[], key: 'day' | 'tokens' | 'cost', descending: boolean): T[] {
   return [...days].sort((a, b) => {
     if (key === 'cost') { if (a.cost === null && b.cost !== null) return 1; if (a.cost !== null && b.cost === null) return -1 }
     const left = a[key], right = b[key]
-    const delta = typeof left === 'string' && typeof right === 'string' ? left.localeCompare(right) : Number(left) - Number(right)
+    const delta = key==='tokens'?compareTokens(a,b):typeof left === 'string' && typeof right === 'string' ? left.localeCompare(right) : Number(left) - Number(right)
     return delta ? (descending ? -delta : delta) : b.day.localeCompare(a.day)
   })
 }

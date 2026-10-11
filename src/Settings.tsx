@@ -11,9 +11,13 @@ import { SHAPE_ORDER, SHAPE_LABELS } from './panel/botmark/data'
 import { brandColour } from './panel/botmark/tint'
 import './settings.css'
 import { NotificationsPane, LowBalanceAlert } from './NotificationsPane'
+import { ServiceStatusGroup } from './ServiceStatusGroup'
 import { GeneralPane } from './GeneralPane'
 import { NetworkPane } from './NetworkPane'
 import { AboutPane } from './AboutPane'
+import { PromptCacheGroup } from './PromptCacheGroup'
+import { CodexSignalsGroup } from './CodexSignalsGroup'
+import {DeepSeekConsoleGroup} from './DeepSeekConsoleGroup'
 import { TokenSpendPane, releaseSpendSession } from './token-spend/TokenSpendPane'
 
 function SidebarSymbol({children}:{children:ReactNode}) {
@@ -124,7 +128,7 @@ export default function Settings() {
         : pane === 'general' ? <GeneralPane/>
         : pane === 'network' ? <NetworkPane preferences={prefs} disabled={busy} onChange={change}/>
         : pane === 'about' ? <AboutPane/>
-        : pane === 'token-spend' ? <TokenSpendPane enabled={prefs.tokenSpendEnabled} onEnabledChange={v=>change({tokenSpendEnabled:v})} span={prefs.tokenSpendSpan} onSpanChange={v=>change({tokenSpendSpan:v})}/>
+        : pane === 'token-spend' ? <TokenSpendPane enabled={prefs.tokenSpendEnabled} onEnabledChange={v=>change({tokenSpendEnabled:v})} span={prefs.tokenSpendSpan} onSpanChange={v=>change({tokenSpendSpan:v})} activityView={prefs.spendActivityView} onActivityViewChange={v=>change({spendActivityView:v})} recapMonthlyPrice={prefs.recapMonthlyPrice} recapHidesProjects={prefs.recapHidesProjects} onRecapChange={change}/>
         : pane === 'accounts' ? <>
         <h1>管理账号</h1><p className="page-description">控制面板显示的服务和排列顺序。</p><button onClick={() => { setSelection(prefs.enabledProviders); setChoose(true) }}>选择服务</button>
         <AddAccountForm onCreated={id=>{void reload();setPane(id)}} onError={setError}/><Group title="排列顺序">{shown.filter(p=>prefs.enabledProviders.includes(p.id)).map(p => <div key={p.id} draggable onDragStart={e=>e.dataTransfer.setData('application/x-pulse-account',p.id)} onDragOver={e=>{if(e.dataTransfer.types.includes('application/x-pulse-account'))e.preventDefault()}} onDrop={e=>{e.preventDefault();moveTo(e.dataTransfer.getData('application/x-pulse-account'),p.id)}}><Row title={p.name} subtitle={prefs.enabledProviders.includes(p.id) ? '显示在面板' : '未显示'}><div className="toolbar"><button disabled={busy || orderedEnabled.indexOf(p.id) === 0} aria-label={`上移 ${p.name}`} onClick={() => move(p.id,-1)}>↑</button><button disabled={busy || orderedEnabled.indexOf(p.id) === orderedEnabled.length-1} aria-label={`下移 ${p.name}`} onClick={() => move(p.id,1)}>↓</button></div></Row></div>)}</Group>
@@ -139,6 +143,10 @@ export default function Settings() {
         <Row title="形状"><select aria-label="机器人形状" disabled={busy} value={appearance.body} onChange={e=>setAppearance({body:e.target.value})}>{SHAPE_ORDER.map(id=><option key={id} value={id}>{SHAPE_LABELS[id]?.zh??id}</option>)}</select></Row>
         <Row title="机器人颜色"><div className="toolbar"><input type="color" aria-label="机器人颜色" value={appearance.markColour??'#8e9dff'} disabled={busy} onChange={e=>setAppearance({markColour:e.target.value})}/><button disabled={busy||!appearance.markColour} onClick={()=>setAppearance({markColour:null})}>自动</button></div></Row></>}</Group>
         <Group title="圆环颜色"><Row title="高亮色" subtitle="自动随用量变化；用尽时仍显示深红。"><div className="toolbar"><input type="color" aria-label="圆环高亮色" value={appearance.ringColour??'#00e68c'} disabled={busy} onChange={e=>setAppearance({ringColour:e.target.value})}/><button disabled={busy||!appearance.ringColour} onClick={()=>setAppearance({ringColour:null})}>自动</button></div></Row></Group><AccountDetails key={provider.id} provider={provider} usage={snapshot?.providers.find(p => p.id === pane)} onError={setError} onChanged={reload} /></> : <Group title="当前用量"><p className="group-copy">未显示。启用后配置连接并检查用量。</p></Group>}
+        {(provider.providerId??provider.id)==='deepseek'&&<DeepSeekConsoleGroup enabled={enabled} onChanged={reload}/>}
+        {['codex','claude-code','deepseek'].includes(provider.providerId??provider.id)&&<ServiceStatusGroup key={provider.id} provider={provider.id} base={provider.providerId??provider.id}/>}
+        {['codex','claude-code'].includes(provider.providerId??provider.id)&&<PromptCacheGroup provider={provider.providerId??provider.id} enabled={prefs.tokenSpendEnabled}/>}
+        {(provider.providerId??provider.id)==='codex'&&<CodexSignalsGroup enabled={prefs.tokenSpendEnabled}/>}
       </> : null}
     </main>
   </div>

@@ -6,7 +6,7 @@ use super::*;
 
 // A future change to persisted counters/shape must bump this and migrate older
 // journals, rather than silently dropping fields on an older application's read.
-const FORMAT:u32=1;
+const FORMAT:u32=2;
 const MAX_BYTES:u64=128*1024*1024;
 pub(super) fn file_key(path:&Path)->String{
     // FNV-1a, fixed across launches/compiler upgrades (DefaultHasher's
@@ -31,23 +31,25 @@ impl History {
         };
         let journal=if let Some(bytes)=&previous {
             match serde_json::from_slice::<Journal>(bytes) {
-                Ok(v) if v.format==FORMAT && v.files.values().all(|e| e.records.len()<=MAX_RECORDS && e.records.iter().all(|r|
-                    r.agent==agent && r.hour<24 && !r.model.trim().is_empty()
+                Ok(mut v) if (1..=FORMAT).contains(&v.format) && v.files.values().all(|e| e.records.len()<=MAX_RECORDS && e.records.iter().all(|r|
+                    r.tally.valid() && r.agent==agent && r.hour<24 && !r.model.trim().is_empty()
                     && chrono::NaiveDate::parse_from_str(&r.day,"%Y-%m-%d").is_ok()
-                    && (r.tally.total()>0 || r.unclassified_tokens>0)))=>v,
+                    && (r.tally.total()>0 || r.unclassified_tokens>0)))=>{if v.format==1{for e in v.files.values_mut(){for r in &mut e.records{migrate_timestamp(r);}}}v.format=FORMAT;v},
                 _=>{notes.push(format!("{agent}：历史文件损坏或格式较新，已保留原文件；本次仅显示可读取的源记录"));return None}
             }
         } else { Journal{format:FORMAT,..Default::default()} };
+        if agent=="codex"&&journal.files.values().any(|e|e.readings<8&&e.records.iter().any(|r|r.source_scope.is_none())){notes.push("Codex：早期历史缓存没有分叉来源标记；仍在的源文件会重新校正，已删除源文件的继承量无法核验。".into());}
         Some(Self{path,previous,journal})
     }
 
-    pub(super) fn reconcile(&mut self, live:Vec<(String,Vec<SpendRecord>)>, stable:bool,
+    pub(super) fn reconcile(&mut self, mut live:Vec<(String,Vec<SpendRecord>)>, stable:bool,
         identities:&mut HashSet<String>, cancel:&AtomicBool)->Result<(Vec<SpendRecord>,usize),String> {
         let paths:HashSet<_>=live.iter().map(|(p,_)|p.as_str()).collect();
         let mut out=Vec::new();
         // Kept records retain ownership even if a resumed/forked transcript
         // contains copies. A returned file is read live, replacing its old row.
-        for (path,entry) in &self.journal.files {
+        let mut kept=self.journal.files.iter().collect::<Vec<_>>();kept.sort_by_key(|(path,entry)|(entry.records.iter().any(is_codex_fork),path.as_str()));
+        for (path,entry) in kept {
             if paths.contains(path.as_str()){continue}
             for record in &entry.records {
                 check(cancel)?;
@@ -55,6 +57,7 @@ impl History {
             }
         }
         let retained=out.len();
+        order_live(&mut live);
         for (path,records) in live {
             check(cancel)?;
             let counted:Vec<_>=records.into_iter().filter(|r|claim(r,identities)).collect();
@@ -77,7 +80,15 @@ impl History {
 }
 
 pub(super) fn claim(record:&SpendRecord,identities:&mut HashSet<String>)->bool {
+    if let Some(scope)=record.source_scope.as_deref(){
+        if let Some(total)=scope.strip_prefix("codex-fork:"){if identities.contains(&format!("codex-total:{total}")){return false}}
+        if let Some(total)=scope.strip_prefix("codex-original:").or_else(||scope.strip_prefix("codex-fork:")){identities.insert(format!("codex-total:{total}"));}
+    }
     record.deduplication_id.as_ref().map(|id|identities.insert(id.clone())).unwrap_or(true)
+}
+fn is_codex_fork(r:&SpendRecord)->bool{r.source_scope.as_deref().is_some_and(|s|s.starts_with("codex-fork:"))}
+pub(super) fn order_live(live:&mut [(String,Vec<SpendRecord>)]){
+    live.sort_by(|(a,ar),(b,br)| (ar.iter().any(is_codex_fork),ar.first().map(|r|(&r.day,r.hour)),a).cmp(&(br.iter().any(is_codex_fork),br.first().map(|r|(&r.day,r.hour)),b)));
 }
 
 /// Stores read as whole ledgers can delete individual rows. Keep the largest
@@ -97,10 +108,10 @@ impl StoreHistory {
         if path.exists()&&previous.is_none(){notes.push(format!("{agent}：历史文件无法读取，已保留原文件"));return None}
         let marks=if let Some(bytes)=&previous {
             match serde_json::from_slice::<Marks>(bytes){
-                Ok(m) if m.format==FORMAT && m.records.len()<=MAX_RECORDS && (-86400..=86400).contains(&m.offset) && m.records.iter().all(|r|
-                    r.agent==agent && r.hour<24 && !r.model.trim().is_empty()
+                Ok(mut m) if (1..=FORMAT).contains(&m.format) && m.records.len()<=MAX_RECORDS && (-86400..=86400).contains(&m.offset) && m.records.iter().all(|r|
+                    r.tally.valid() && r.agent==agent && r.hour<24 && !r.model.trim().is_empty()
                     && chrono::NaiveDate::parse_from_str(&r.day,"%Y-%m-%d").is_ok()
-                    && (r.tally.total()>0 || r.unclassified_tokens>0))=>m,
+                    && (r.tally.total()>0 || r.unclassified_tokens>0))=>{if m.format==1{for r in &mut m.records{migrate_timestamp(r);}}m.format=FORMAT;m},
                 _=>{notes.push(format!("{agent}：历史文件损坏或格式较新，已保留原文件；本次仅显示源记录"));return None}
             }
         }else{Marks{format:FORMAT,readings:TRANSCRIPT_VERSION,offset:Local::now().offset().local_minus_utc(),records:vec![]}};
@@ -141,7 +152,7 @@ impl StoreHistory {
             check(cancel)?;
             let mut added=held.clone();let empty=Tally::default();let base=current.get(key);
             let tally=base.map(|r|&r.tally).unwrap_or(&empty);
-            added.tally=Tally{input:held.tally.input.saturating_sub(tally.input),output:held.tally.output.saturating_sub(tally.output),cache_write:held.tally.cache_write.saturating_sub(tally.cache_write),cache_read:held.tally.cache_read.saturating_sub(tally.cache_read)};
+            added.tally=held.tally.removing(tally);
             added.unclassified_tokens=held.unclassified_tokens.saturating_sub(base.map(|r|r.unclassified_tokens).unwrap_or(0));
             if added.tally.total()>0||added.unclassified_tokens>0{live.push(added)}
         }
@@ -161,13 +172,20 @@ fn mark_key(r:&SpendRecord)->(String,String){
     let time=if !r.aggregate_timing {r.source_timestamp.map(|t|format!("utc:{}",t.div_euclid(900))).unwrap_or_else(||format!("hour:{}:{}",r.day,r.hour))}else{format!("day:{}",r.day)};
     (time,r.model.clone())
 }
-fn highest(a:&mut Tally,b:&Tally){a.input=a.input.max(b.input);a.output=a.output.max(b.output);a.cache_write=a.cache_write.max(b.cache_write);a.cache_read=a.cache_read.max(b.cache_read);}
+fn highest(a:&mut Tally,b:&Tally){a.input=a.input.max(b.input);a.output=a.output.max(b.output);a.cache_write=a.cache_write.max(b.cache_write);a.cache_read=a.cache_read.max(b.cache_read);a.cache_write_1h=a.cache_write_1h.max(b.cache_write_1h).min(a.cache_write);}
+fn migrate_timestamp(r:&mut SpendRecord){
+    // Format 1 mixed seconds (transcript/OpenCode) and milliseconds (exports,
+    // Gemini/Harness). Format 2 and the native contract use epoch seconds.
+    if matches!(r.agent.as_str(),"gemini"|"cursor"|"antigravity"|"hindsight"|"mcode"|"dsh"){
+        if let Some(ts)=r.source_timestamp{r.source_timestamp=Some(ts.div_euclid(1000));}
+    }
+}
 fn totals(records:&[SpendRecord])->BTreeMap<(String,String),SpendRecord>{
     let mut sums=BTreeMap::new();
     for r in records{
         let sum=sums.entry(mark_key(r)).or_insert_with(||{
             let mut r=r.clone();r.session.clear();r.project=None;r.deduplication_id=None;r.source_scope=Some("retained-store-total".into());
-            r.cost=None;r.cost_breakdown=None;r.model_name=None;r.tally=Tally::default();r.unclassified_tokens=0;r
+            r.cost=None;r.cache_savings=None;r.cost_breakdown=None;r.model_name=None;r.tally=Tally::default();r.unclassified_tokens=0;r
         });
         sum.tally.add(&r.tally);sum.unclassified_tokens=sum.unclassified_tokens.saturating_add(r.unclassified_tokens);
     }

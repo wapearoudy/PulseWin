@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { beginSpendScan, cancelSpendScan, clearSpendSnapshot, getSpendScan } from './api'
-import { agentName, formatCost, shortTokens, sortDays, summarize } from './summary'
+import { beginSpendScan, cancelSpendScan, clearSpendSnapshot, getSpendScan,getKeptSpendSnapshot } from './api'
+import { agentName, exactTokenText, formatCost, shortTokens, sortDays, summarize } from './summary'
 import type { SpendAmounts, SpendGroup, SpendSnapshot, SpendSpan } from './types'
 import './token-spend.css'
+import { TokenActivityView } from './TokenActivityView'
+import type { ActivityView } from './activity'
+import { RecapPane } from './RecapPane'
 
 // A completed result belongs to this Settings webview. Sidebar round trips do
 // not discover stores again. Closing this webview naturally releases this copy.
@@ -20,11 +23,16 @@ export interface TokenSpendPaneProps {
   onEnabledChange: (enabled: boolean) => void
   span?: SpendSpan
   onSpanChange?: (span: SpendSpan) => void
+  activityView?:ActivityView
+  onActivityViewChange?:(view:ActivityView)=>void
+  recapMonthlyPrice?:number|null
+  recapHidesProjects?:boolean
+  onRecapChange?:(patch:{recapMonthlyPrice?:number|null;recapHidesProjects?:boolean})=>void
 }
 const spans: [SpendSpan, string][] = [['today', '今天'], ['week', '最近 7 天'], ['month', '最近 30 天']]
 // This list is about actual readers, not provider registrations. Antigravity's
 // original catalog uses separate labels for CLI/IDE native stores and capture.
-const pendingSources = ['Grok Build','Kimi CLI','Devin','Pi','Oh My Pi','OmO Native','Kimchi','Prime Agent','Amp','Droid','OpenClaw','Roo Code','Kilo Code','Cline','CodeBuddy','WorkBuddy','Cherry Studio','Command Code','OpenCodeReview','ZCode','Hermes','Goose','Zed','Kiro','Crush','Unsloth','Antigravity CLI','Antigravity IDE','Devin Desktop','Mux','Codebuff','Freebuff','JCode','Augment','Gajae Code','Junie','Fx','LM Studio','Reasonix','Trae','Warp','Copilot']
+const pendingSources = ['Grok Build','Kimi CLI','Devin','OmO Native','Prime Agent','Roo Code','Kilo Code','Cline','CodeBuddy','WorkBuddy','Cherry Studio','Command Code','OpenCodeReview','ZCode','Kiro','Unsloth','Antigravity CLI','Antigravity IDE','Devin Desktop','Mux','Codebuff','Freebuff','JCode','Augment','Gajae Code','Junie','Fx','LM Studio','Reasonix','Trae','Warp','Copilot']
 const exportHelp: Record<string, string> = {
   dsh: '自动读取 DeepSeek Harness 的 sessions 会话目录（默认 ~/.dsh，可通过 DSH_HOME 指定）。支持普通、版本化及 Zstandard 压缩 JSONL，分别统计输入、输出和缓存；分叉历史与迁移副本去重。CLI 与当前桌面版共享此目录。',
   cursor: '需要事先导出 Cursor usageEventsDisplay JSON 或带四类计数列的 CSV。不会读取 Cursor 原生日志或自动登录；CSV 只用于日统计。',
@@ -33,8 +41,10 @@ const exportHelp: Record<string, string> = {
   mcode: '需要事先捕获 mcode exec --output-format stream-json 输出为 JSONL；不会运行客户端。',
 }
 
-export function TokenSpendPane({ enabled, onEnabledChange, span: savedSpan, onSpanChange }: TokenSpendPaneProps) {
+export function TokenSpendPane({ enabled, onEnabledChange, span: savedSpan, onSpanChange,activityView:savedView,onActivityViewChange,recapMonthlyPrice=null,recapHidesProjects=false,onRecapChange }: TokenSpendPaneProps) {
+  const [showRecap,setShowRecap]=useState(false)
   const [localSpan, setLocalSpan] = useState<SpendSpan>('week')
+  const [localActivity,setLocalActivity]=useState<ActivityView>('daily'),activityView=savedView??localActivity
   const span = savedSpan && spans.some(([id]) => id === savedSpan) ? savedSpan : localSpan
   const [snapshot, setSnapshot] = useState<SpendSnapshot | null>(retainedSnapshot)
   const [loading, setLoading] = useState(false), [progress, setProgress] = useState('')
@@ -45,10 +55,10 @@ export function TokenSpendPane({ enabled, onEnabledChange, span: savedSpan, onSp
   const [sortKey, setSortKey] = useState<'day' | 'tokens' | 'cost'>('day'), [descending, setDescending] = useState(true)
   const summary = useMemo(() => summarize(snapshot?.records ?? [], span, new Date(), agent, model), [snapshot, span, agent, model])
   const sortedDays = useMemo(() => sortDays(summary.days, sortKey, descending), [summary.days, sortKey, descending])
-  const start = useCallback(async (force: boolean) => {
+  const start = useCallback(async (force: boolean,keep=false) => {
     if (!enabled) return
     const turn = ++generation.current
-    retainedSnapshot = null; setSnapshot(null); setError(null); setLoading(true); setProgress('正在准备读取…')
+    if(!keep){retainedSnapshot = null; setSnapshot(null)} setError(null); setLoading(true); setProgress('正在准备读取…')
     try {
       const id = await beginSpendScan(true, force)
       if (!mounted.current || generation.current !== turn) { await cancelSpendScan(id); return }
@@ -71,7 +81,13 @@ export function TokenSpendPane({ enabled, onEnabledChange, span: savedSpan, onSp
   }, [enabled])
   useEffect(() => {
     mounted.current = true
-    if (enabled) { if (retainedSnapshot) setSnapshot(retainedSnapshot); else void start(false) }
+    if (enabled) {
+      if (retainedSnapshot) { setSnapshot(retainedSnapshot); if (!Number.isFinite(Date.parse(retainedSnapshot.scannedAt)) || Date.now()-Date.parse(retainedSnapshot.scannedAt)>120_000) void start(false,true) }
+      else {const turn=generation.current;void getKeptSpendSnapshot().then(value=>{
+        if(!mounted.current||generation.current!==turn)return
+        if(value){retainedSnapshot=value;setSnapshot(value);if(Date.now()-Date.parse(value.scannedAt)>120_000)void start(false,true)}else void start(false)
+      }).catch(()=>{if(mounted.current&&generation.current===turn)void start(false)})}
+    }
     else { generation.current++; releaseSpendSession(); setSnapshot(null); setLoading(false); setAgent(null); setModel(null) }
     return () => {
       mounted.current = false; generation.current++
@@ -89,7 +105,7 @@ export function TokenSpendPane({ enabled, onEnabledChange, span: savedSpan, onSp
     <h1 id="token-spend-title">Token 花费</h1>
     <p className="page-description">从本机记录查看 Token 去向，按公开 API 价格估算金额。</p>
     <div className="spend-opt-in">
-      <div><strong>读取本机用量记录</strong><p>默认关闭。开启后读取 Claude Code、Codex、Qwen Code、Gemini CLI、DeepSeek Harness 等工具的本机计数及已有导出文件，并获取 models.dev 公开价格；不保存对话正文。</p></div>
+      <div><strong>读取本机用量记录</strong><p>默认关闭。开启后读取 Claude Code、Codex、Qwen Code、Gemini CLI、DeepSeek Harness 等工具的本机计数及已有导出文件，并获取 models.dev 公开价格；不保存对话正文。开启后会在后台每 10 分钟更新；关闭后停止读取并清除内存结果。</p></div>
       <input role="switch" aria-label="读取本机 Token 用量记录" type="checkbox" checked={enabled} onChange={event => onEnabledChange(event.target.checked)} />
     </div>
     {enabled && <>
@@ -112,10 +128,13 @@ export function TokenSpendPane({ enabled, onEnabledChange, span: savedSpan, onSp
         </div>
         {summary.unpricedTokens > 0 && <p className="spend-notice">{shortTokens(summary.unpricedTokens)} Token 无法计价，已计入 Token 总量；可能缺少公开价格或 Token 分类，金额估算未包含这部分。</p>}
         {snapshot.notes.length > 0 && <details className="spend-notice"><summary>计数可能不完整 · {snapshot.notes.length} 条读取说明</summary>{snapshot.notes.map((note, index) => <p key={index}>{note}</p>)}</details>}
+        <button onClick={()=>setShowRecap(true)}>月度 / 年度回顾</button>
+        {showRecap&&<RecapPane records={snapshot.records} monthlyPrice={recapMonthlyPrice} hidesProjects={recapHidesProjects} onChange={v=>onRecapChange?.(v)} onClose={()=>setShowRecap(false)} partial={snapshot.notes.length>0}/>}
         {summary.tokens === 0 && <p className="spend-empty">此时间范围内没有读到 Token 用量。可以扩大时间范围或重新扫描。</p>}
+        <TokenActivityView records={snapshot.records} view={activityView} onChange={v=>{setLocalActivity(v);onActivityViewChange?.(v)}} agent={agent} model={model} partial={snapshot.notes.length>0}/>
         <div className="spend-charts"><Chart title="每日 Token" labels={summary.days.map(d => d.day)} values={summary.days.map(d => d.tokens)} />{summary.hasAggregateTiming ? <section className="spend-card spend-chart"><h2>小时分布</h2><p className="spend-empty">此范围包含仅能用于日统计的导出记录，无法确定请求时段。小时分布与最活跃时段不可用。</p></section> : <Chart title="小时分布" labels={summary.hours.map((_, hour) => `${String(hour).padStart(2,'0')}:00`)} values={summary.hours} />}</div>
         <section className="spend-card"><h2>Token 分类</h2><div className="spend-splits">
-          {([['新输入',summary.tally.input,0],['输出',summary.tally.output,1],['缓存写入',summary.tally.cacheWrite,2],['缓存读取',summary.tally.cacheRead,3]] as const).map(([name,value,index]) => <div key={name}><span>{summary.unclassifiedTokens > 0 ? '已分类 · ' : ''}{name}</span><strong title={summary.unclassifiedTokens === summary.tokens && summary.tokens > 0 ? '来源仅报告总量，分类不可用' : value.toLocaleString('zh-CN')}>{summary.unclassifiedTokens === summary.tokens && summary.tokens > 0 ? '—' : shortTokens(value)}</strong><small>{formatCost(summary.costBreakdown?.[index] ?? null)}</small></div>)}
+          {([['新输入',summary.tally.input,0],['输出',summary.tally.output,1],['缓存写入',summary.tally.cacheWrite,2],['缓存读取',summary.tally.cacheRead,3]] as const).map(([name,value,index]) => <div key={name}><span>{summary.unclassifiedTokens > 0 ? '已分类 · ' : ''}{name}</span><strong title={summary.unclassifiedTokens === summary.tokens && summary.tokens > 0 ? '来源仅报告总量，分类不可用' : (index===2||index===3)&&summary.repliesWithoutCacheFields&&summary.tally.cacheWrite===0&&summary.tally.cacheRead===0 ? '来源未报告缓存分类' : value.toLocaleString('zh-CN')}>{summary.unclassifiedTokens === summary.tokens && summary.tokens > 0 || ((index===2||index===3)&&summary.repliesWithoutCacheFields&&summary.tally.cacheWrite===0&&summary.tally.cacheRead===0) ? '—' : shortTokens(value)}</strong><small>{(index===2||index===3)&&summary.repliesWithoutCacheFields&&summary.tally.cacheWrite===0&&summary.tally.cacheRead===0?'—':formatCost(summary.costBreakdown?.[index] ?? null)}</small></div>)}
         </div>{summary.unclassifiedTokens > 0 && <p className="spend-footnote">未分类：{shortTokens(summary.unclassifiedTokens)} Token。来源报告了总量但不能证明各分类；计入总量，不计价。</p>}{summary.unpricedTokens > 0 && summary.cost !== null && <p className="spend-footnote">分类金额覆盖可计价部分。</p>}</section>
         {!model && <section className="spend-card"><h2>模型</h2>{summary.models.length ? <>
           <GroupRows groups={summary.models.slice(modelPage * 8, (modelPage + 1) * 8)} onOpen={group => setModel(group.id)} />
@@ -124,10 +143,10 @@ export function TokenSpendPane({ enabled, onEnabledChange, span: savedSpan, onSp
         {(!agent || model) && <section className="spend-card"><h2>{model ? 'Agent 贡献' : 'Agent'}</h2><GroupRows groups={summary.agents} onOpen={group => { setAgent(group.id); if (!model) setModel(null) }} /></section>}
         <section className="spend-card"><h2>每日明细</h2><div className="spend-table-scroll"><table className="spend-table"><thead><tr>
           {([['day','日期'],['tokens','Token'],['cost','API 金额估算']] as const).map(([key,label]) => <th key={key} aria-sort={sortKey === key ? descending ? 'descending' : 'ascending' : 'none'}><button onClick={() => sort(key)}>{label}{sortKey === key ? descending ? ' ↓' : ' ↑' : ''}</button></th>)}
-        </tr></thead><tbody>{sortedDays.slice(dayPage * 10, (dayPage + 1) * 10).map(day => <tr key={day.day}><td>{day.day}</td><td title={day.tokens.toLocaleString('zh-CN')}>{shortTokens(day.tokens)}</td><td title={day.cost === null ? '金额不可用' : `US$${day.cost.toPrecision(8)}`}>{formatCost(day.cost)}{day.unpricedTokens > 0 && day.cost !== null ? ' *' : ''}</td></tr>)}</tbody></table></div><Pagination page={dayPage} total={sortedDays.length} size={10} onChange={setDayPage} /></section>
+        <th>未分类 Token</th></tr></thead><tbody>{sortedDays.slice(dayPage * 10, (dayPage + 1) * 10).map(day => <tr key={day.day}><td>{day.day}</td><td title={exactTokenText(day.tokens,day.exactTokens)}>{shortTokens(day.tokens)}</td><td title={day.cost === null ? '金额不可用' : `US$${day.cost.toPrecision(8)}`}>{formatCost(day.cost)}{day.unpricedTokens > 0 && day.cost !== null ? ' *' : ''}</td><td title={exactTokenText(day.unclassifiedTokens,day.exactUnclassifiedTokens)}>{shortTokens(day.unclassifiedTokens)}</td></tr>)}</tbody></table></div><Pagination page={dayPage} total={sortedDays.length} size={10} onChange={setDayPage} /></section>
         {!model && <><section className="spend-card"><h2>会话 · {summary.sessions.length}</h2><GroupRows groups={summary.sessions.slice(sessionPage * 8, (sessionPage + 1) * 8)} /><Pagination page={sessionPage} total={summary.sessions.length} size={8} onChange={setSessionPage} /><p className="spend-footnote">会话按本机记录标识区分，不读取对话标题或正文。</p></section>
           <section className="spend-card"><h2>项目</h2><GroupRows groups={summary.projects} /><p className="spend-footnote">仅显示记录中明确写出的项目路径；缺少路径的会话仍计入总量。</p></section></>}
-        <section className="spend-card spend-sources"><h2>读取来源</h2>{snapshot.sources.map(source => <div key={source.id}><strong>{source.name}{source.origin === 'export' ? ' · 导出 / 捕获' : ''}</strong><span>{source.status === 'counted' ? `${source.files} 个记录文件 · ${source.cachedFiles} 个缓存命中${source.retainedRecords ? ` · 保留 ${source.retainedRecords} 条历史计数` : ''}` : source.status === 'no-data' ? '未读取到用量' : source.origin === 'export' ? '尚无导出 / 捕获文件' : '未检测到记录目录'}</span></div>)}
+        <section className="spend-card spend-sources"><h2>读取来源</h2>{snapshot.sources.map(source => <div key={source.id}><strong>{source.name}{source.origin === 'export' ? ' · 导出 / 捕获' : ''}</strong><span>{source.status === 'counted' ? `${source.files} 个记录文件 · ${source.cachedFiles} 个缓存命中${source.retainedRecords ? ` · 保留 ${source.retainedRecords} 条历史计数` : ''}` : source.status === 'no-data' ? source.id === 'crush' ? '已识别 · 来源只报告费用，无法确定 Token 计数' : '未读取到用量' : source.origin === 'export' ? '尚无导出 / 捕获文件' : '未检测到记录目录'}</span></div>)}
           <details><summary>支持格式与读取位置 · {snapshot.sources.length} 个实际 reader</summary>{snapshot.sources.map(source => <section key={source.id}><strong>{source.name}</strong>{exportHelp[source.id] && <p>{exportHelp[source.id]}</p>}{source.roots?.map(root => <p key={root}>{root}</p>)}</section>)}<p>UsageImports 文件夹需要自行放入符合格式的导出；不会扫描其他任意文件夹。</p></details>
           <details><summary>其他 {pendingSources.length} 个原版来源尚未移植</summary><p>{pendingSources.join('、')}</p><p>这些来源未扫描，未被算作已覆盖，也未以零用量代替读取。</p></details>
         </section>

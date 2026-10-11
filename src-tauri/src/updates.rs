@@ -11,11 +11,11 @@ const MAX_PACKAGE: u64 = 256 * 1024 * 1024;
 const EVENT: &str = "update-status";
 
 #[derive(Clone, Serialize, Deserialize)]
-#[serde(rename_all="camelCase")]
-pub struct UpdateSettings { pub source: String, pub automatic: bool }
+#[serde(rename_all="camelCase",default)]
+pub struct UpdateSettings { pub source:String, pub automatic:bool, pub backup_automatic:bool, pub notes_language:String }
 impl Default for UpdateSettings {
     fn default() -> Self {
-        Self { source: include_str!("../update-channel.txt").trim().into(), automatic: true }
+        Self { source:include_str!("../update-channel.txt").trim().into(),automatic:true,backup_automatic:true,notes_language:"auto".into() }
     }
 }
 #[derive(Clone, Serialize)]
@@ -23,13 +23,14 @@ impl Default for UpdateSettings {
 pub struct Status {
     pub current_version: String, pub settings: UpdateSettings,
     pub phase: String, pub version: Option<String>, pub notes: Option<String>,
+    pub notes_by_language:std::collections::HashMap<String,String>,pub checked_source:Option<String>,
     pub downloaded: u64, pub total: Option<u64>, pub checked_at: Option<String>, pub error: Option<String>,
 }
 impl Default for Status {
     fn default() -> Self {
         Self { current_version: env!("CARGO_PKG_VERSION").into(), settings: load(),
             phase: "idle".into(), version: None, notes: None, downloaded: 0,
-            total: None, checked_at: None, error: None }
+            total: None, checked_at: None, error: None,notes_by_language:Default::default(),checked_source:None }
     }
 }
 #[derive(Default)]
@@ -69,7 +70,7 @@ fn validate_source(source:&str) -> Result<Source,String> {
     Ok(Source::Local(path))
 }
 #[derive(Deserialize)]
-struct LocalManifest { version:String, #[serde(default)] notes:Option<String>, file:String, signature:String }
+struct LocalManifest { version:String, #[serde(default)] notes:Option<String>,file:String,signature:String,#[serde(default,rename="notesByLanguage")] notes_by_language:std::collections::HashMap<String,String> }
 fn parse_local(bytes:&[u8],root:&Path) -> Result<(LocalManifest,PathBuf),String> {
     if bytes.len() as u64>MAX_MANIFEST {return Err("更新清单超过大小限制。".into());}
     let manifest:LocalManifest=serde_json::from_slice(bytes).map_err(|_|"更新清单格式无效。")?;
@@ -97,6 +98,7 @@ pub fn get_update_status(state:State<'_,UpdateState>) -> Status { state.status.l
 #[tauri::command]
 pub async fn save_update_settings(app:AppHandle, settings:UpdateSettings) -> Result<Status,String> {
     validate_source(&settings.source)?;
+    if !["auto","zh-CN","zh-TW","en","ja","ko"].contains(&settings.notes_language.as_str()){return Err("请选择有效的发布说明语言。".into())}
     let state=app.state::<UpdateState>();
     let _operation=state.operation.try_lock().map_err(|_|"正在检查或更新，请稍后修改来源。")?;
     let settings=UpdateSettings{source:settings.source.trim().into(),..settings};
@@ -106,22 +108,65 @@ pub async fn save_update_settings(app:AppHandle, settings:UpdateSettings) -> Res
     let previous=std::fs::read(&path).ok();
     crate::credential_store::atomic_write(&path,&serde_json::to_vec_pretty(&settings).map_err(|_|"无法保存更新设置。")?,previous.as_deref())
         .map_err(|_|"无法保存更新设置，请重试。")?;
-    Ok(publish(&app,|s|{s.settings=settings;s.phase="idle".into();s.version=None;s.notes=None;s.error=None;}))
+    Ok(publish(&app,|s|{if s.settings.source!=settings.source{s.phase="idle".into();s.version=None;s.notes=None;s.notes_by_language.clear();s.checked_source=None;s.error=None;}s.settings=settings;}))
 }
 
 fn online_builder(app:&AppHandle,url:reqwest::Url) -> Result<tauri_plugin_updater::Updater,String> {
     let mut builder=app.updater_builder().endpoints(vec![url]).map_err(|_|"更新地址无效。")?
         .timeout(Duration::from_secs(30));
-    if let Some(proxy)=crate::proxy::system_proxy().and_then(|p|p.parse().ok()) {builder=builder.proxy(proxy);}
+    let network=app.state::<crate::AppState>().preferences.lock().unwrap().network_proxy.clone();
+    let policy=crate::proxy::Policy::capture(&network)?;
+    // Validate before building the infallible updater client callback. This
+    // gives the updater the same manual/system/environment route as quota.
+    let _ = policy.configure_updater(updater_http::Client::builder())?;
+    builder=builder.configure_client(move|client|policy.configure_updater(client).expect("validated updater proxy policy"));
     builder.build().map_err(|_|"无法初始化更新程序。".into())
+}
+
+fn github_repository(url:&reqwest::Url)->Option<(String,String)>{
+    if url.host_str()!=Some("github.com"){return None}let p=url.path_segments()?.collect::<Vec<_>>();
+    if p.len()!=6 || p[2..]!=["releases","latest","download","latest.json"]{return None}
+    let valid=|s:&str|!s.is_empty()&&s!="."&&s!=".."&&s.len()<=120&&s.bytes().all(|b|b.is_ascii_alphanumeric()||b"_-.".contains(&b));
+    (valid(p[0])&&valid(p[1])).then(||(p[0].into(),p[1].into()))
+}
+fn github_asset(v:&serde_json::Value,owner:&str,repo:&str)->Result<reqwest::Url,String>{
+    let a=v["assets"].as_array().and_then(|a|a.iter().find(|a|a["name"]=="latest.json"&&a["state"]=="uploaded")).ok_or("GitHub 备用通道没有已发布的更新清单。")?;
+    if !a["size"].as_u64().is_some_and(|n|n>0&&n<=MAX_MANIFEST){return Err("备用更新清单大小无效。".into())}
+    let url=a["url"].as_str().ok_or("备用更新地址无效。")?.parse::<reqwest::Url>().map_err(|_|"备用更新地址无效。")?;
+    let prefix=format!("/repos/{owner}/{repo}/releases/assets/");
+    if url.scheme()!="https"||url.host_str()!=Some("api.github.com")||!url.username().is_empty()||url.password().is_some()||url.query().is_some()||url.fragment().is_some()||!url.path().strip_prefix(&prefix).is_some_and(|id|!id.is_empty()&&id.bytes().all(|b|b.is_ascii_digit())){return Err("GitHub 备用地址与发布仓库不一致。".into())}
+    Ok(url)
+}
+async fn github_backup(app:&AppHandle,url:&reqwest::Url)->Result<tauri_plugin_updater::Updater,String>{
+    let (owner,repo)=github_repository(url).ok_or("此更新来源没有 GitHub 备用通道。")?;
+    let state=app.state::<crate::AppState>();let prefs=state.preferences.lock().unwrap().clone();
+    let ctx=crate::providers::Ctx::current(&state.ctx,&prefs.network_proxy).map_err(|_|"无法应用更新代理设置。")?;
+    let mut response=ctx.client.get(format!("https://api.github.com/repos/{owner}/{repo}/releases/latest")).header("Accept","application/vnd.github+json").timeout(Duration::from_secs(20)).send().await.map_err(|_|"无法连接 GitHub 备用通道。")?;
+    if !response.status().is_success(){return Err(format!("GitHub 备用通道返回 HTTP {}。",response.status().as_u16()))}
+    let mut bytes=vec![];while let Some(chunk)=response.chunk().await.map_err(|_|"无法读取备用更新清单。")?{if bytes.len()+chunk.len()>MAX_MANIFEST as usize{return Err("备用清单超过大小限制。".into())}bytes.extend_from_slice(&chunk)}
+    let value=serde_json::from_slice(&bytes).map_err(|_|"GitHub 备用清单无效。")?;
+    let endpoint=github_asset(&value,&owner,&repo)?;
+    let network=state.preferences.lock().unwrap().network_proxy.clone();let policy=crate::proxy::Policy::capture(&network)?;let _ = policy.configure_updater(updater_http::Client::builder())?;
+    app.updater_builder().endpoints(vec![endpoint]).map_err(|_|"备用更新地址无效。")?.header("Accept","application/octet-stream").map_err(|_|"备用请求头无效。")?.timeout(Duration::from_secs(30)).configure_client(move|client|policy.configure_updater(client).expect("validated updater proxy policy")).build().map_err(|_|"无法初始化备用更新。".into())
+}
+async fn check_online(app:&AppHandle,url:reqwest::Url,backup:bool)->Result<(Option<tauri_plugin_updater::Update>,&'static str),String>{
+    match online_builder(app,url.clone())?.check().await{
+        Ok(update)=>Ok((update,"primary")),
+        Err(_) if backup&&github_repository(&url).is_some()=>github_backup(app,&url).await?.check().await.map(|u|(u,"github-api")).map_err(|_|"主更新通道和 GitHub 备用通道均未能读取更新。".into()),
+        Err(_)=>Err("检查更新失败，请检查网络或发布地址后重试。".into()),
+    }
+}
+fn notes_languages(v:&serde_json::Value)->std::collections::HashMap<String,String>{
+    v.get("notesByLanguage").and_then(|v|serde_json::from_value::<std::collections::HashMap<String,String>>(v.clone()).ok()).unwrap_or_default().into_iter().filter(|(k,v)|["zh-CN","zh-TW","en","ja","ko"].contains(&k.as_str())&&v.len()<=MAX_MANIFEST as usize).collect()
 }
 
 #[tauri::command]
 pub async fn check_app_update(app:AppHandle) -> Result<Status,String> {
     let state=app.state::<UpdateState>();
     let _operation=state.operation.try_lock().map_err(|_|"更新操作正在进行。")?;
-    let source=state.status.lock().unwrap().settings.source.clone();
+    let settings=state.status.lock().unwrap().settings.clone();let source=settings.source.clone();
     publish(&app,|s|{s.phase="checking".into();s.error=None;});
+    let mut languages=std::collections::HashMap::new();let mut checked="local";
     let result:Result<Option<(String,Option<String>)>,String>=async {
         match validate_source(&source)? {
             Source::Local(root)=>{
@@ -130,19 +175,20 @@ pub async fn check_app_update(app:AppHandle) -> Result<Status,String> {
                 let (manifest,package)=parse_local(&bounded_file(&path,MAX_MANIFEST).await?,&root)?;
                 if !newer(&manifest.version,env!("CARGO_PKG_VERSION"))? {return Ok(None);}
                 if !tokio::fs::try_exists(package).await.map_err(|_|"无法访问更新包。")? {return Err("清单中的更新包不存在，请重新发布更新。".into());}
-                Ok(Some((manifest.version,manifest.notes)))
+                languages=manifest.notes_by_language;Ok(Some((manifest.version,manifest.notes)))
             },
             Source::Online(url)=>{
-                let update=online_builder(&app,url)?.check().await.map_err(|_|"检查更新失败，请检查网络或发布地址后重试。")?;
+                let (update,channel)=check_online(&app,url,settings.backup_automatic).await?;checked=channel;
                 if let Some(update)=update {
                     validate_download(&update.download_url)?;
+                    languages=notes_languages(&update.raw_json);
                     Ok(Some((update.version,update.body)))
                 }else{Ok(None)}
             }
         }
     }.await;
     match result {
-        Ok(update)=>Ok(publish(&app,|s|{s.checked_at=Some(crate::model::now_rfc3339());s.downloaded=0;s.total=None;
+        Ok(update)=>Ok(publish(&app,|s|{s.checked_at=Some(crate::model::now_rfc3339());s.downloaded=0;s.total=None;s.notes_by_language=languages;s.checked_source=Some(checked.into());
             if let Some((version,notes))=update {s.phase="available".into();s.version=Some(version);s.notes=notes;}
             else{s.phase="current".into();s.version=None;s.notes=None;}})),
         Err(error)=>Err(fail(&app,&error))
@@ -203,7 +249,7 @@ async fn apply_update(app:AppHandle,version:String,install:bool) -> Result<(),St
                 app.updater_builder().endpoints(vec![endpoint]).map_err(|_|"本机更新传输不可用。")?.no_proxy().timeout(Duration::from_secs(30))
                     .build().map_err(|_|"无法初始化本机更新。")?.check().await.map_err(|_|"无法读取本机更新清单。")?
             },
-            Source::Online(url)=>online_builder(&app,url)?.check().await.map_err(|_|"无法读取在线更新清单。")?,
+            Source::Online(url)=>check_online(&app,url,status.settings.backup_automatic).await?.0,
         }.ok_or("没有可安装的新版本，请重新检查。")?;
         if update.version!=version {if let Some(task)=bridge {task.abort();}return Err("发布版本已变化，请重新检查更新。".into());}
         if bridge.is_none(){validate_download(&update.download_url)?;}
@@ -238,6 +284,19 @@ pub fn open(app:&AppHandle) {
 
 #[cfg(test)] mod tests {
     use super::*;
+    #[test] fn old_settings_keep_safe_defaults_and_notes_only_use_supported_languages(){
+        let s:UpdateSettings=serde_json::from_str(r#"{"source":"C:/updates","automatic":false}"#).unwrap();
+        assert!(!s.automatic);assert!(s.backup_automatic);assert_eq!(s.notes_language,"auto");
+        let notes=notes_languages(&serde_json::json!({"notesByLanguage":{"en":"English","zh-CN":"中文","unknown":"discard"}}));assert_eq!(notes.len(),2);assert_eq!(notes["en"],"English");
+    }
+    #[test] fn backup_is_limited_to_the_same_public_github_release(){
+        let source="https://github.com/wapearoudy/PulseWin/releases/latest/download/latest.json".parse().unwrap();
+        assert_eq!(github_repository(&source),Some(("wapearoudy".into(),"PulseWin".into())));
+        for url in ["https://example.com/a/b/releases/latest/download/latest.json","https://github.com/a/b/releases/download/v1/latest.json","https://github.com/a/b/releases/latest/download/other.json"]{assert!(github_repository(&url.parse().unwrap()).is_none())}
+        let mut asset=serde_json::json!({"assets":[{"name":"latest.json","state":"uploaded","size":500,"url":"https://api.github.com/repos/wapearoudy/PulseWin/releases/assets/42"}]});
+        assert!(github_asset(&asset,"wapearoudy","PulseWin").is_ok());
+        for url in ["http://api.github.com/repos/wapearoudy/PulseWin/releases/assets/42","https://api.github.com/repos/other/PulseWin/releases/assets/42","https://api.github.com.evil.test/repos/wapearoudy/PulseWin/releases/assets/42","https://api.github.com/repos/wapearoudy/PulseWin/releases/assets/42?token=x"]{asset["assets"][0]["url"]=url.into();assert!(github_asset(&asset,"wapearoudy","PulseWin").is_err())}
+    }
     #[test] fn versions_do_not_downgrade_or_compare_lexically() {
         assert!(newer("0.1.10","0.1.9").unwrap());assert!(!newer("0.1.3","0.1.4").unwrap());
         assert!(!newer("0.1.4","0.1.4").unwrap());assert!(!newer("0.1.4-beta.1","0.1.4").unwrap());assert!(newer("garbage","0.1.4").is_err());
@@ -255,7 +314,7 @@ pub fn open(app:&AppHandle) {
         assert!(parse_local(br#"{"version":"0.1.5","file":"package.exe","signature":""}"#,Path::new("C:/updates")).is_err());
     }
     #[tokio::test] async fn loopback_bridge_only_serves_the_selected_manifest_and_bytes() {
-        let manifest=LocalManifest{version:"0.1.5".into(),notes:None,file:"package.exe".into(),signature:"sig".into()};
+        let manifest=LocalManifest{version:"0.1.5".into(),notes:None,file:"package.exe".into(),signature:"sig".into(),notes_by_language:Default::default()};
         let (endpoint,task)=local_bridge(&manifest,b"signed fixture bytes".to_vec()).await.unwrap();
         let client=reqwest::Client::builder().no_proxy().build().unwrap();
         let value:serde_json::Value=client.get(endpoint.clone()).send().await.unwrap().json().await.unwrap();

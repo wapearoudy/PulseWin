@@ -1,0 +1,114 @@
+{
+  "passed": true,
+  "testedAt": "2026-10-11T09:36:15.848Z",
+  "sources": [
+    {
+      "id": "claude",
+      "records": 1
+    },
+    {
+      "id": "codex",
+      "records": 1
+    },
+    {
+      "id": "qwen",
+      "records": 0
+    },
+    {
+      "id": "gemini",
+      "records": 0
+    },
+    {
+      "id": "cursor",
+      "records": 0
+    },
+    {
+      "id": "antigravity",
+      "records": 0
+    },
+    {
+      "id": "hindsight",
+      "records": 0
+    },
+    {
+      "id": "mcode",
+      "records": 0
+    },
+    {
+      "id": "opencode",
+      "records": 0
+    },
+    {
+      "id": "kilo",
+      "records": 0
+    },
+    {
+      "id": "micode",
+      "records": 0
+    },
+    {
+      "id": "dsh",
+      "records": 0
+    },
+    {
+      "id": "pi",
+      "records": 1
+    },
+    {
+      "id": "omp",
+      "records": 1
+    },
+    {
+      "id": "kimchi",
+      "records": 1
+    },
+    {
+      "id": "amp",
+      "records": 1
+    },
+    {
+      "id": "droid",
+      "records": 1
+    },
+    {
+      "id": "openclaw",
+      "records": 1
+    },
+    {
+      "id": "goose",
+      "records": 1
+    },
+    {
+      "id": "hermes",
+      "records": 1
+    },
+    {
+      "id": "zed",
+      "records": 1
+    },
+    {
+      "id": "crush",
+      "records": 0
+    }
+  ],
+  "checks": [
+    "isolated fixture-only home and cache",
+    "opt-in and opt-out native guards",
+    "eleven native token sources including four SQLite/legacy stores",
+    "counter timestamps in seconds",
+    "Codex measured speed and TTFT",
+    "Codex evidence and insufficient-sample threshold",
+    "Claude and Codex cache TTL",
+    "full-size real canvas PNG export through native decoder and atomic writer",
+    "recap and activity preference persistence",
+    "backup and release-note language persistence"
+  ],
+  "notRun": [
+    "real account billing",
+    "clipboard and interactive file dialogs",
+    "official status outage delivery",
+    "full original recap visual parity",
+    "online backup assets blocked by public API rate limit"
+  ],
+  "fixtureDataOnly": true
+}

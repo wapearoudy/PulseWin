@@ -18,6 +18,14 @@ test.beforeEach(async ({ page }) => {
         w.testCommands.push({ cmd, args })
         if(cmd === 'plugin:event|listen') { listeners[++seq] = args; return seq }
         if(cmd === 'plugin:event|unlisten') return
+        if(cmd === 'get_deepseek_console_connection') return {connected:!!w.testConsoleConnected}
+        if(cmd === 'begin_deepseek_console_login') return
+        if(cmd === 'finish_deepseek_console_login') {w.testConsoleConnected=true;return {connected:true}}
+        if(cmd === 'remove_deepseek_console_login') {w.testConsoleConnected=false;return {connected:false}}
+        if(cmd === 'get_deepseek_console_history') {if(w.testConsoleError)throw new Error(w.testConsoleError);return structuredClone(w.testConsoleHistory)}
+        if(cmd === 'get_service_status') { if(w.testStatusError) throw new Error(w.testStatusError); return structuredClone(w.testStatus ?? null) }
+        if(cmd === 'get_codex_signals') { if(w.testSignalsError) throw new Error(w.testSignalsError); return structuredClone(w.testSignals ?? {models:[],changes:[],sessions:0,judgedSessions:0,notes:[]}) }
+        if(cmd === 'get_prompt_cache') { if(w.testCacheError) throw new Error(w.testCacheError); return structuredClone(w.testCache ?? {live:[],lastLapsed:null,notes:[]}) }
         if(cmd === 'get_preferences') return structuredClone(prefs)
         if(cmd === 'save_preferences') { Object.assign(prefs,args.value); emit('preferences-changed',structuredClone(prefs)); return }
         if(cmd === 'provider_settings') return structuredClone(providers)
@@ -42,6 +50,34 @@ test.beforeEach(async ({ page }) => {
     }
   })
   await page.goto('/?view=settings')
+})
+
+test('official status shows source colours, missing history and publisher uptime',async({page})=>{
+  await page.evaluate(()=>{(window as any).testStatus={page:'claude',checkedAt:'2026-10-11T01:00:00Z',historyError:null,components:[{id:'code',name:'Claude Code API',state:'partialOutage',uptime:99.95,days:[{date:'2026-10-09',state:null,colour:null},{date:'2026-10-10',state:'partialOutage',colour:'#e75f36'},{date:'2026-10-11',state:'operational',colour:'#76ad2a'}]}]}})
+  await page.getByRole('button',{name:'暂不设置'}).click();await page.getByRole('button',{name:'Claude Code',exact:true}).click()
+  const group=page.getByRole('region',{name:'官方服务状态'});await expect(group.getByText('部分故障',{exact:true})).toBeVisible();await expect(group.getByText('99.95% 正常运行 · 官方报告')).toBeVisible()
+  await expect(group.getByRole('listitem')).toHaveCount(3);await expect(group.getByRole('listitem').first()).toHaveAttribute('title','2026-10-09 · 无数据');await expect(group.getByRole('listitem').nth(1)).toHaveCSS('background-color','rgb(231, 95, 54)')
+  await expect(group.getByRole('link',{name:'打开'})).toHaveAttribute('href','https://status.claude.com/')
+  expect(await page.evaluate(()=>(window as any).testCommands.filter((x:any)=>x.cmd==='refresh_provider'))).toHaveLength(0)
+  await page.screenshot({path:'test-results/service-status.png',fullPage:true})
+})
+
+test('status rereads at five minutes and failed reads remove healthy rows; leaving stops polling',async({page})=>{
+  await page.clock.install();await page.evaluate(()=>{(window as any).testStatus={page:'openAI',checkedAt:'2026-10-11T01:00:00Z',historyError:null,components:[{id:'cli',name:'CLI',state:'operational',uptime:null,days:[]}]}})
+  await page.getByRole('button',{name:'暂不设置'}).click();await page.getByRole('button',{name:'Codex',exact:true}).click()
+  const group=page.getByRole('region',{name:'官方服务状态'});await expect(group.getByText('运行正常',{exact:true})).toBeVisible()
+  await page.evaluate(()=>{(window as any).testStatusError='官方状态页请求失败'});await page.clock.fastForward(300_000)
+  await expect(group.getByText(/官方状态页请求失败/)).toBeVisible();await expect(group.getByText('运行正常',{exact:true})).toHaveCount(0)
+  const count=await page.evaluate(()=>(window as any).testCommands.filter((x:any)=>x.cmd==='get_service_status').length)
+  await page.getByRole('button',{name:'外观',exact:true}).click();await page.clock.fastForward(600_000)
+  expect(await page.evaluate(()=>(window as any).testCommands.filter((x:any)=>x.cmd==='get_service_status').length)).toBe(count)
+})
+
+test('outage notifications default off and persist independently of quota alerts',async({page})=>{
+  await page.getByRole('button',{name:'暂不设置'}).click();await page.getByRole('button',{name:'通知',exact:true}).click()
+  const toggle=page.getByRole('switch',{name:'服务故障与恢复通知'});await expect(toggle).not.toBeChecked();await toggle.check()
+  expect(await page.evaluate(()=>(window as any).testPrefs.alerts.onServiceOutage)).toBe(true)
+  await expect(page.getByLabel('额度提醒阈值')).toHaveValue('');await toggle.uncheck()
 })
 
 test('first-run selection is explicit and disabled accounts cannot refresh', async ({page}) => {
@@ -127,7 +163,7 @@ test('notifications are opt-in and reset warnings depend on the threshold',async
   await page.getByLabel('额度提醒阈值').selectOption('90')
   await page.getByRole('switch',{name:'额度重置时通知'}).check()
   await page.getByRole('switch',{name:'连续检查失败时通知'}).check()
-  expect(await page.evaluate(()=>(window as any).testPrefs.alerts)).toEqual({threshold:90,onReset:true,onFailure:true,lowBalance:{}})
+  expect(await page.evaluate(()=>(window as any).testPrefs.alerts)).toEqual({threshold:90,onReset:true,onFailure:true,lowBalance:{},onServiceOutage:false,onRecap:false})
   await page.getByLabel('额度提醒阈值').selectOption('')
   await expect(page.getByRole('switch',{name:'额度重置时通知'})).toBeDisabled()
 })
@@ -173,4 +209,45 @@ test('same-service accounts add, rename, refresh and remove independently',async
   await expect(page.getByRole('heading',{name:'管理账号',exact:true})).toBeVisible()
   await expect(page.locator('nav').getByRole('button',{name:'公司账号',exact:true})).toHaveCount(0)
   expect(await page.evaluate(()=>(window as any).testPrefs.enabledProviders)).toEqual(['codex','claude-code'])
+})
+
+
+test('local Codex analysis requires consent, uses requested range and cancels on exit',async({page})=>{
+  await page.getByRole('button',{name:'暂不设置'}).click();await page.getByRole('button',{name:'Codex',exact:true}).click()
+  const group=page.getByRole('region',{name:'Codex 本地分析'});await expect(group.getByLabel('Codex 分析范围')).toBeDisabled()
+  expect(await page.evaluate(()=>(window as any).testCommands.filter((x:any)=>x.cmd==='get_codex_signals'))).toHaveLength(0)
+  await page.evaluate(()=>{const w=window as any;w.testSignals={models:[{model:'gpt-test',responses:10,reached:10,hits:5,share:.5,measurable:false,suspicious:false}],changes:[],sessions:3,judgedSessions:1,notes:[]};return w.__TAURI_INTERNALS__.invoke('save_preferences',{value:{...w.testPrefs,tokenSpendEnabled:true}})})
+  await expect(group.getByText('样本不足',{exact:true})).toBeVisible();await expect(group.getByText(/1 \/ 3 个会话可判断/)).toBeVisible()
+  await page.evaluate(()=>{(window as any).testSignalsError='本地文件读取失败'});await group.getByLabel('Codex 分析范围').selectOption('quarter')
+  await expect(group.getByRole('alert')).toContainText('本地文件读取失败');await expect(group.getByText('gpt-test',{exact:true})).toHaveCount(0)
+  expect(await page.evaluate(()=>(window as any).testCommands.filter((x:any)=>x.cmd==='get_codex_signals').map((x:any)=>x.args.span))).toEqual(['month','quarter'])
+  const before=await page.evaluate(()=>(window as any).testCommands.filter((x:any)=>x.cmd==='cancel_codex_signal_read').length)
+  await page.getByRole('button',{name:'外观',exact:true}).click()
+  await expect.poll(()=>page.evaluate(()=>(window as any).testCommands.filter((x:any)=>x.cmd==='cancel_codex_signal_read').length)).toBeGreaterThan(before)
+})
+
+test('prompt cache countdown refreshes, errors discard readings and navigation stops polling',async({page})=>{
+  await page.clock.install({time:new Date('2026-10-11T00:00:00Z')});await page.clock.pauseAt(new Date('2026-10-11T00:00:00Z'));await page.getByRole('button',{name:'暂不设置'}).click()
+  await page.evaluate(()=>{const w=window as any;w.testCache={live:[{id:'cache',title:'可计时会话',project:'工程',lastRequest:new Date().toISOString(),expiresAt:new Date(Date.now()+31*60_000).toISOString(),lifetime:1800,isMinimum:true}],lastLapsed:null,notes:[]};return w.__TAURI_INTERNALS__.invoke('save_preferences',{value:{...w.testPrefs,tokenSpendEnabled:true}})})
+  await page.getByRole('button',{name:'Codex',exact:true}).click();const group=page.getByRole('region',{name:'提示词缓存'})
+  await expect(group.getByText('可计时会话',{exact:true})).toBeVisible();await expect(group.getByText('至少 31分 0秒',{exact:true})).toBeVisible()
+  await page.clock.fastForward(1_000);await expect(group.getByText('至少 30分 59秒',{exact:true})).toBeVisible()
+  await page.evaluate(()=>{(window as any).testCacheError='缓存记录不可读'});await page.clock.fastForward(30_000)
+  await expect(group.getByRole('alert')).toContainText('缓存记录不可读');await expect(group.getByText('可计时会话',{exact:true})).toHaveCount(0)
+  const count=await page.evaluate(()=>(window as any).testCommands.filter((x:any)=>x.cmd==='get_prompt_cache').length)
+  await page.getByRole('button',{name:'外观',exact:true}).click();await page.clock.fastForward(60_000)
+  expect(await page.evaluate(()=>(window as any).testCommands.filter((x:any)=>x.cmd==='get_prompt_cache').length)).toBe(count)
+})
+
+
+test('DeepSeek console login is independent of API keys and never reads disabled billing',async({page})=>{
+ await page.getByRole('button',{name:'暂不设置'}).click();await page.getByRole('button',{name:'DeepSeek',exact:true}).click()
+ const group=page.getByRole('region',{name:'DeepSeek 控制台账单'});await group.getByRole('button',{name:'登录控制台',exact:true}).click();await group.getByRole('button',{name:'已登录，连接控制台'}).click()
+ await expect(group.getByText('已连接控制台',{exact:true})).toBeVisible();await expect(group.getByRole('button',{name:'刷新账单'})).toBeDisabled()
+ expect(await page.evaluate(()=>(window as any).testCommands.filter((c:any)=>c.cmd==='get_deepseek_console_history'))).toHaveLength(0)
+ await page.evaluate(()=>{const w=window as any;w.testConsoleHistory={days:[{date:'2026-10-11',input:100,output:20,cacheRead:30,tokens:'150',cost:null,models:{'deepseek-chat':150}}],currency:null,checkedAt:new Date().toISOString(),notes:[]};return w.__TAURI_INTERNALS__.invoke('save_preferences',{value:{...w.testPrefs,enabledProviders:['deepseek']}})})
+ await expect(group.getByRole('cell',{name:'150',exact:true})).toBeVisible();await expect(group.getByRole('cell',{name:'—',exact:true})).toBeVisible()
+ await page.evaluate(()=>{(window as any).testConsoleError='控制台登录已失效'});await group.getByRole('button',{name:'刷新账单'}).click();await expect(group.getByRole('alert')).toContainText('登录已失效');await expect(group.getByRole('cell',{name:'150',exact:true})).toHaveCount(0)
+ await group.getByRole('button',{name:'断开控制台'}).click();await expect(group.getByText('连接 DeepSeek 控制台',{exact:true})).toBeVisible()
+ expect(await page.evaluate(()=>(window as any).testCommands.filter((c:any)=>c.cmd==='save_provider_credential'))).toHaveLength(0)
 })

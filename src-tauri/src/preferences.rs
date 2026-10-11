@@ -16,6 +16,9 @@ pub struct Preferences {
     pub alerts: crate::alerts::AlertPreferences,
     pub token_spend_enabled: bool,
     pub token_spend_span: String,
+    pub spend_activity_view: String,
+    pub recap_monthly_price:Option<f64>,
+    pub recap_hides_projects:bool,
     pub reset_celebration: bool,
     pub enabled_providers: Vec<String>,
     pub provider_order: Vec<String>,
@@ -45,7 +48,7 @@ pub struct Preferences {
 
 impl Default for Preferences {
     fn default() -> Self {
-        Self { network_proxy:Default::default(), panel_visible:true, tray_shows_usage:false, tray_style:"figure".into(), tray_account:None, accounts: vec![], account_labels: Default::default(), open_settings_shortcut: None, toggle_panel_shortcut: None, alerts: Default::default(), token_spend_enabled: false, token_spend_span: "week".into(), reset_celebration: true, enabled_providers: vec![], provider_order: vec![], panel_colour: "black".into(), panel_size: 1.0,
+        Self { network_proxy:Default::default(), panel_visible:true, tray_shows_usage:false, tray_style:"figure".into(), tray_account:None, accounts: vec![], account_labels: Default::default(), open_settings_shortcut: None, toggle_panel_shortcut: None, alerts: Default::default(), token_spend_enabled: false, token_spend_span: "week".into(), spend_activity_view:"daily".into(),recap_monthly_price:None,recap_hides_projects:false, reset_celebration: true, enabled_providers: vec![], provider_order: vec![], panel_colour: "black".into(), panel_size: 1.0,
             rail_spacing: 1.0, round_ends: false, shows_remaining: false,
             show_percentages: true, label_above: false, auto_collapse: true,
             warning_threshold: 0.75, refresh_seconds: 120, refresh_automatic: true, show_reset_clock: false,
@@ -69,6 +72,8 @@ impl Preferences {
         }
         self.alerts.normalize(known);
         if !["today","week","month"].contains(&self.token_spend_span.as_str()){self.token_spend_span="week".into();}
+        if !["daily","weekly","cumulative"].contains(&self.spend_activity_view.as_str()){self.spend_activity_view="daily".into();}
+        self.recap_monthly_price=self.recap_monthly_price.filter(|p|p.is_finite()&&*p>0.0&&*p<=10000.0);
         self.account_appearance.retain(|id, _| known.contains(id));
         for value in self.account_appearance.values_mut() { value.normalize(); }
         self.pinned_windows.retain(|id, label| known.contains(id) && !label.is_empty());

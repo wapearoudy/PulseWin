@@ -14,11 +14,16 @@ use serde_json::Value;
 /// e.g. `PULSEWIN_CLAUDE_TOKEN`, `PULSEWIN_CURSOR_COOKIE`.
 pub const ENV_PREFIX: &str = "PULSEWIN_";
 
+// Native acceptance has a validated, isolated APPDATA profile (see lib.rs).
+// Windows Known Folders ignore USERPROFILE overrides, so use its own fixture
+// roots explicitly; this branch is inaccessible without --native-smoke.
+fn smoke_root()->Option<PathBuf>{std::env::args().any(|a|a=="--native-smoke").then(crate::settings::directory).flatten()}
 pub fn home_dir() -> Option<PathBuf> {
     #[cfg(test)]
     if let Some(directory) = std::env::var_os("PULSEWIN_TEST_HOME") {
         return Some(PathBuf::from(directory));
     }
+    if let Some(root)=smoke_root(){return Some(root.join("smoke-home"))}
     dirs::home_dir()
 }
 
@@ -27,6 +32,7 @@ pub fn config_dir() -> Option<PathBuf> {
     if let Some(directory) = std::env::var_os("PULSEWIN_TEST_CONFIG") {
         return Some(PathBuf::from(directory));
     }
+    if let Some(root)=smoke_root(){return root.parent().map(Path::to_path_buf)}
     dirs::config_dir()
 }
 
@@ -35,6 +41,7 @@ pub fn data_local_dir() -> Option<PathBuf> {
     if let Some(directory) = std::env::var_os("PULSEWIN_TEST_LOCAL_CONFIG") {
         return Some(PathBuf::from(directory));
     }
+    if let Some(root)=smoke_root(){return Some(root.join("smoke-local"))}
     dirs::data_local_dir()
 }
 
@@ -43,6 +50,7 @@ pub fn cache_dir() -> Option<PathBuf> {
     if let Some(directory) = std::env::var_os("PULSEWIN_TEST_CACHE") {
         return Some(PathBuf::from(directory));
     }
+    if let Some(root)=smoke_root(){return Some(root.join("smoke-cache"))}
     dirs::cache_dir()
 }
 

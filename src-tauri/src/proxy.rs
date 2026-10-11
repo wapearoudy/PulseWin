@@ -81,6 +81,15 @@ pub(crate) struct Policy {
     environment: Vec<(String, Option<std::ffi::OsString>)>,
 }
 impl Policy {
+    pub(crate) fn configure_updater(&self,mut builder:updater_http::ClientBuilder)->Result<updater_http::ClientBuilder,String>{
+        if let Some(endpoint)=self.settings.endpoint(){
+            let url=updater_http::Url::parse(&endpoint).map_err(|_|"代理地址无效。")?;
+            builder=builder.no_proxy().proxy(updater_http::Proxy::custom(move|target|if target.host_str().is_some_and(is_loopback){None}else{Some(url.clone())}));
+        }else if let Some(endpoint)=&self.system{
+            if let Ok(proxy)=updater_http::Proxy::all(endpoint){builder=builder.proxy(proxy.no_proxy(updater_http::NoProxy::from_string(self.bypass.as_deref().unwrap_or_default())));}
+        }
+        Ok(builder)
+    }
     pub(crate) fn capture(settings:&NetworkProxySettings)->Result<Self,String>{
         let mut checked=settings.clone();checked.validate()?;
         let manual=checked.endpoint().is_some();

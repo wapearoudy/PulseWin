@@ -30,15 +30,58 @@ test.beforeEach(async ({ page }) => {
         if(command === 'provider_settings') return [{id:'claude-code',name:'Claude Code',configured:true,stored:false,hints:[],credentialPath:null},{id:'codex',name:'Codex',configured:true,stored:false,hints:[],credentialPath:null}]
         if(command === 'panel_placement') return {dockEdge:'right',railPosition:null}
         if(command === 'get_snapshot') return {providers:[],fetchedAt:new Date().toISOString()}
+        if(command === 'spend_kept_snapshot') return structuredClone(w.spendKept ?? null)
         if(command === 'spend_begin_scan') return `fixture-scan-${++sequence}`
         if(command === 'spend_get_scan') return { id: args.scanId, status: w.spendHold ? 'running' : 'completed', currentSource:'Claude Code',sourceIndex:1,sourceCount:sources.length,error:null,
           snapshot: w.spendHold ? null : { scannedAt:new Date().toISOString(), ...w.spendTestData,notes:[],pricesAt:new Date().toISOString(),pricingStatus:'fresh' } }
         if(command === 'spend_cancel_scan' || command === 'spend_clear_snapshot') return
+        if(command === 'recap_export') {if(w.recapFailure)throw new Error('模拟导出失败');return 'saved'}
       },
     }
   })
   await page.goto('/?view=settings')
   await page.getByRole('button',{name:'Token 消耗',exact:true}).click()
+})
+
+test('recap uses full-size images, persists privacy and price, and exports each real card',async({page})=>{
+  await page.evaluate(()=>{const w=window as any;w.recapPaint=[];const original=CanvasRenderingContext2D.prototype.fillText;CanvasRenderingContext2D.prototype.fillText=function(...args:any[]){w.recapPaint.push(args[0]);return original.apply(this,args as [string,number,number])}})
+  await page.getByRole('switch',{name:'读取本机 Token 用量记录'}).check();await page.getByRole('button',{name:'月度 / 年度回顾'}).click()
+  const region=page.getByRole('region',{name:'月度与年度回顾'}),image=region.getByRole('img');await expect(image).toBeVisible();expect(await image.evaluate((img:HTMLImageElement)=>[img.naturalWidth,img.naturalHeight])).toEqual([1080,1920])
+  await region.getByRole('textbox',{name:'回顾月订阅价'}).fill('20');await region.getByRole('textbox',{name:'回顾月订阅价'}).press('Enter');await expect(region.getByRole('button',{name:'订阅回报',exact:true})).toBeVisible()
+  await region.getByRole('button',{name:'成绩单',exact:true}).click();expect(await page.evaluate(()=>(window as any).recapPaint)).toContain('E:\\synthetic-project')
+  await page.evaluate(()=>(window as any).recapPaint=[]);await region.getByRole('checkbox',{name:'隐藏项目名称'}).check();expect(await page.evaluate(()=>(window as any).recapPaint)).toContain('Project 1');expect(await page.evaluate(()=>(window as any).recapPaint)).not.toContain('E:\\synthetic-project')
+  await region.getByRole('button',{name:'保存全部卡片'}).click();await expect(region.getByRole('status')).toContainText('已保存')
+  const exported=await page.evaluate(()=>{const calls=(window as any).spendTestCommands.filter((c:any)=>c.command==='recap_export');return calls[0].args.cards.map((card:any)=>{const b=atob(card.png);const u=(offset:number)=>[0,1,2,3].reduce((n,i)=>n*256+b.charCodeAt(offset+i),0);return{name:card.name,width:u(16),height:u(20)}})})
+  expect(exported).toHaveLength(6);expect(exported.every((c:any)=>c.width===1080&&c.height===1920&&c.name.endsWith('.png'))).toBe(true)
+  await region.getByRole('button',{name:'年度',exact:true}).click();await expect(region.getByRole('button',{name:'年历',exact:true})).toBeVisible();await expect(region.getByRole('button',{name:'月份',exact:true})).toBeVisible()
+  await page.evaluate(()=>(window as any).recapFailure=true);await region.getByRole('button',{name:'保存图片',exact:true}).click();await expect(region.getByRole('alert')).toContainText('导出失败')
+  expect(await page.evaluate(()=>(window as any).spendTestPrefs.recapMonthlyPrice)).toBe(20);expect(await page.evaluate(()=>(window as any).spendTestPrefs.recapHidesProjects)).toBe(true)
+  expect(await page.evaluate(()=>(window as any).spendTestCommands.filter((c:any)=>c.command==='spend_begin_scan'))).toHaveLength(1)
+  await page.screenshot({path:'test-results/recap-year.png',fullPage:true})
+})
+
+test('year activity views persist, remain independent of range and reuse the scan',async({page})=>{
+  await page.getByRole('switch',{name:'读取本机 Token 用量记录'}).check()
+  const activity=page.locator('.token-activity');await expect(activity.getByRole('heading',{name:'Token 活动'})).toBeVisible();await expect(activity.getByRole('img')).toHaveAttribute('aria-label',/最近 12 个月/)
+  await activity.getByRole('button',{name:'每周',exact:true}).click();expect(await page.evaluate(()=>(window as any).spendTestPrefs.spendActivityView)).toBe('weekly')
+  const caption=await activity.getByRole('img').getAttribute('aria-label');await page.getByRole('button',{name:'今天',exact:true}).click();await expect(activity.getByRole('img')).toHaveAttribute('aria-label',caption!)
+  await activity.getByRole('button',{name:'累计',exact:true}).click();await expect(activity.locator('svg path')).toHaveCount(2)
+  await page.getByRole('button',{name:'外观',exact:true}).click();await page.getByRole('button',{name:'Token 消耗',exact:true}).click();await expect(activity.getByRole('button',{name:'累计',exact:true})).toHaveAttribute('aria-pressed','true')
+  expect(await page.evaluate(()=>(window as any).spendTestCommands.filter((c:any)=>c.command==='spend_begin_scan'))).toHaveLength(1)
+  await activity.getByRole('button',{name:'每日',exact:true}).click();await page.screenshot({path:'test-results/token-activity.png',fullPage:true})
+})
+
+test('unclassified daily counters and missing cache fields are shown without invented zeros',async({page})=>{
+  await page.evaluate(()=>{const w=window as any;const row=w.spendTestData.records[0];w.spendTestData.records=[{...row,tally:{input:100,output:20,cacheWrite:0,cacheRead:0,repliesWithoutCacheFields:1},unclassifiedTokens:25,cost:null,costBreakdown:null}]})
+  await page.getByRole('switch',{name:'读取本机 Token 用量记录'}).check();await expect(page.getByRole('columnheader',{name:'未分类 Token',exact:true})).toBeVisible()
+  const cache=page.locator('.spend-splits>div').filter({hasText:'缓存读取'});await expect(cache.locator('strong')).toHaveText('—');await expect(cache.locator('strong')).toHaveAttribute('title','来源未报告缓存分类')
+  await expect(page.locator('.spend-table tbody tr').first().locator('td').last()).toHaveText('25')
+})
+
+test('native exact counters drive large-integer sorting and full-value tooltips',async({page})=>{
+  await page.evaluate(()=>{const w=window as any;const row=w.spendTestData.records[0];const d=new Date();d.setDate(d.getDate()-1);const previous=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;w.spendTestData.records=[{...row,day:previous,tally:{input:9007199254740992,output:0,cacheWrite:0,cacheRead:0},exactTally:{input:'9007199254740993',output:'0',cacheWrite:'0',cacheRead:'0'},cost:null,costBreakdown:null},{...row,tally:{input:9007199254740992,output:0,cacheWrite:0,cacheRead:0},exactTally:{input:'9007199254740992',output:'0',cacheWrite:'0',cacheRead:'0'},cost:null,costBreakdown:null}]})
+  await page.getByRole('switch',{name:'读取本机 Token 用量记录'}).check();await page.getByRole('button',{name:/^Token$/}).click()
+  await expect(page.locator('.spend-table tbody tr').first().locator('td').nth(1)).toHaveAttribute('title','9,007,199,254,740,993');await expect(page.locator('.spend-table tbody tr').nth(1).locator('td').nth(1)).toHaveAttribute('title','9,007,199,254,740,992')
 })
 
 test('default off reads nothing; model navigation, range changes and sidebar reuse do not reread', async ({page}) => {
@@ -47,7 +90,7 @@ test('default off reads nothing; model navigation, range changes and sidebar reu
   await page.getByRole('switch',{name:'读取本机 Token 用量记录'}).check()
   await expect(page.getByRole('heading',{name:'每日 Token',exact:true})).toBeVisible()
   await expect(page.locator('.spend-sources>div')).toHaveCount(8)
-  await expect(page.getByText('其他 42 个原版来源尚未移植')).toBeVisible()
+  await expect(page.getByText('其他 32 个原版来源尚未移植')).toBeVisible()
   await page.getByText('支持格式与读取位置 · 8 个实际 reader').click()
   await expect(page.getByText('需要事先导出 Cursor', { exact: false })).toBeVisible()
   expect(await page.evaluate(() => (window as any).spendTestPrefs.tokenSpendEnabled)).toBe(true)
@@ -126,4 +169,25 @@ test('an unfinished scan can be stopped and is cancelled on sidebar departure', 
   await expect(page.getByRole('heading',{name:'每日 Token',exact:true})).toBeVisible()
   await page.screenshot({path:'test-results/token-spend-overview.png',fullPage:true})
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+})
+
+
+test('fresh native kept counters appear without scanning and expired ones refresh behind the visible result',async({page})=>{
+  await page.evaluate(()=>{const w=window as any;w.spendKept={scannedAt:new Date().toISOString(),...w.spendTestData,notes:[],pricesAt:null,pricingStatus:'cached'}})
+  await page.getByRole('switch',{name:'读取本机 Token 用量记录'}).check()
+  await expect(page.getByRole('button',{name:'月度 / 年度回顾'})).toBeVisible()
+  expect(await page.evaluate(()=>(window as any).spendTestCommands.filter((c:any)=>c.command==='spend_begin_scan'))).toHaveLength(0)
+  await page.getByRole('switch',{name:'读取本机 Token 用量记录'}).uncheck()
+  await page.evaluate(()=>{const w=window as any;w.spendHold=true;w.spendKept.scannedAt=new Date(Date.now()-180_000).toISOString()})
+  await page.getByRole('switch',{name:'读取本机 Token 用量记录'}).check()
+  await expect(page.getByRole('button',{name:'停止读取'})).toBeVisible();await expect(page.getByRole('button',{name:'月度 / 年度回顾'})).toBeVisible()
+  expect(await page.evaluate(()=>(window as any).spendTestCommands.filter((c:any)=>c.command==='spend_begin_scan'))).toHaveLength(1)
+  await page.getByRole('switch',{name:'读取本机 Token 用量记录'}).uncheck();await expect(page.getByRole('button',{name:'月度 / 年度回顾'})).toHaveCount(0)
+})
+
+
+test('Crush recognition explains why reported dollars are not token counters',async({page})=>{
+  await page.evaluate(()=>{const w=window as any;w.spendTestData.sources.push({id:'crush',name:'Crush',status:'no-data',files:0,cachedFiles:0,records:0,origin:'native',roots:['fixture/projects.json']})})
+  await page.getByRole('switch',{name:'读取本机 Token 用量记录'}).check()
+  await expect(page.locator('.spend-sources')).toContainText('已识别 · 来源只报告费用，无法确定 Token 计数')
 })

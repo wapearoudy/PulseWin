@@ -16,7 +16,7 @@ const msiPath=path.join(root,'src-tauri/target/release/bundle/msi',msi)
 const msiSignature=readFileSync(`${msiPath}.sig`,'utf8').trim()
 copyFileSync(msiPath,path.join(folder,msi));copyFileSync(`${msiPath}.sig`,path.join(folder,`${msi}.sig`))
 const nsis={url:`${release}/${local.file}`,signature:local.signature}
-const manifest={version:local.version,notes:local.notes,pub_date:local.pub_date,platforms:{
+const manifest={version:local.version,notes:local.notes,...(local.notesByLanguage?{notesByLanguage:local.notesByLanguage}:{}),pub_date:local.pub_date,platforms:{
   'windows-x86_64':nsis,'windows-x86_64-nsis':nsis,
   'windows-x86_64-msi':{url:`${release}/${msi}`,signature:msiSignature}
 }}

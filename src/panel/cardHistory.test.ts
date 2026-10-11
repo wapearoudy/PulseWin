@@ -1,11 +1,17 @@
 import { describe,it,expect } from 'vitest'
-import { budgetEstimate,cardActivity } from './cardHistory'
+import { budgetEstimate,cardActivity,outputSpeeds } from './cardHistory'
 import type { SpendRecord, SpendSnapshot } from '../token-spend/types'
 const now=new Date(2026,9,3,12).getTime()
 const row=(sourceTimestamp:number,day='2026-10-03'):SpendRecord=>({agent:'opencode',model:'raw-model',modelName:'Model',day,hour:10,session:'s',project:null,
   tally:{input:100,output:25,cacheWrite:5,cacheRead:50},unclassifiedTokens:0,cost:.5,costBreakdown:[.3,.1,.02,.08],sourceTimestamp})
 const snapshot=(records:SpendRecord[]):SpendSnapshot=>({scannedAt:new Date(now).toISOString(),records,sources:[],notes:[],pricesAt:null,pricingStatus:'unavailable'})
 describe('detailed card measured history',()=>{
+  it('speed is weighted output over time and TTFT is averaged only after five valid recent measures',()=>{
+    const records=Array.from({length:5},(_,i)=>({...row(now/1000-60),replyTiming:{outputTokens:i?100:1000,seconds:i?1:10,replies:1,firstTokenSeconds:i?.5:1,firstTokenTurns:1}}))
+    expect(outputSpeeds(records.slice(0,4),now)).toEqual([])
+    expect(outputSpeeds(records,now)).toEqual([{name:'Model',speed:100,ttft:.6,output:1400}])
+    expect(outputSpeeds(records.map(r=>({...r,sourceTimestamp:now/1000-86400-1})),now)).toEqual([])
+  })
   it('builds 31 calendar days and counts models/cache with exclusive kinds',()=>{
     const history=snapshot([row(now/1000),row(now/1000-86400,'2026-10-02'),row(now/1000-35*86400,'2026-08-29')])
     const result=cardActivity(history,new Date(now))
@@ -28,6 +34,8 @@ describe('detailed card measured history',()=>{
     expect(budgetEstimate(window,history,now)).toEqual({spent:.5,full:2})
     expect(budgetEstimate({...window,scope:'model-pool'},history,now)).toBeNull()
     expect(budgetEstimate({...window,percentUsed:1},history,now)).toBeNull()
+    expect(budgetEstimate({...window,percentUsed:4.99},history,now)).toBeNull()
+    expect(budgetEstimate({...window,percentUsed:5},history,now)).toEqual({spent:.5,full:10})
     expect(budgetEstimate(window,snapshot([row(now/1000-60)]),now)).toBeNull()
     expect(budgetEstimate(window,snapshot([{...row(opened-900),aggregateTiming:true},row(now/1000-60)]),now)).toBeNull()
     expect(budgetEstimate(window,snapshot([row(opened-900),{...row(now/1000-60),cost:null}]),now)).toBeNull()

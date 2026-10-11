@@ -1,5 +1,5 @@
 export type SpendSpan = 'today' | 'week' | 'month'
-export interface TokenTally { input: number; output: number; cacheWrite: number; cacheRead: number }
+export interface TokenTally { input: number; output: number; cacheWrite: number; cacheRead: number; cacheWrite1h?:number; repliesWithoutCacheFields?:number }
 export interface SpendRecord {
   sourceTimestamp?: number | null
   agent: string; model: string; modelName: string | null; day: string; hour: number
@@ -7,6 +7,10 @@ export interface SpendRecord {
   unclassifiedTokens?: number; deduplicationId?: string | null
   aggregateTiming?: boolean
   cost: number | null; costBreakdown: [number, number, number, number] | null
+  cacheSavings?:number|null
+  replyTiming?:{outputTokens:number;seconds:number;replies:number;firstTokenSeconds:number;firstTokenTurns:number}|null
+  exactTally?: {input:string;output:string;cacheWrite:string;cacheRead:string}
+  exactUnclassifiedTokens?:string
 }
 export interface SpendSource { id: string; name: string; status: 'counted' | 'no-data' | 'not-detected'; files: number; cachedFiles: number; records: number; retainedRecords?:number; origin?: 'native' | 'export'; roots?: string[] }
 export interface SpendSnapshot {
@@ -19,6 +23,7 @@ export interface SpendScan {
 }
 export interface SpendAmounts {
   tokens: number; tally: TokenTally; cost: number | null; costBreakdown: [number, number, number, number] | null; unpricedTokens: number; unclassifiedTokens: number
+  exactTokens?:string; exactUnclassifiedTokens?:string; repliesWithoutCacheFields?:number
 }
 export interface SpendDay extends SpendAmounts { day: string }
 export interface SpendGroup extends SpendAmounts { id: string; name: string; records: SpendRecord[] }
