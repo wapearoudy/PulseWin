@@ -1,5 +1,5 @@
 import { OpenCodeConsoleGroup } from './OpenCodeConsoleGroup'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { getSnapshot, onUsageUpdated, onSettingsAccount, panelPlacement, onPlacementChanged, setPanelPosition, providerSettings, addAccount, removeAccount, importAccountLogin, refreshProvider, saveProviderCredential, type ProviderSetting } from './api'
 import { usePreferences, savePreferences, defaultAccountAppearance, type Preferences } from './preferences'
 import { formatReset, type ProviderUsage, type Snapshot } from './types'
@@ -133,8 +133,8 @@ export default function Settings() {
         : pane === 'accounts' ? <>
         <h1>管理账号</h1><p className="page-description">控制面板显示的服务和排列顺序。</p><button onClick={() => { setSelection(prefs.enabledProviders); setChoose(true) }}>选择服务</button>
         <AddAccountForm onCreated={id=>{void reload();setPane(id)}} onError={setError}/><Group title="排列顺序">{shown.filter(p=>prefs.enabledProviders.includes(p.id)).map(p => <div key={p.id} draggable onDragStart={e=>e.dataTransfer.setData('application/x-pulse-account',p.id)} onDragOver={e=>{if(e.dataTransfer.types.includes('application/x-pulse-account'))e.preventDefault()}} onDrop={e=>{e.preventDefault();moveTo(e.dataTransfer.getData('application/x-pulse-account'),p.id)}}><Row title={p.name} subtitle={prefs.enabledProviders.includes(p.id) ? '显示在面板' : '未显示'}><div className="toolbar"><button disabled={busy || orderedEnabled.indexOf(p.id) === 0} aria-label={`上移 ${p.name}`} onClick={() => move(p.id,-1)}>↑</button><button disabled={busy || orderedEnabled.indexOf(p.id) === orderedEnabled.length-1} aria-label={`下移 ${p.name}`} onClick={() => move(p.id,1)}>↓</button></div></Row></div>)}</Group>
-      </> : provider ? <>
-        <h1>{provider.name}</h1><AccountIdentity key={provider.id} provider={provider} onRename={name=>update({accountLabels:{...prefs.accountLabels,[provider.id]:name}})} onRemoved={()=>{void reload();setPane('accounts')}} onError={setError}/><p className="page-description">{provider.configured ? '已发现凭据；连接结果以下方实际检查为准。' : '尚未发现可用凭据。'}</p>
+      </> : provider ? <Fragment key={provider.id}>
+        <h1>{provider.name}</h1><AccountIdentity provider={provider} onRename={name=>update({accountLabels:{...prefs.accountLabels,[provider.id]:name}})} onRemoved={()=>{void reload();setPane('accounts')}} onError={setError}/><p className="page-description">{provider.configured ? '已发现凭据；连接结果以下方实际检查为准。' : '尚未发现可用凭据。'}</p>
         {provider.credentialError&&<div role="alert" className="settings-alert">{provider.credentialError}</div>}
         {enabled&&accountUsage?.creditRemaining&&<LowBalanceAlert value={prefs.alerts.lowBalance[pane]} currency={accountUsage.creditRemaining.currency} disabled={busy} onChange={v=>{const lowBalance={...prefs.alerts.lowBalance};if(v===undefined)delete lowBalance[pane];else lowBalance[pane]=v;change({alerts:{...prefs.alerts,lowBalance}})}}/>}
         <Group title="面板"><Toggle title="显示在面板" subtitle="关闭后停止此账号的用量检查。" disabled={busy} value={enabled} onChange={v => change({ enabledProviders: v ? [...prefs.enabledProviders,pane] : prefs.enabledProviders.filter(id => id !== pane) })} /></Group>
@@ -146,10 +146,10 @@ export default function Settings() {
         <Group title="圆环颜色"><Row title="高亮色" subtitle="自动随用量变化；用尽时仍显示深红。"><div className="toolbar"><input type="color" aria-label="圆环高亮色" value={appearance.ringColour??'#00e68c'} disabled={busy} onChange={e=>setAppearance({ringColour:e.target.value})}/><button disabled={busy||!appearance.ringColour} onClick={()=>setAppearance({ringColour:null})}>自动</button></div></Row></Group><AccountDetails key={provider.id} provider={provider} usage={snapshot?.providers.find(p => p.id === pane)} onError={setError} onChanged={reload} /></> : <Group title="当前用量"><p className="group-copy">未显示。启用后配置连接并检查用量。</p></Group>}
         {provider.id==='deepseek'&&<DeepSeekConsoleGroup enabled={enabled} onChanged={reload}/>}
     {provider.id==='opencode-go'&&<OpenCodeConsoleGroup enabled={enabled} onChanged={reload}/>}
-        {['codex','claude-code','deepseek'].includes(provider.providerId??provider.id)&&<ServiceStatusGroup key={provider.id} provider={provider.id} base={provider.providerId??provider.id}/>}
+        {['codex','claude-code','deepseek'].includes(provider.providerId??provider.id)&&<ServiceStatusGroup provider={provider.id} base={provider.providerId??provider.id}/>}
         {['codex','claude-code'].includes(provider.providerId??provider.id)&&<PromptCacheGroup provider={provider.providerId??provider.id} enabled={prefs.tokenSpendEnabled}/>}
         {(provider.providerId??provider.id)==='codex'&&<CodexSignalsGroup enabled={prefs.tokenSpendEnabled}/>}
-      </> : null}
+      </Fragment> : null}
     </main>
   </div>
 }

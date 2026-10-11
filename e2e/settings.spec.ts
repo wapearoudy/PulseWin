@@ -33,7 +33,7 @@ test.beforeEach(async ({ page }) => {
         if(cmd === 'get_prompt_cache') { if(w.testCacheError) throw new Error(w.testCacheError); return structuredClone(w.testCache ?? {live:[],lastLapsed:null,notes:[]}) }
         if(cmd === 'get_preferences') return structuredClone(prefs)
         if(cmd === 'save_preferences') { Object.assign(prefs,args.value); emit('preferences-changed',structuredClone(prefs)); return }
-        if(cmd === 'provider_settings') return structuredClone([...providers,...(w.testOpenCodeProvider?[{id:'opencode-go',providerId:'opencode-go',name:'OpenCode Go',configured:true,stored:false,hints:[],credentialPath:null}]:[])])
+        if(cmd === 'provider_settings') return structuredClone([...providers,...(w.testGrokProvider?[{id:'grok',providerId:'grok',name:'Grok',configured:false,stored:false,hints:[],credentialPath:null}]:[]),...(w.testOpenCodeProvider?[{id:'opencode-go',providerId:'opencode-go',name:'OpenCode Go',configured:true,stored:false,hints:[],credentialPath:null}]:[])])
         if(cmd === 'add_account') {
           const id=args.provider+'--account-ab';prefs.accounts.push({id,provider:args.provider});prefs.accountLabels[id]=args.label;
           if(args.enabled!==false)prefs.enabledProviders.push(id);prefs.providerOrder.push(id);
@@ -280,4 +280,23 @@ test('arriving console rows stay visible during paging and disabled panes ignore
  await page.evaluate(()=>{const w=window as any;return w.__TAURI_INTERNALS__.invoke('save_preferences',{value:{...w.testPrefs,enabledProviders:[]}})})
  await expect(group.getByRole('cell',{name:'155',exact:true})).toHaveCount(0)
  await page.evaluate(value=>{const w=window as any;w.testEmit('opencode-console-history',value);w.resolveOpenCode(value)},result);await expect(group.getByRole('cell',{name:'155',exact:true})).toHaveCount(0);await expect(group.getByRole('button',{name:'刷新账单'})).toBeDisabled()
+})
+
+
+test('switching account pages never retains another account identity or draft',async({page})=>{
+  const warnings:string[]=[];page.on('console',message=>{if(message.text().includes('same key'))warnings.push(message.text())});
+  await page.getByRole('button',{name:'暂不设置'}).click();
+  await page.evaluate(()=>{(window as any).testGrokProvider=true});
+  // Reload provider settings by leaving the initial render through a real preference event.
+  await page.evaluate(()=>{const w=window as any;w.testPrefs.accounts=[{id:'fixture-reload',provider:'grok'}];w.testEmit('preferences-changed',structuredClone(w.testPrefs))});
+  const nav=page.getByRole('complementary',{name:'设置导航'});
+  for(const name of ['Claude Code','Codex','Claude Code','Grok','DeepSeek','Grok']){
+    await nav.getByRole('button',{name,exact:true}).click();
+    await expect(page.getByRole('heading',{name,exact:true})).toBeVisible();
+    await expect(page.getByLabel('账号显示名称',{exact:true})).toHaveCount(1);
+    await expect(page.getByLabel('账号显示名称',{exact:true})).toHaveValue(name);
+    await page.getByLabel('账号显示名称',{exact:true}).fill('未保存的草稿');
+  }
+  expect(warnings).toEqual([]);
+  await page.screenshot({path:'test-results/settings-account-switch.png',fullPage:true});
 })

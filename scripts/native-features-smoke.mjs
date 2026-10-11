@@ -54,6 +54,13 @@ try{
  for(let i=0;i<60;i++){page=browser.contexts().flatMap(c=>c.pages()).find(p=>p.url().includes('view=settings'));if(page)break;await new Promise(r=>setTimeout(r,250))}assert(page)
  await page.getByRole('button',{name:'暂不设置'}).click()
  const invoke=(command,args={})=>page.evaluate(({command,args})=>window.__TAURI_INTERNALS__.invoke(command,args),{command,args})
+ const nav=page.getByRole('complementary',{name:'设置导航'})
+ for(const name of ['Claude Code','Codex','Claude Code','Grok','DeepSeek','Grok']){
+  await nav.getByRole('button',{name,exact:true}).click()
+  assert.equal(await page.getByLabel('账号显示名称',{exact:true}).count(),1,`Native ${name}: exactly one account identity`)
+  assert.equal(await page.getByLabel('账号显示名称',{exact:true}).inputValue(),name)
+ }
+ await page.screenshot({path:path.join(root,'test-results/native-account-switch.png')})
  assert.deepEqual((await invoke('get_preferences')).enabledProviders,[])
  assert.equal((await invoke('get_opencode_console_connection')).connected,false);await assert.rejects(invoke('get_opencode_console_history'),/启用 OpenCode Go/);await assert.rejects(invoke('finish_opencode_console_login'),/先打开控制台/);
  assert.equal((await invoke('get_deepseek_console_connection')).connected,false);await assert.rejects(invoke('get_deepseek_console_history'),/启用 DeepSeek/);await assert.rejects(invoke('finish_deepseek_console_login'),/先打开控制台/)
@@ -74,6 +81,6 @@ try{
  const persisted=JSON.parse(await readFile(path.join(data,'preferences.json'),'utf8'));assert.equal(persisted.recapMonthlyPrice,20);assert.equal(persisted.recapHidesProjects,true);assert.equal(persisted.spendActivityView,'weekly')
  const update=await invoke('get_update_status');await invoke('save_update_settings',{settings:{...update.settings,automatic:false,backupAutomatic:false,notesLanguage:'ja'}});const saved=JSON.parse(await readFile(path.join(data,'updates.json'),'utf8'));assert.equal(saved.backupAutomatic,false);assert.equal(saved.notesLanguage,'ja')
  await invoke('save_preferences',{value:{...prefs,tokenSpendEnabled:false}});assert.equal(await invoke('spend_kept_snapshot'),null);await assert.rejects(invoke('get_codex_signals',{span:'month'}),/本机 Token/);await assert.rejects(invoke('get_prompt_cache',{provider:'codex'}),/未开启/)
- const result={passed:true,profile,testedAt:new Date().toISOString(),sources:scan.snapshot.sources.map(s=>({id:s.id,records:s.records})),checks:['isolated fixture-only home and cache','opt-in and opt-out native guards','thirteen native token sources including Kiro/Kimi and four SQLite/legacy stores','counter timestamps in seconds','Codex measured speed and TTFT','Codex evidence and insufficient-sample threshold','Claude and Codex cache TTL','full-size real canvas PNG export through native decoder and atomic writer','recap and activity preference persistence','backup and release-note language persistence'],notRun:['real account billing','clipboard and interactive file dialogs','official status outage delivery','full original recap visual parity','online backup assets blocked by public API rate limit']}
+ const result={passed:true,profile,testedAt:new Date().toISOString(),sources:scan.snapshot.sources.map(s=>({id:s.id,records:s.records})),checks:['account switches remove prior identities and drafts','isolated fixture-only home and cache','opt-in and opt-out native guards','thirteen native token sources including Kiro/Kimi and four SQLite/legacy stores','counter timestamps in seconds','Codex measured speed and TTFT','Codex evidence and insufficient-sample threshold','Claude and Codex cache TTL','full-size real canvas PNG export through native decoder and atomic writer','recap and activity preference persistence','backup and release-note language persistence'],notRun:['real account billing','clipboard and interactive file dialogs','official status outage delivery','full original recap visual parity','online backup assets blocked by public API rate limit']}
  await writeFile(path.join(root,'test-results/native-features-smoke.json'),JSON.stringify(result,null,2));console.log('PASS: native feature IPC, fixture counters, opt-out, PNG export and settings persistence')
 }catch(e){await page?.screenshot({path:path.join(root,'test-results/native-features-failure.png')}).catch(()=>undefined);throw e}finally{await browser?.close().catch(()=>undefined);child.kill()}

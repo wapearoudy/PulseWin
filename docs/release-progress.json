@@ -20,12 +20,13 @@
     "Zed native/plain/zstd SQLite thread counts; imported and external ACP threads excluded",
     "Crush source recognition without deriving token counts from dollars",
     "Updater proxy policy, same-repository fallback validation and supplied release-note language selection",
-    "Kiro explicit per-turn counters with sidecar timestamp invalidation and Kimi CLI wire counters; no guessed model prices or conversation persistence"
+    "Kiro explicit per-turn counters with sidecar timestamp invalidation and Kimi CLI wire counters; no guessed model prices or conversation persistence",
+    "Account page switch isolation: duplicate sibling React keys removed, whole provider subtree keyed; browser and rebuilt native repeated-switch regression passed"
   ],
   "verification": {
     "rust": "984 passed, 0 failed, 2 explicitly ignored real-account checks (986 total)",
     "frontendUnit": "205 passed in 20 files",
-    "browser": "80 passed full suite with 2 workers; all IPC replies are synthetic",
+    "browser": "80 passed preceding full suite; latest account identity fix passed all 17 Settings flows, including a red/green repeated-switch regression. All browser IPC responses are synthetic.",
     "native": "PASS on latest rebuilt 0.1.15 Windows/WebView2 binary: 13 synthetic native sources including Kiro/Kimi, kept reuse/opt-out, Codex evidence/cache/speed/TTFT, full-size PNG and preferences; light/bottom/horizontal suites. No interactive clipboard/file-dialog acceptance.",
     "localUpdateFeed": "0.1.14 remains unchanged; build explicitly holds promotion",
     "externalLimitations": [

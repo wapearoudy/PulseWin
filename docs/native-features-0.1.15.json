@@ -1,6 +1,6 @@
 {
   "passed": true,
-  "testedAt": "2026-10-11T10:20:56.605Z",
+  "testedAt": "2026-10-11T10:30:03.980Z",
   "sources": [
     {
       "id": "claude",
@@ -100,6 +100,7 @@
     }
   ],
   "checks": [
+    "account switches remove prior identities and drafts",
     "isolated fixture-only home and cache",
     "opt-in and opt-out native guards",
     "thirteen native token sources including Kiro/Kimi and four SQLite/legacy stores",
