@@ -1,10 +1,10 @@
 {
   "version": "0.1.17",
-  "status": "release-preparation",
-  "releaseHold": false,
-  "reason": "User requested commit, push and release on 2026-10-18 after the 0.1.17 token-source implementation. This release does not establish full Pulse parity; the remaining parity work continues afterwards.",
+  "status": "interim-published",
+  "releaseHold": true,
+  "reason": "User requested commit, push and release on 2026-10-18 after the 0.1.17 token-source implementation. The 0.1.17 GitHub release is published; the user then waived post-publication anonymous asset verification. This release does not establish full Pulse parity, so the release hold is restored for the remaining parity work.",
   "upstream": "1.9.0",
-  "publishedVersion": "0.1.16",
+  "publishedVersion": "0.1.17",
   "implementedVerified": [
     "Light assistant surfaces, rings and detail cards",
     "Horizontal floating, bottom docking and orientation-aware detail cards",
@@ -29,14 +29,14 @@
     "frontendUnit": "205 passed in 20 files",
     "browser": "81 passed in the full browser suite on the 0.1.17 working tree; browser IPC responses are synthetic.",
     "native": "PASS on the rebuilt 0.1.17 Windows/WebView2 binary: light/bottom/horizontal assistant and obsolete-layout rejection; repeated account switching and disabled collection; 41 registered token sources with 13 fixture counters; Codex measured speed/TTFT, local evidence and cache TTL; full-size 1080x1920 PNG export; preference persistence; CLI isolated cache; real signed updater download, tamper/version rejection and same-version skip. No installer executed.",
-    "localUpdateFeed": "Signed local 0.1.17 feed published to updates/latest.json and verified by the native updater; GitHub release publication in progress.",
+    "localUpdateFeed": "Signed local 0.1.17 feed published to updates/latest.json and verified by the native updater; the GitHub release was published as v0.1.17 with the same signed assets.",
     "externalLimitations": [
       "Anonymous GitHub backup API rate limited; live fallback not accepted",
       "DeepSeek official status network/TLS request failed",
       "Real Harness read-only integrity check failed because source logs changed during its 57.8-second scan; no stable live-source acceptance. Full offline fixture regression remains passing."
     ],
     "authenticatedConsole": "DeepSeek official interactive login and actual 30-day billing read passed. OpenCode official interactive login and resume passed: 20,364 Go request IDs, all unique, pending ranges 0, complete=true. Private credentials/ledger are ignored; this validates live reads, not full original card/renewal parity. Both encrypted connections and complete OpenCode ledger restored after restart. Live OpenCode forced read cancelled on account disable, disabled read rejected, DeepSeek unaffected. OpenCode Go explicit live quota GET passed.",
-    "publicRelease": "PENDING for 0.1.17: assets are built, signed and locally verified; GitHub release publication and anonymous asset verification are in progress. The last fully public verification remains 0.1.16."
+    "publicRelease": "0.1.17 was published on GitHub (v0.1.17: latest.json matches the local 0.1.17 manifest; NSIS exe, MSI and both signatures uploaded). At the user's request on 2026-10-18, post-publication anonymous asset verification was skipped, so no public SHA-256 comparison or old-client public-download check is recorded for 0.1.17. The last fully public verification remains 0.1.16. No installer executed."
   },
   "pending": [
     "13 unported Token sources are hidden from the UI and tracked in docs/token-source-backlog.md; four existing export/capture sources still require supplied exports",

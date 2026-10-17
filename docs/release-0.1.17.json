@@ -1,6 +1,6 @@
 {
   "version": "0.1.17",
-  "status": "prepared",
+  "status": "published",
   "authorization": "提交、推送、发版（2026-10-18）",
   "tests": {
     "rust": {
@@ -45,6 +45,7 @@
     "DeepSeek official status network/TLS request failed",
     "Real Harness read-only integrity check failed because source logs changed during its 57.8-second scan; no stable live-source acceptance. Full offline fixture regression remains passing."
   ],
-  "releaseCommit": null,
-  "publicVerification": null
+  "releaseCommit": "fe31c33",
+  "publicVerification": null,
+  "postPublicationVerification": "Skipped at the user's request on 2026-10-18; no anonymous asset SHA-256 comparison or old-client public-download check was run for 0.1.17."
 }
