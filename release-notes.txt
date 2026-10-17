@@ -1,15 +1,13 @@
-PulseWin 0.1.17 开发记录（暂不发布）
+PulseWin 0.1.17
 
-已实现并验证：
+本版按用户要求提交并发布当前已验证的改进。本版不宣称与 Pulse 1.9.0 达到 100% 功能覆盖。
+
 - Token 消耗本机读取来源从 24 个补齐到 41 个（共对照 Pulse 1.9.0 的 54 个）。新增 Roo Code、Kilo Code、Cline 的 VS Code 任务日志与 Cline CLI 会话；Cherry Studio、Command Code、OpenCodeReview、ZCode、JCode、Augment、Gajae Code、Junie、Fx 的会话记录；Mux、Codebuff 的对话统计；Unsloth Studio、LM Studio 的本地数据库/日志；Reasonix 的每日统计。
 - 新增来源按各自语义计数：流式快照按字段最大值合并而不重复累加，被放弃的对话分支照实计数，缓存关系优先采用来源自报的 total，无法判定的缓存/推理字段保留为中文说明而不猜测数字。
 - 缓存指纹补充侧车文件：JCode 日志、Fx 会话元数据、编辑器对话历史、Command Code 配置以及 ZCode/Unsloth 的 WAL 文件变化都会触发重新读取。
 - 仍未移植的 13 个来源继续从界面隐藏并记录在 docs/token-source-backlog.md；已有 reader 的「未检测到目录/无数据」状态保留。
-- Rust 单元/集成测试 1060 通过、2 个需真实账号的用例显式忽略；前端单测 205 通过（20 个文件）；浏览器全套件 81 通过。以上为 working tree 验证，0.1.17 尚未重新构建原生安装包。
+- Rust 单元/集成测试 1060 通过、2 个需真实账号的用例显式忽略；前端单测 205 通过（20 个文件）；浏览器全套件 81 通过；原生构建包完成本机冒烟验证。
 
-未完成其余对照项、多屏/真实通知/真实 Harness 稳定读取验收及 0.1.17 原生构建验证前不发布。已安装应用的最新更新仍为 0.1.16。
+现有账号、凭据、设置和时间进度额度告警规则保留。可从「设置 → 通用 → 软件更新」更新并重启。
 
-开发清单：docs/release-progress.json
-未移植来源：docs/token-source-backlog.md
-上游对照：docs/upstream-release-notes.md
-现有账号、凭据、设置及时间进度额度告警规则保留。
+仍待补齐：其余 13 个本地 Token 来源、完整详情卡/回顾视觉与分享流程、部分登录续期和扩展/集成功能。多屏、部分真实通知和真实 Harness 稳定日志验收仍未完成。

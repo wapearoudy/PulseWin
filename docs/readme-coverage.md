@@ -2,7 +2,7 @@
 
 2026-10-11 已同步原版 1.7.0–1.9.0 的 [发布说明与新增缺口](upstream-release-notes.md)。本次移植依据为已获取的 v1.9.0 标签对象；原版工作目录仍停在下述旧提交。下面的历史对照不是对 1.9.0 的完整验收，新增浅色助手、月报年报、官方服务状态等能力以新清单追踪。
 
-2026-10-17 继续实现检查点：服务状态、活动视图、回顾计算与 PNG 导出、Codex 本地分析、缓存时限、精确计数和计价，以及额外 Token 来源已有实现和专项测试。0.1.17 再移植 17 个 Token 来源（Roo Code、Kilo Code、Cline、Cherry Studio、Command Code、OpenCodeReview、ZCode、Unsloth、Mux、Codebuff、JCode、Augment、Gajae Code、Junie、Fx、LM Studio、Reasonix），当前登记 41 个来源（含只识别费用、不生成 Token 的 Crush），还有 13 项未移植；部分已登记来源仍需导出文件。DeepSeek 控制台、完整详情卡、回顾原版视觉/原生流程和真实账号验收仍未完成。下方历史表不自动升级为全部通过，最新缺口与证据见 [release-progress.json](release-progress.json)，用户于 2026-10-11 改为授权先发布 0.1.16；未实现来源在 UI 隐藏，内部开发清单继续保留。
+2026-10-17 继续实现检查点：服务状态、活动视图、回顾计算与 PNG 导出、Codex 本地分析、缓存时限、精确计数和计价，以及额外 Token 来源已有实现和专项测试。0.1.17 再移植 17 个 Token 来源（Roo Code、Kilo Code、Cline、Cherry Studio、Command Code、OpenCodeReview、ZCode、Unsloth、Mux、Codebuff、JCode、Augment、Gajae Code、Junie、Fx、LM Studio、Reasonix），当前登记 41 个来源（含只识别费用、不生成 Token 的 Crush），还有 13 项未移植；部分已登记来源仍需导出文件。DeepSeek 控制台、完整详情卡、回顾原版视觉/原生流程和真实账号验收仍未完成。下方历史表不自动升级为全部通过，最新缺口与证据见 [release-progress.json](release-progress.json)，用户于 2026-10-11 改为授权先发布 0.1.16；未实现来源在 UI 隐藏，内部开发清单继续保留。2026-10-18 用户要求提交、推送并发布 0.1.17；该版本已重新构建 Windows 产物，并通过 native 冒烟、CLI 与签名更新检查。
 
 验收来源：[官方 README.zh-CN.md](https://github.com/qunqin24/Pulse/blob/main/README.zh-CN.md)，2026-10-02 阅读在线版本；实现依据为同目录 `Pulse-original` 的 Swift 源码和 Docs。README 中的截图是外观参考，具体默认值和交互以对应源码与专题文档为准。上游当前有 77 个配额服务商，Token 消耗的 54 种客户端来源是另一套功能，不能混算。
 

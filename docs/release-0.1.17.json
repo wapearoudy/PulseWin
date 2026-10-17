@@ -1,0 +1,50 @@
+{
+  "version": "0.1.17",
+  "status": "prepared",
+  "authorization": "提交、推送、发版（2026-10-18）",
+  "tests": {
+    "rust": {
+      "passed": 1060,
+      "failed": 0,
+      "ignored": 2
+    },
+    "frontend": {
+      "passed": 205,
+      "files": 20
+    },
+    "browser": {
+      "passed": 81
+    },
+    "native": [
+      "native light appearance, bottom docking, horizontal restoration and obsolete-layout rejection; accounts remain isolated and collection disabled",
+      "41 registered token sources with 13 fixture-backed reader records; counter timestamps in seconds and empty notes",
+      "Codex measured speed/TTFT, local evidence threshold and Claude/Codex cache TTL",
+      "full-size 1080x1920 PNG export through the native decoder and atomic writer",
+      "recap, activity, backup and release-note language preference persistence",
+      "CLI isolated dated cache, account/pin selection and untouched fixture files",
+      "real Tauri signed local update download, tamper/version rejection, same-version skip, test install blocked and user settings unchanged"
+    ]
+  },
+  "installationExecuted": false,
+  "fullParity": false,
+  "limitations": [
+    "13 unported Token sources are hidden from the UI and tracked in docs/token-source-backlog.md; four existing export/capture sources still require supplied exports",
+    "DeepSeek console renewal/import and detailed-card integration; complete login-to-bill comparison still needs documented acceptance",
+    "OpenCode Go session renewal and detailed-card integration; authenticated read/resume/restart/account-scope cancellation now passed",
+    "Original recap visual parity, native recap flow, notification click navigation, interactive clipboard/file-dialog acceptance",
+    "Prompt-cache hover-card integration and complete per-model output/TTFT rows",
+    "Background warming timer/cancellation acceptance",
+    "Remaining provider authentication/diagnostics, stable quota identities and full 77-route audit",
+    "Extensions, complete JSON/integration fields and account deep links remain listed in README coverage",
+    "Windows multi-DPI/multi-monitor, full-screen and live-account regression acceptance",
+    "Live official outage notification and backup update acceptance",
+    "Stable real Harness source integrity acceptance; initial read-before/read-after verification failed on changing source logs"
+  ],
+  "externalLimitations": [
+    "Anonymous GitHub backup API rate limited; live fallback not accepted",
+    "DeepSeek official status network/TLS request failed",
+    "Real Harness read-only integrity check failed because source logs changed during its 57.8-second scan; no stable live-source acceptance. Full offline fixture regression remains passing."
+  ],
+  "releaseCommit": null,
+  "publicVerification": null
+}

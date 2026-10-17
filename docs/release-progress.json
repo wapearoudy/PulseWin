@@ -1,8 +1,8 @@
 {
   "version": "0.1.17",
-  "status": "implementation-in-progress",
-  "releaseHold": true,
-  "reason": "The 0.1.16 interim release remains the last published version. Continue implementing and validating the remaining Pulse 1.9 parity work before another release, as requested by the user; 100% parity is not established and the 0.1.17 tree has not been rebuilt as a native artifact.",
+  "status": "release-preparation",
+  "releaseHold": false,
+  "reason": "User requested commit, push and release on 2026-10-18 after the 0.1.17 token-source implementation. This release does not establish full Pulse parity; the remaining parity work continues afterwards.",
   "upstream": "1.9.0",
   "publishedVersion": "0.1.16",
   "implementedVerified": [
@@ -28,15 +28,15 @@
     "rust": "1060 passed, 0 failed, 2 explicitly ignored real-account checks (1062 total)",
     "frontendUnit": "205 passed in 20 files",
     "browser": "81 passed in the full browser suite on the 0.1.17 working tree; browser IPC responses are synthetic.",
-    "native": "Not rebuilt for the 0.1.17 working tree. The last verified native artifact remains the 0.1.16 Windows/WebView2 binary: hidden unported source list, repeated account switching, 13 synthetic native token sources, cache/speed/TTFT, full-size PNG, preferences, light/bottom/horizontal assistant, CLI and signed updater tamper/version rejection. No installer executed.",
-    "localUpdateFeed": "Signed local 0.1.16 feed remains the last promoted feed; no 0.1.17 artifact exists yet.",
+    "native": "PASS on the rebuilt 0.1.17 Windows/WebView2 binary: light/bottom/horizontal assistant and obsolete-layout rejection; repeated account switching and disabled collection; 41 registered token sources with 13 fixture counters; Codex measured speed/TTFT, local evidence and cache TTL; full-size 1080x1920 PNG export; preference persistence; CLI isolated cache; real signed updater download, tamper/version rejection and same-version skip. No installer executed.",
+    "localUpdateFeed": "Signed local 0.1.17 feed published to updates/latest.json and verified by the native updater; GitHub release publication in progress.",
     "externalLimitations": [
       "Anonymous GitHub backup API rate limited; live fallback not accepted",
       "DeepSeek official status network/TLS request failed",
       "Real Harness read-only integrity check failed because source logs changed during its 57.8-second scan; no stable live-source acceptance. Full offline fixture regression remains passing."
     ],
     "authenticatedConsole": "DeepSeek official interactive login and actual 30-day billing read passed. OpenCode official interactive login and resume passed: 20,364 Go request IDs, all unique, pending ranges 0, complete=true. Private credentials/ledger are ignored; this validates live reads, not full original card/renewal parity. Both encrypted connections and complete OpenCode ledger restored after restart. Live OpenCode forced read cancelled on account disable, disabled read rejected, DeepSeek unaffected. OpenCode Go explicit live quota GET passed.",
-    "publicRelease": "PASS for the published 0.1.16 release: all five anonymous GitHub assets match local SHA-256; latest manifest is 0.1.16; actual 0.1.16 native updater reports current; isolated 0.1.4 client downloads and verifies the real signed 0.1.16 package, with preferences unchanged. No installer executed. The 0.1.17 tree has not been published."
+    "publicRelease": "PENDING for 0.1.17: assets are built, signed and locally verified; GitHub release publication and anonymous asset verification are in progress. The last fully public verification remains 0.1.16."
   },
   "pending": [
     "13 unported Token sources are hidden from the UI and tracked in docs/token-source-backlog.md; four existing export/capture sources still require supplied exports",
@@ -49,10 +49,9 @@
     "Extensions, complete JSON/integration fields and account deep links remain listed in README coverage",
     "Windows multi-DPI/multi-monitor, full-screen and live-account regression acceptance",
     "Live official outage notification and backup update acceptance",
-    "Stable real Harness source integrity acceptance; initial read-before/read-after verification failed on changing source logs",
-    "Rebuild and re-verify the native 0.1.17 artifact (token source list, assistant, tray, CLI and signed updater) before any release"
+    "Stable real Harness source integrity acceptance; initial read-before/read-after verification failed on changing source logs"
   ],
-  "checkpointDate": "2026-10-17",
+  "checkpointDate": "2026-10-18",
   "reference": "Pulse v1.9.0 tag objects, alongside the unchanged old checkout",
   "implementedPartial": [
     "DeepSeek independent encrypted console login, 30-day actual billing and 60-second cache; interactive live read passed, renewal/import and detailed-card acceptance pending",

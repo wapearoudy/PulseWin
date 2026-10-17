@@ -9,17 +9,18 @@ Upstream release-note sync (2026-10-11): latest stable Pulse is 1.9.0.
 commit; this documentation sync does not establish parity with the new release.
 
 The user authorized an interim 0.1.16 release on 2026-10-11 and requested hiding
-unported Token sources from the UI. Remaining parity work is tracked in
-[release-progress.json](release-progress.json). Light assistant surfaces,
-horizontal floating/bottom docking and durable counter history are now implemented.
-The 0.1.17 working-tree checkpoint is recorded in [release-progress.json](release-progress.json):
+unported Token sources from the UI. On 2026-10-18 the user requested committing,
+pushing and releasing the 0.1.17 Token-source implementation. Remaining parity
+work is tracked in [release-progress.json](release-progress.json). Light assistant
+surfaces, horizontal floating/bottom docking and durable counter history are now implemented.
+The 0.1.17 release checkpoint is recorded in [release-progress.json](release-progress.json):
 1060 Rust checks passed, 2 real-account checks explicitly ignored; 205 frontend
 unit checks and 81 synthetic browser checks passed. Status history, activity,
 recap logic, local Codex evidence, cache timing, accurate pricing/counters and
 additional native readers have running implementations. DeepSeek console,
 recap visual/native flow, detailed-card integration and authenticated billing
-remain partial. The latest released Windows binary (0.1.16) passed both isolated native suites, including thirteen
-synthetic source fixtures and native PNG export; the 0.1.17 tree has not been rebuilt as a native artifact yet.
+remain partial. The rebuilt 0.1.17 Windows/WebView2 binary passed both isolated native suites, including thirteen
+synthetic source fixtures and native PNG export, plus CLI and signed-updater checks.
 Interactive clipboard/dialogs remain unrun. DeepSeek interactive login and 30-day real billing read passed;
 OpenCode interactive login and resume completed: 20,364 unique Go request IDs,
 no pending ranges. Restart recovery and account-disable cancellation passed. Original detailed-card acceptance remains pending.
@@ -28,7 +29,7 @@ because source logs changed during scanning and is not counted as accepted.
 The Token source catalog now declares 41 integrations (Crush recognizes a
 cost-only store and intentionally emits no token records); 13 source entries
 remain unported. This is a source inventory, not an overall parity percentage.
-The 0.1.17 tree does not establish full parity. The 13 unported sources
+The 0.1.17 release does not establish full parity. The 13 unported sources
 remain in [the internal backlog](token-source-backlog.md); their entries are
 hidden from the Token page. Existing source failures and no-data states remain visible.
 
@@ -68,9 +69,10 @@ abandoned branches, OpenCodeReview settles cache relations from its own total,
 and ambiguous cache/reasoning relations become visible notes instead of guessed
 numbers. Sidecar fingerprints cover JCode journals, Fx session metadata, editor
 conversation histories, Command Code config, and ZCode/Unsloth WAL files.
-Validation: 1060 Rust tests plus two ignored, 205 frontend and 81 browser tests.
-No native binary was rebuilt for this tree. See `token-source-backlog.md` and
-`release-progress.json`.
+Validation: 1060 Rust tests plus two ignored, 205 frontend and 81 browser tests;
+the rebuilt 0.1.17 Windows/WebView2 binary passed both isolated native suites,
+native PNG export, CLI and signed-updater checks. No installer was executed.
+See `token-source-backlog.md` and `release-progress.json`.
 
 0.1.14 compares approaching quota warnings with cycle time while preserving the
 configured minimum. At a 75% minimum, 75% used / 75% elapsed stays normal and
