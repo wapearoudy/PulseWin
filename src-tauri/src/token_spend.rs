@@ -19,9 +19,12 @@ const TRANSCRIPT_VERSION: u32 = 9;
 const MAX_LINE: usize = 8 * 1024 * 1024;
 const MAX_FILES: usize = 50_000;
 const MAX_RECORDS: usize = 1_000_000;
-const AGENTS: [(&str, &str); 24] = [("claude", "Claude Code"), ("codex", "Codex"), ("qwen", "Qwen Code"),
+const AGENTS: [(&str, &str); 41] = [("claude", "Claude Code"), ("codex", "Codex"), ("qwen", "Qwen Code"),
     ("gemini", "Gemini CLI"), ("cursor", "Cursor"), ("antigravity", "Antigravity"), ("hindsight", "Hindsight"), ("mcode", "MCode"),
-    ("opencode", "OpenCode"), ("kilo", "Kilo CLI"), ("micode", "MiMo Code"), ("dsh", "DeepSeek Harness"),("pi","Pi"),("omp","Oh My Pi"),("kimchi","Kimchi"),("amp","Amp"),("droid","Droid"),("openclaw","OpenClaw"),("goose","Goose"),("hermes","Hermes"),("zed","Zed"),("crush","Crush"),("kiro","Kiro"),("kimi","Kimi CLI")];
+    ("opencode", "OpenCode"), ("kilo", "Kilo CLI"), ("micode", "MiMo Code"), ("dsh", "DeepSeek Harness"),("pi","Pi"),("omp","Oh My Pi"),("kimchi","Kimchi"),("amp","Amp"),("droid","Droid"),("openclaw","OpenClaw"),("goose","Goose"),("hermes","Hermes"),("zed","Zed"),("crush","Crush"),("kiro","Kiro"),("kimi","Kimi CLI"),
+    // Ported from Pulse 1.9's Groups B–D in this batch. Every id here has a
+    // reader below; a source without one stays hidden in the backlog instead.
+    ("roocode","Roo Code"),("kilocode","Kilo Code"),("cline","Cline"),("cherrystudio","Cherry Studio"),("commandcode","Command Code"),("opencodereview","OpenCodeReview"),("zcode","ZCode"),("unsloth","Unsloth"),("mux","Mux"),("codebuff","Codebuff"),("jcode","JCode"),("augment","Augment"),("gjc","Gajae Code"),("junie","Junie"),("fx","Fx"),("lmstudio","LM Studio"),("reasonix","Reasonix")];
 #[path = "token_spend/dsh_reader.rs"]
 mod dsh_reader;
 #[path = "token_spend/measured_readers.rs"]
@@ -40,6 +43,23 @@ mod zed_reader;
 mod crush_reader;
 mod kiro_reader;
 mod kimi_reader;
+// Pulse 1.9 Groups B–D. Each file owns one store format (or one family of
+// sibling stores) and stays out of the main scan loop until registered below.
+mod editor_task_reader;
+mod cherrystudio_reader;
+mod commandcode_reader;
+mod opencodereview_reader;
+mod zcode_reader;
+mod unsloth_reader;
+mod mux_reader;
+mod codebuff_reader;
+mod jcode_reader;
+mod augment_reader;
+mod gjc_reader;
+mod junie_reader;
+mod fx_reader;
+mod lmstudio_reader;
+mod reasonix_reader;
 pub fn watch(app:tauri::AppHandle){warmer::watch(app)}
 pub fn reading_changed(){warmer::changed()}
 pub fn forget_kept(){warmer::forget()}
@@ -333,7 +353,7 @@ fn stamp(path: &Path, agent: &str) -> std::io::Result<u64> {
     let main=(meta.len(), meta.modified()?.duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos());
     // A running SQLite writer can append records without changing the main
     // file. Fingerprint its WAL/journal too; never open with immutable=1.
-    let sidecars=if opencode_store::is_database(path)||openclaw_reader::database(path)||aggregate_databases::candidate(path,"goose")||aggregate_databases::candidate(path,"hermes")||zed_reader::candidate(path) { ["-wal", "-journal"].into_iter().map(|suffix| {
+    let sidecars=if opencode_store::is_database(path)||openclaw_reader::database(path)||aggregate_databases::candidate(path,"goose")||aggregate_databases::candidate(path,"hermes")||zed_reader::candidate(path)||zcode_reader::candidate(path,"zcode")||unsloth_reader::candidate(path,"unsloth") { ["-wal", "-journal"].into_iter().map(|suffix| {
         let mut name=path.as_os_str().to_os_string(); name.push(suffix);
         match fs::metadata(PathBuf::from(name)) {
             Ok(m)=>Ok(Some((m.len(),m.modified()?.duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos()))),
@@ -351,7 +371,19 @@ fn stamp(path: &Path, agent: &str) -> std::io::Result<u64> {
             Err(e) => return Err(e)
         }
     } else { None };
-    Ok(hash((path.to_string_lossy().to_string(), main, sidecars,dependency,registry,kiro_sidecar)))
+    // Sibling inputs the ported readers consult: JCode's append journal, Fx's
+    // session sidecar, editor model fallbacks and Command Code's legacy config.
+    // The candidate file alone cannot fingerprint them, so cache freshness would
+    // otherwise survive a sibling-only change.
+    let probe=|path:&Path|->std::io::Result<Option<(u64,u128)>>{match fs::metadata(path){Ok(m)=>Ok(Some((m.len(),m.modified()?.duration_since(UNIX_EPOCH).unwrap_or_default().as_nanos()))),Err(e)if e.kind()==std::io::ErrorKind::NotFound=>Ok(None),Err(e)=>Err(e)}};
+    let mut siblings=Vec::new();
+    let name=path.file_name().and_then(|name|name.to_str()).unwrap_or_default();
+    if agent=="jcode" { if let Some(stem)=path.file_stem().and_then(|stem|stem.to_str()){ siblings.push(probe(&path.with_file_name(format!("{stem}.journal.jsonl")))?); } }
+    if agent=="fx" { siblings.push(probe(&path.with_file_name("session.json"))?); }
+    if matches!(agent,"roocode"|"kilocode"|"cline") && name.eq_ignore_ascii_case("ui_messages.json") { siblings.push(probe(&path.with_file_name("api_conversation_history.json"))?); }
+    if agent=="cline" && name.ends_with(".messages.json") { let stem=name.trim_end_matches(".messages.json"); siblings.push(probe(&path.with_file_name(format!("{stem}.json")))?); }
+    if agent=="commandcode" { if let Some(dir)=path.ancestors().find(|dir|dir.file_name().and_then(|name|name.to_str())==Some(".commandcode")){ siblings.push(probe(&dir.join("config.json"))?); } }
+    Ok(hash((path.to_string_lossy().to_string(), main, sidecars,dependency,registry,kiro_sidecar,siblings)))
 }
 fn write_cache(dir: &Path, name: &str, value: &impl Serialize, cancel: &AtomicBool) -> Result<(), String> {
     check(cancel)?; let bytes = serde_json::to_vec(value).map_err(|e| e.to_string())?; check(cancel)?;
@@ -385,7 +417,78 @@ fn roots(home: &Path, agent: &str, environment: impl Fn(&str) -> Option<String>)
         "openclaw"=>[".openclaw/agents",".clawdbot",".moltbot",".moldbot"].into_iter().map(|p|home.join(p)).collect(),
         id if aggregate_databases::agent(id)=>aggregate_databases::roots(home,id,&environment),
         id if session_readers::agent(id)=>session_readers::roots(home,id,&environment),
+        id if ported_source(id)=>ported_roots(home,id,&environment),
         _ => Vec::new(),
+    }
+}
+/// Sources whose readers were ported from Pulse 1.9 Groups B–D. Ids outside
+/// this set have no reader, stay out of AGENTS, and are never scanned.
+fn ported_source(agent: &str) -> bool {
+    matches!(agent, "roocode"|"kilocode"|"cline"|"cherrystudio"|"commandcode"|"opencodereview"|"zcode"|"unsloth"|"mux"|"codebuff"|"jcode"|"augment"|"gjc"|"junie"|"fx"|"lmstudio"|"reasonix")
+}
+/// File-based stores keep per-file history so a deleted task log keeps its last
+/// complete read. An accumulated SQLite ledger instead goes through StoreHistory.
+fn ported_history(agent: &str) -> bool {
+    matches!(agent, "roocode"|"kilocode"|"cline"|"cherrystudio"|"commandcode"|"opencodereview"|"zcode"|"mux"|"codebuff"|"jcode"|"augment"|"gjc"|"junie"|"fx"|"lmstudio"|"reasonix")
+}
+fn ported_roots(home: &Path, agent: &str, env: &impl Fn(&str) -> Option<String>) -> Vec<PathBuf> {
+    match agent {
+        "roocode"|"kilocode"|"cline" => editor_task_reader::roots(home,agent,env),
+        "cherrystudio" => cherrystudio_reader::roots(home,agent,env),
+        "commandcode" => commandcode_reader::roots(home,agent,env),
+        "opencodereview" => opencodereview_reader::roots(home,agent,env),
+        "zcode" => zcode_reader::roots(home,agent,env),
+        "unsloth" => unsloth_reader::roots(home,agent,env),
+        "mux" => mux_reader::roots(home,agent,env),
+        "codebuff" => codebuff_reader::roots(home,agent,env),
+        "jcode" => jcode_reader::roots(home,agent,env),
+        "augment" => augment_reader::roots(home,agent,env),
+        "gjc" => gjc_reader::roots(home,agent,env),
+        "junie" => junie_reader::roots(home,agent,env),
+        "fx" => fx_reader::roots(home,agent,env),
+        "lmstudio" => lmstudio_reader::roots(home,agent,env),
+        "reasonix" => reasonix_reader::roots(home,agent,env),
+        _ => Vec::new(),
+    }
+}
+fn ported_candidate(path: &Path, agent: &str) -> bool {
+    match agent {
+        "roocode"|"kilocode"|"cline" => editor_task_reader::candidate(path,agent),
+        "cherrystudio" => cherrystudio_reader::candidate(path,agent),
+        "commandcode" => commandcode_reader::candidate(path,agent),
+        "opencodereview" => opencodereview_reader::candidate(path,agent),
+        "zcode" => zcode_reader::candidate(path,agent),
+        "unsloth" => unsloth_reader::candidate(path,agent),
+        "mux" => mux_reader::candidate(path,agent),
+        "codebuff" => codebuff_reader::candidate(path,agent),
+        "jcode" => jcode_reader::candidate(path,agent),
+        "augment" => augment_reader::candidate(path,agent),
+        "gjc" => gjc_reader::candidate(path,agent),
+        "junie" => junie_reader::candidate(path,agent),
+        "fx" => fx_reader::candidate(path,agent),
+        "lmstudio" => lmstudio_reader::candidate(path,agent),
+        "reasonix" => reasonix_reader::candidate(path,agent),
+        _ => false,
+    }
+}
+fn ported_read(path: &Path, agent: &str, cancel: &AtomicBool) -> Result<(Vec<SpendRecord>, Vec<String>), String> {
+    match agent {
+        "roocode"|"kilocode"|"cline" => editor_task_reader::read(path,agent,cancel),
+        "cherrystudio" => cherrystudio_reader::read(path,agent,cancel),
+        "commandcode" => commandcode_reader::read(path,agent,cancel),
+        "opencodereview" => opencodereview_reader::read(path,agent,cancel),
+        "zcode" => zcode_reader::read(path,agent,cancel),
+        "unsloth" => unsloth_reader::read(path,agent,cancel),
+        "mux" => mux_reader::read(path,agent,cancel),
+        "codebuff" => codebuff_reader::read(path,agent,cancel),
+        "jcode" => jcode_reader::read(path,agent,cancel),
+        "augment" => augment_reader::read(path,agent,cancel),
+        "gjc" => gjc_reader::read(path,agent,cancel),
+        "junie" => junie_reader::read(path,agent,cancel),
+        "fx" => fx_reader::read(path,agent,cancel),
+        "lmstudio" => lmstudio_reader::read(path,agent,cancel),
+        "reasonix" => reasonix_reader::read(path,agent,cancel),
+        _ => Ok((Vec::new(), Vec::new())),
     }
 }
 fn candidate(path: &Path, agent: &str) -> bool {
@@ -398,6 +501,7 @@ fn candidate(path: &Path, agent: &str) -> bool {
     else if agent == "dsh" { dsh_reader::candidate(path) }
     else if opencode_store::agent(agent) { opencode_store::candidate(path, agent) }
     else if session_readers::agent(agent) { session_readers::candidate(path, agent) }
+    else if ported_source(agent) { ported_candidate(path, agent) }
     else { measured_readers::candidate(path, agent) }
 }
 fn enumerate(root: &Path, agent: &str, files: &mut Vec<PathBuf>, cancel: &AtomicBool, notes: &mut Vec<String>) -> Result<(), String> {
@@ -484,7 +588,7 @@ fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl
         }
         let stable=snapshot.notes.len()==note_start && snapshot.records.len()+raw_count<=MAX_RECORDS;
         history::order_live(&mut per_file);
-        let mut records=if !inputs.is_empty() && matches!(*agent,"claude"|"codex"|"qwen"|"gemini"|"pi"|"omp"|"kimchi"|"amp"|"droid"|"kiro"|"kimi") {
+        let mut records=if !inputs.is_empty() && (matches!(*agent,"claude"|"codex"|"qwen"|"gemini"|"pi"|"omp"|"kimchi"|"amp"|"droid"|"kiro"|"kimi") || ported_history(agent)) {
             if let Some(mut journal)=history::History::load(cache,agent,&mut snapshot.notes) {
                 let (records,retained)=journal.reconcile(per_file,stable,&mut identities,cancel)?;
                 source.retained_records=retained;
@@ -492,7 +596,7 @@ fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl
                 records
             } else {per_file.into_iter().flat_map(|(_,r)|r).filter(|r|history::claim(r,&mut identities)).collect()}
         } else {per_file.into_iter().flat_map(|(_,r)|r).filter(|r|history::claim(r,&mut identities)).collect()};
-        if !inputs.is_empty() && !matches!(*agent,"claude"|"codex"|"qwen"|"gemini"|"pi"|"omp"|"kimchi"|"amp"|"droid"|"kiro"|"kimi") {
+        if !inputs.is_empty() && !(matches!(*agent,"claude"|"codex"|"qwen"|"gemini"|"pi"|"omp"|"kimchi"|"amp"|"droid"|"kiro"|"kimi") || ported_history(agent)) {
             if let Some(mut journal)=history::StoreHistory::load(cache,agent,&mut snapshot.notes){
                 source.retained_records=journal.reconcile(&mut records,stable,cancel)?;
                 if stable {store_journals.push(journal)}
@@ -527,6 +631,7 @@ fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl
 
 fn counter(value: &Value) -> u64 { value.as_u64().or_else(|| value.as_f64().filter(|x| x.is_finite() && *x >= 0.).map(|x| x as u64)).unwrap_or(0) }
 fn parse_file(path: &Path, agent: &str, cancel: &AtomicBool) -> Result<(Vec<SpendRecord>, Vec<String>), String> {
+    if ported_source(agent){return ported_read(path,agent,cancel)}
     if agent=="kiro"{return kiro_reader::read(path,cancel)}
     if agent=="kimi"{return kimi_reader::read(path,cancel)}
     if agent=="zed"{return zed_reader::read(path,cancel)}
@@ -1120,5 +1225,65 @@ mod tests {
         let mut value: Value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap(); value["records"][0]["hour"] = json!(99);
         fs::write(&file,value.to_string()).unwrap();
         let rebuilt = fixture.scan(&Prices::new(),&AtomicBool::new(false)).unwrap(); assert_eq!(rebuilt.sources[0].cached_files,0); assert!(rebuilt.records[0].hour < 24); assert_eq!(rebuilt.records[0].tally.total(),125);
+    }
+    #[test] fn ported_sidecar_inputs_invalidate_the_transcript_cache() {
+        let fixture = Fixture::new(); let dir = fixture.dir.clone();
+        let put = |relative: &str, content: &str| { let path = dir.join(relative); fs::create_dir_all(path.parent().unwrap()).unwrap(); fs::write(&path, content).unwrap(); path };
+        // JCode appends most replies to a sibling journal, not to the session JSON.
+        let jcode = put("logs/jcode/session_a.json", "{}"); let journal = put("logs/jcode/session_a.journal.jsonl", "");
+        let before = stamp(&jcode, "jcode").unwrap(); fs::write(&journal, "{\"append\":1}\n").unwrap();
+        assert_ne!(stamp(&jcode, "jcode").unwrap(), before, "journal-only append must invalidate");
+        // Fx keeps its version and creation time in a sibling session sidecar.
+        let fx = put("logs/fx/s1/usage-v2.json", "{}"); put("logs/fx/s1/session.json", "{}");
+        let before = stamp(&fx, "fx").unwrap(); fs::write(dir.join("logs/fx/s1/session.json"), "{\"updated_at_ms\":1}").unwrap();
+        assert_ne!(stamp(&fx, "fx").unwrap(), before, "fx sidecar must invalidate");
+        // The editor task log's model fallback is a sibling document.
+        let ui = put("logs/roocode/tasks/t1/ui_messages.json", "[]"); put("logs/roocode/tasks/t1/api_conversation_history.json", "");
+        let before = stamp(&ui, "roocode").unwrap(); fs::write(dir.join("logs/roocode/tasks/t1/api_conversation_history.json"), "[{\"model\":\"m\"}]").unwrap();
+        assert_ne!(stamp(&ui, "roocode").unwrap(), before, "editor model fallback must invalidate");
+        // Cline CLI keeps its session manifest beside the message log.
+        let cli = put("logs/cline/abc.messages.json", "[]"); put("logs/cline/abc.json", "{}");
+        let before = stamp(&cli, "cline").unwrap(); fs::write(dir.join("logs/cline/abc.json"), "{\"model\":\"m\"}").unwrap();
+        assert_ne!(stamp(&cli, "cline").unwrap(), before, "cline manifest must invalidate");
+        // Command Code's legacy model default is the store-level config.
+        let command = put("logs/store/.commandcode/projects/p/s.jsonl", ""); put("logs/store/.commandcode/config.json", "{}");
+        let before = stamp(&command, "commandcode").unwrap(); fs::write(dir.join("logs/store/.commandcode/config.json"), "{\"model\":\"m\"}").unwrap();
+        assert_ne!(stamp(&command, "commandcode").unwrap(), before, "command code config must invalidate");
+        // A running SQLite writer changes only the WAL / rollback journal.
+        let zcode = put("logs/zcode/cli/db/db.sqlite", "sqlite"); put("logs/zcode/cli/db/db.sqlite-wal", "");
+        let before = stamp(&zcode, "zcode").unwrap(); fs::write(dir.join("logs/zcode/cli/db/db.sqlite-wal"), "wal").unwrap();
+        assert_ne!(stamp(&zcode, "zcode").unwrap(), before, "zcode WAL must invalidate");
+        let unsloth = put("logs/unsloth/studio.db", "sqlite"); put("logs/unsloth/studio.db-journal", "");
+        let before = stamp(&unsloth, "unsloth").unwrap(); fs::write(dir.join("logs/unsloth/studio.db-journal"), "journal").unwrap();
+        assert_ne!(stamp(&unsloth, "unsloth").unwrap(), before, "unsloth rollback journal must invalidate");
+        let stable = stamp(&ui, "roocode").unwrap(); assert_eq!(stamp(&ui, "roocode").unwrap(), stable, "an untouched candidate keeps its fingerprint");
+    }
+    #[test] fn ported_sources_count_natively_and_survive_rescans() {
+        let fixture = Fixture::new(); let home = fixture.dir.join("home");
+        let put = |relative: &str, content: &str| { let path = home.join(relative); fs::create_dir_all(path.parent().unwrap()).unwrap(); fs::write(&path, content).unwrap(); };
+        put(".augment/sessions/aug-1.json", &json!({"sessionId":"aug-1","chatHistory":[{"completed":true,"finishedAt":1791028800,
+            "exchange":{"model_id":"claude-sonnet-4","request_id":"req-1","response_nodes":[{"token_usage":{"input_tokens":10,"output_tokens":2}}]}}]}).to_string());
+        put(".mux/sessions/ws-1/session-usage.json", &json!({"version":1,"byModel":{"anthropic:claude":{"input":{"tokens":100},"output":{"tokens":50}}},
+            "lastRequest":{"timestamp":1_700_000_000_000i64},"prompt":"SIDE-CHANNEL PROMPT"}).to_string());
+        put(".config/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks/task-1/ui_messages.json", &json!([
+            {"type":"say","say":"api_req_started","ts":1_700_000_000_000i64,"modelInfo":{"modelId":"claude-3"},
+             "text":"{\"tokensIn\":100,\"tokensOut\":20,\"cacheWrites\":5,\"cacheReads\":10}"}]).to_string());
+        let scan=||scan_roots(&fixture.dir.join("cache"),&Prices::new(),&AtomicBool::new(false),|_,_|{},|id|roots(&home,id,|_|None)).unwrap();
+        let first=scan();
+        assert_eq!(first.sources.len(), 41, "every registered agent reports one source");
+        assert!(first.notes.is_empty(), "unexpected notes: {:?}", first.notes);
+        let counted=|snapshot:&SpendSnapshot,id:&str|snapshot.sources.iter().find(|source|source.id==id).unwrap().records;
+        assert_eq!(counted(&first,"augment"), 1); assert_eq!(counted(&first,"mux"), 1); assert_eq!(counted(&first,"roocode"), 1);
+        let total=|snapshot:&SpendSnapshot,id:&str|snapshot.records.iter().filter(|record|record.agent==id).map(|record|record.tally.total()).sum::<u64>();
+        assert_eq!(total(&first,"augment"), 12); assert_eq!(total(&first,"mux"), 150); assert_eq!(total(&first,"roocode"), 135);
+        for id in ["augment","mux","roocode"] { let source=first.sources.iter().find(|source|source.id==id).unwrap();
+            assert_eq!(source.origin, "native"); assert_eq!(source.status, "counted"); assert!(source.files >= 1); }
+        assert!(!serde_json::to_string(&first.records).unwrap().contains("SIDE-CHANNEL"));
+        // The second pass reads the transcript caches and reconciles the same
+        // identities, so a rescan cannot duplicate a ported source's counters.
+        let second=scan(); assert_eq!(second.records.len(), first.records.len());
+        for id in ["augment","mux","roocode"] { let source=second.sources.iter().find(|source|source.id==id).unwrap();
+            assert_eq!(source.records, 1); assert_eq!(source.cached_files, 1); }
+        assert_eq!(total(&second,"augment"), 12); assert_eq!(total(&second,"mux"), 150); assert_eq!(total(&second,"roocode"), 135);
     }
 }

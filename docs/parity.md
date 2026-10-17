@@ -12,23 +12,23 @@ The user authorized an interim 0.1.16 release on 2026-10-11 and requested hiding
 unported Token sources from the UI. Remaining parity work is tracked in
 [release-progress.json](release-progress.json). Light assistant surfaces,
 horizontal floating/bottom docking and durable counter history are now implemented.
-The continuing checkpoint is recorded in [release-progress.json](release-progress.json):
-984 Rust checks passed, 2 real-account checks explicitly ignored; 205 frontend
-unit checks and 80 synthetic browser checks passed; latest Token/settings changes passed 26 targeted flows. Status history, activity,
+The 0.1.17 working-tree checkpoint is recorded in [release-progress.json](release-progress.json):
+1060 Rust checks passed, 2 real-account checks explicitly ignored; 205 frontend
+unit checks and 81 synthetic browser checks passed. Status history, activity,
 recap logic, local Codex evidence, cache timing, accurate pricing/counters and
 additional native readers have running implementations. DeepSeek console,
 recap visual/native flow, detailed-card integration and authenticated billing
-remain partial. The latest Windows binary passed both isolated native suites, including thirteen
-synthetic source fixtures and native PNG export. Interactive clipboard/dialogs
-remain unrun. DeepSeek interactive login and 30-day real billing read passed;
+remain partial. The latest released Windows binary (0.1.16) passed both isolated native suites, including thirteen
+synthetic source fixtures and native PNG export; the 0.1.17 tree has not been rebuilt as a native artifact yet.
+Interactive clipboard/dialogs remain unrun. DeepSeek interactive login and 30-day real billing read passed;
 OpenCode interactive login and resume completed: 20,364 unique Go request IDs,
 no pending ranges. Restart recovery and account-disable cancellation passed. Original detailed-card acceptance remains pending.
 The explicit live Go quota GET passed; the live Harness integrity test failed
 because source logs changed during scanning and is not counted as accepted.
-The Token source catalog now declares 24 integrations (Crush recognizes a
-cost-only store and intentionally emits no token records); 30 source entries
+The Token source catalog now declares 41 integrations (Crush recognizes a
+cost-only store and intentionally emits no token records); 13 source entries
 remain unported. This is a source inventory, not an overall parity percentage.
-This interim release does not establish full parity. The 30 unported sources
+The 0.1.17 tree does not establish full parity. The 13 unported sources
 remain in [the internal backlog](token-source-backlog.md); their entries are
 hidden from the Token page. Existing source failures and no-data states remain visible.
 
@@ -58,6 +58,20 @@ All unchecked items remain incomplete or unverified. No overall completion perce
 
 ## Verification baseline
 
+0.1.17 adds seventeen Pulse 1.9 native Token readers: Roo Code, Kilo Code and
+Cline VS Code task logs plus Cline CLI sessions; Cherry Studio, Command Code,
+OpenCodeReview, ZCode, JCode, Augment, Gajae Code, Junie and Fx session stores;
+Mux and Codebuff session chats; Unsloth Studio and LM Studio local stores; and
+Reasonix daily statistics. Readers follow the original's counter semantics:
+streamed Cherry Studio snapshots merge by field maximum, Command Code counts
+abandoned branches, OpenCodeReview settles cache relations from its own total,
+and ambiguous cache/reasoning relations become visible notes instead of guessed
+numbers. Sidecar fingerprints cover JCode journals, Fx session metadata, editor
+conversation histories, Command Code config, and ZCode/Unsloth WAL files.
+Validation: 1060 Rust tests plus two ignored, 205 frontend and 81 browser tests.
+No native binary was rebuilt for this tree. See `token-source-backlog.md` and
+`release-progress.json`.
+
 0.1.14 compares approaching quota warnings with cycle time while preserving the
 configured minimum. At a 75% minimum, 75% used / 75% elapsed stays normal and
 80% used / 75% elapsed warns. Rings, hover cards, collapsed rail, tray dashboard
@@ -74,8 +88,8 @@ percentage-point parsing below 1%. Validation: 885 Rust tests plus two ignored,
 37% cached to 41% live was verified with the same read-only CLI login. See
 `codex-quota-refresh.md` and `release-0.1.13.json`. This is not full parity.
 
-Current Token Spend readers: 12 of 54. DeepSeek Harness is implemented in
-0.1.12; 42 sources remain unsupported. Four implemented readers require prepared
+Current Token Spend readers: 41 of 54. DeepSeek Harness is implemented in
+0.1.12; 13 sources remain unsupported. Four implemented readers require prepared
 exports/captures. Historical milestone counts below describe their release date.
 
 0.1.12 Harness acceptance: ordinary/versioned JSONL and concatenated Zstandard

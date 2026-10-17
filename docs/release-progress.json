@@ -1,8 +1,8 @@
 {
-  "version": "0.1.16",
-  "status": "interim-published",
+  "version": "0.1.17",
+  "status": "implementation-in-progress",
   "releaseHold": true,
-  "reason": "The user-authorized interim 0.1.16 release is published and publicly verified. The prior requirement to complete and verify remaining parity before further releases is restored; 100% parity is not established.",
+  "reason": "The 0.1.16 interim release remains the last published version. Continue implementing and validating the remaining Pulse 1.9 parity work before another release, as requested by the user; 100% parity is not established and the 0.1.17 tree has not been rebuilt as a native artifact.",
   "upstream": "1.9.0",
   "publishedVersion": "0.1.16",
   "implementedVerified": [
@@ -21,24 +21,25 @@
     "Crush source recognition without deriving token counts from dollars",
     "Updater proxy policy, same-repository fallback validation and supplied release-note language selection",
     "Kiro explicit per-turn counters with sidecar timestamp invalidation and Kimi CLI wire counters; no guessed model prices or conversation persistence",
-    "Account page switch isolation: duplicate sibling React keys removed, whole provider subtree keyed; browser and rebuilt native repeated-switch regression passed"
+    "Account page switch isolation: duplicate sibling React keys removed, whole provider subtree keyed; browser and rebuilt native repeated-switch regression passed",
+    "Seventeen additional Pulse 1.9 native Token readers: Roo Code, Kilo Code and Cline VS Code task logs plus Cline CLI sessions; Cherry Studio, Command Code, OpenCodeReview, ZCode, JCode, Augment, Gajae Code, Junie and Fx session stores; Mux and Codebuff chats; Unsloth Studio and LM Studio local databases/logs; Reasonix daily statistics. Streaming snapshots merge by field maximum, abandoned branches count, store-reported totals settle cache relations, and ambiguous fields stay visible notes. Sidecar fingerprints cover JCode journals, Fx session metadata, editor conversation histories, Command Code config and ZCode/Unsloth WAL files."
   ],
   "verification": {
-    "rust": "984 passed, 0 failed, 2 explicitly ignored real-account checks (986 total)",
+    "rust": "1060 passed, 0 failed, 2 explicitly ignored real-account checks (1062 total)",
     "frontendUnit": "205 passed in 20 files",
-    "browser": "81 passed in the full browser suite on 0.1.16 source; browser IPC responses are synthetic.",
-    "native": "PASS on rebuilt 0.1.16 Windows/WebView2 binary: hidden unported source list, repeated account switching, 13 synthetic native token sources, cache/speed/TTFT, full-size PNG, preferences, light/bottom/horizontal assistant, CLI and signed updater tamper/version rejection. No installer executed.",
-    "localUpdateFeed": "Signed local 0.1.16 feed promoted for the user-authorized interim release.",
+    "browser": "81 passed in the full browser suite on the 0.1.17 working tree; browser IPC responses are synthetic.",
+    "native": "Not rebuilt for the 0.1.17 working tree. The last verified native artifact remains the 0.1.16 Windows/WebView2 binary: hidden unported source list, repeated account switching, 13 synthetic native token sources, cache/speed/TTFT, full-size PNG, preferences, light/bottom/horizontal assistant, CLI and signed updater tamper/version rejection. No installer executed.",
+    "localUpdateFeed": "Signed local 0.1.16 feed remains the last promoted feed; no 0.1.17 artifact exists yet.",
     "externalLimitations": [
       "Anonymous GitHub backup API rate limited; live fallback not accepted",
       "DeepSeek official status network/TLS request failed",
       "Real Harness read-only integrity check failed because source logs changed during its 57.8-second scan; no stable live-source acceptance. Full offline fixture regression remains passing."
     ],
     "authenticatedConsole": "DeepSeek official interactive login and actual 30-day billing read passed. OpenCode official interactive login and resume passed: 20,364 Go request IDs, all unique, pending ranges 0, complete=true. Private credentials/ledger are ignored; this validates live reads, not full original card/renewal parity. Both encrypted connections and complete OpenCode ledger restored after restart. Live OpenCode forced read cancelled on account disable, disabled read rejected, DeepSeek unaffected. OpenCode Go explicit live quota GET passed.",
-    "publicRelease": "PASS: all five anonymous GitHub assets match local SHA-256; latest manifest is 0.1.16; actual 0.1.16 native updater reports current; isolated 0.1.4 client downloads and verifies the real signed 0.1.16 package, with preferences unchanged. No installer executed."
+    "publicRelease": "PASS for the published 0.1.16 release: all five anonymous GitHub assets match local SHA-256; latest manifest is 0.1.16; actual 0.1.16 native updater reports current; isolated 0.1.4 client downloads and verifies the real signed 0.1.16 package, with preferences unchanged. No installer executed. The 0.1.17 tree has not been published."
   },
   "pending": [
-    "30 unported Token sources are hidden from the UI and tracked in docs/token-source-backlog.md; four existing export/capture sources still require supplied exports",
+    "13 unported Token sources are hidden from the UI and tracked in docs/token-source-backlog.md; four existing export/capture sources still require supplied exports",
     "DeepSeek console renewal/import and detailed-card integration; complete login-to-bill comparison still needs documented acceptance",
     "OpenCode Go session renewal and detailed-card integration; authenticated read/resume/restart/account-scope cancellation now passed",
     "Original recap visual parity, native recap flow, notification click navigation, interactive clipboard/file-dialog acceptance",
@@ -48,9 +49,10 @@
     "Extensions, complete JSON/integration fields and account deep links remain listed in README coverage",
     "Windows multi-DPI/multi-monitor, full-screen and live-account regression acceptance",
     "Live official outage notification and backup update acceptance",
-    "Stable real Harness source integrity acceptance; initial read-before/read-after verification failed on changing source logs"
+    "Stable real Harness source integrity acceptance; initial read-before/read-after verification failed on changing source logs",
+    "Rebuild and re-verify the native 0.1.17 artifact (token source list, assistant, tray, CLI and signed updater) before any release"
   ],
-  "checkpointDate": "2026-10-11",
+  "checkpointDate": "2026-10-17",
   "reference": "Pulse v1.9.0 tag objects, alongside the unchanged old checkout",
   "implementedPartial": [
     "DeepSeek independent encrypted console login, 30-day actual billing and 60-second cache; interactive live read passed, renewal/import and detailed-card acceptance pending",

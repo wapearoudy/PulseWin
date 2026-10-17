@@ -1,15 +1,15 @@
 # PulseWin
 
-> **Parity work in progress (2026-10-11).** This is not yet a complete port of Pulse.
+> **Parity work in progress (2026-10-17).** This is not yet a complete port of Pulse.
 > The desktop assistant now includes original provider artwork, per-account bots with eight
 > personalities/eighteen bodies, lifecycle activity, hover cards, scoped refresh, forecast,
 > drag docking and persisted preferences. The precise implemented/partial/missing status is in
 > [the official README feature/UI comparison](docs/readme-coverage.md).
 > All 77 provider adapters are registered; registration is not real-account validation.
-> Token Spend now has twelve actual readers, notifications have evidence-based alert
-> rules, and the original bot animation engine/effects are ported. Multi-account authentication,
-> the remaining Token Spend readers, extensions, localization and full
-> native/multiple-display acceptance remain open.
+> Token Spend now registers 41 of 54 sources (40 that emit token records; Crush is
+> cost-only), notifications have evidence-based alert rules, and the original bot
+> animation engine/effects are ported. Multi-account authentication, the remaining 13 Token Spend
+> sources, extensions, localization and full native/multiple-display acceptance remain open.
 > Existing installations explicitly select the services to monitor; stored credentials are retained.
 
 **Upstream release notes:** [Pulse 1.7.0 through 1.9.0](docs/upstream-release-notes.md), checked on 2026-10-11. Includes a Windows follow-up inventory; these notes do not imply feature parity.
@@ -122,12 +122,22 @@ MCode captured stream-json. These four import formats require files prepared bef
 does not connect or sync them. Readers use bounded streaming, replay deduplication, file caching and cooperative cancellation.
 The page has today/7-day/30-day ranges, model and agent details, daily/hourly charts, project and
 session sorting/pagination, and public models.dev price estimates. Unknown prices stay unknown.
-Native read-only SQLite readers now cover OpenCode, Kilo CLI and MiMo Code, including active WAL files.
+Native read-only readers also cover OpenCode, Kilo CLI, MiMo Code, Pi, Oh My Pi, Kimchi, Amp,
+Droid, OpenClaw, Goose, Hermes, Zed, Kiro and Kimi CLI, including active WAL files; Crush is
+recognized as a cost-only source. The 0.1.17 tree ports seventeen more Pulse 1.9 sources:
+Roo Code, Kilo Code and Cline task logs or CLI sessions; Cherry Studio, Command Code,
+OpenCodeReview, ZCode, JCode, Augment, Gajae Code, Junie and Fx session stores; Mux and Codebuff
+chats; Unsloth Studio and LM Studio local databases or logs; and Reasonix daily statistics.
+Streamed snapshots merge by field maximum, abandoned branches are counted, cache relations come
+from each store's own reported total, and ambiguous cache/reasoning relations stay visible as
+notes instead of guessed numbers. Sidecar fingerprints cover JCode journals, Fx session metadata,
+editor conversation histories, Command Code config and ZCode/Unsloth WAL files.
 DeepSeek Harness reads normal and versioned JSONL sessions, including concatenated Zstandard checkpoints,
 under `~/.dsh/sessions` or `$DSH_HOME/sessions`. CLI and the current desktop share this directory.
 It includes provider-reported failed attempts and compaction calls, excludes fork-inherited counters,
 and deduplicates migrated copies. Reasoning stays inside output; input and cache buckets are disjoint.
-The original's other 42 sources, including native Antigravity CLI/IDE stores,
+The original's other 13 sources — Grok Build, Devin, OmO Native, Prime Agent, CodeBuddy,
+WorkBuddy, Antigravity CLI, Antigravity IDE, Devin Desktop, Freebuff, Trae, Warp and Copilot —
 are explicitly unsupported until their readers are implemented. Aggregate Cursor exports do not
 generate a fabricated hour chart.
 
