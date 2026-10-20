@@ -10,6 +10,8 @@
 
 2026-10-03 再次按 Windows 0.1.7 源码与原版提交 `397c8fc4f1bd52180a452d2f3f0c099def97cf69` 核对，并在线读取该提交的中文 README。此前清单漏记的菜单栏用量、重置后自动开启窗口、完整设置入口及登录回退已补入。此处是源码与已有验收证据审计，不代表本次重新执行真实账号或桌面交互测试。
 
+这张 38 行的表是按**界面**组织的：一个面板、一组圆环、一页 Token 消耗各占一行，所以它能说明每块界面还差什么，不能说明原版有多少整块能力在表里根本还没有行。官方服务状态（原版 44 个服务商）、货币换算、回顾与 Token 消耗的时间区间、扩展指标可视化、从截屏中隐藏、statusline 安装、账号面板的一整套分组都属于后者，单独列在下面的[「未覆盖的整块能力」](#未覆盖的整块能力)一节，同样给出原版位置与这里的现状。
+
 | 官方能力 | 对应原版源码 / 文档 | Windows 当前状态 / 验收缺口 |
 | --- | --- | --- |
 | 圆环、阈值颜色与账号高亮色 | Panel/UsageRingView、UsageTint；Docs/ui/rings-and-surface.md | 已接通使用量、剩余量、账号高亮、明确用尽标记；没有百分比时保持空轨道，内外环使用同一账号颜色，用尽覆盖自定义颜色；随机动画及系统渲染差异不作为像素一致证明 |
@@ -115,6 +117,69 @@
 | 34 | 图标旁排文字 | Windows 通知区域只能画图标加 tooltip，macOS 那种图标旁文字没有对应 API |
 
 完整清单与每条证据见 [release-progress.json](release-progress.json)（12 条 pending、5 条 implementedPartial）。
+
+## 未覆盖的整块能力
+
+上面那张 38 行的表是按**界面**组织的：一个面板、一组圆环、一页 Token 消耗各占一行。原版 README 里另有一些整块能力在表里连一行都没有，所以「13 已接通 / 25 有未完成项 / 0 缺失」不是差距的全貌。这一节单独列出它们，每项都给原版位置和这里的现状，不用「部分」概括。
+
+### A. 原版有、这里整块没有
+
+| # | 能力 | 原版在这里 | 这里现在在这里 | 具体差什么 |
+| --- | --- | --- | --- | --- |
+| A1 | 官方服务状态：44 个服务商、12 种 feed 形态 | `Providers/Status/` 共 1804 行 —— `StatusPage.swift`（331 行，`of(_:)` 在 `:109`；里面 46 个 `case .x`，其中 `china`／`international` 是 MiniMax 两个店面的分支，减去后是 **44 个服务商**，与原版 README 的 44 providers 一致；`matches` 在 `:58`，`notifiesAbout` 在 `:101`，`page` 在 `:286`）、`ServiceStatus.swift`（300）、`ServiceStatus+Companies.swift`（235）、`ServiceStatus+Monitors.swift`（229）、`ServiceStatus+IncidentIO.swift`（222）、`ServiceStatus+Flashcat.swift`（212）、`ServiceStatus+Statuspage.swift`（161）、`ServiceStatus+BetterStack.swift`（114）。12 种形态在 `StatusPage.swift:9-40` | `src-tauri/src/service_status.rs`（1026 行）里 `pub enum Page` 只有 `OpenAI`／`Claude`／`DeepSeek` 三个（`:18`），`from_provider` 只认三个 id（`:31`）；解析器只有 `openai_summary`（`:150`）、`claude_summary`（`:178`）、`flashcat_data`（`:211`）三个，合起来只覆盖 statuspage 与 flashcat 两种形态；`src/Settings.tsx:164` 只给 `['codex','claude-code','deepseek']` 渲染 `ServiceStatusGroup`，而 `src/ServiceStatusGroup.tsx:9` 的 `hosts` 也只有这三个域名 | 缺 41 个服务商的状态页地址和「哪些组件算这个服务商」的规则（`matches`／`notifiesAbout` 的等价物），以及 12 种形态里剩下的 10 种（incidentIO、betterStack、instatus、uptimeRobot、upptime、gatus、openCode、deepInfra、ibmBob、googleCloud）；宕机通知也只对三个服务商生效 |
+| A2 | 货币换算 7 种 | `Usage/Money.swift`（193 行：`enum DisplayCurrency` 在 `:13`，`usd`／`cny`／`hkd`／`twd`／`jpy`／`krw`／`rub` 七种在 `:14-20`；`Money.converted` 在 `:105`，`format` 在 `:145`，`symbol` 在 `:184`）、`Usage/ExchangeRates.swift`（161 行，源是 ExchangeRate-API 开放端点，每天一次，只在用户选了非美元时才联网，`ExchangeRateKeeper` 在 `:111`，落盘 `exchange-rates.json`）、`Settings/CurrencySettingsGroup.swift`（134 行）、`App/AppSettings.swift:141 displayCurrency`／`:148 manualExchangeRates`／`:155 exchangeRates`、`App/AppSettings+Application.swift:121 moneyIdentity` | 完全没有：`src/token-spend/summary.ts:99-102` 的 `formatCost` 硬编码 `US$`；`US$` 还写死在 `src/token-spend/TokenSpendPane.tsx:125,146,163`、`src/token-spend/RecapPane.tsx:23`（月订阅价标签）、`src/OpenCodeConsoleGroup.tsx:21`；`src/preferences.ts` 没有任何 currency 字段 | 缺设置项、汇率抓取与落盘、手动汇率优先于抓取，以及 5 个前端文件里所有金额格式化点改为按所选货币与 locale 输出 |
+| A3 | 回顾的时间粒度 4 档 + `--recap` 命令行 | `Usage/Recap.swift:20-30` 的 `enum Period` 有 `day`／`week`／`month`／`year` 四档；`Usage/RecapReport.swift:23 static let modeArgument = "--recap"`，`:69` 解析参数，支持 `--recap 2026-09`、`2026`、某一天、`week-YYYY-MM-DD` | `src/token-spend/RecapPane.tsx:23` 只有「月度」「年度」两个按钮；`src-tauri/src/main.rs:8` 只识别 `--json` 与 `--statusline`，没有 `--recap` 分支 | 缺 day 与 week 两档的口径和卡片内容，以及一个只读的命令行入口。月/年两档的数据模型与 8 张卡片已移植（`recap.ts`、`recap-renderer.ts`） |
+| A4 | Token 消耗时间区间 9 种 + 自定义 | `Settings/TokenSpendView.swift:999` 的 `enum SpendSpan`（文件 1115 行，定义在 `:999-1011`）：`today`／`week`／`month`／`quarter`／`thisMonth`／`lastMonth`／`thisYear`／`all`／`custom`；`:1004` 的注释写明「账单意义上的上个月不是最近 30 天」，`:1010` 的 `custom` 用 `AppSettings.spendCustomDays` | `src/token-spend/TokenSpendPane.tsx:32` 只有 `[['today','今天'],['week','最近 7 天'],['month','最近 30 天']]`；`src/token-spend/summary.ts:6-11` 的 `spanDays` 只有 `today`／`month`／默认 7 天三支 | 缺自然月、自然季、自然年、全部、自定义五种口径及各自标签。`summarizeBetween`（`summary.ts:76`）已经能接受任意起止日，所以这是口径与 UI 的补齐，不是数据层重写 |
+| A5 | 扩展指标的可视化 | `Settings/ExtensionMetricsGroup.swift`（86 行，`MetricSeriesChart` 在 `:39`）；原版卡片上也有扩展指标的趋势线 | 后端已解析并返回：`src-tauri/src/model.rs:161 metrics: Vec<UsageMetric>`（结构在 `:106` 与 `:121`），`src-tauri/src/extension.rs:538` 确实把 `report.metrics` 填进 `usage.metrics` | **前端从不渲染**：`grep -rn metrics src/` 只命中一个无关的 `set_panel_metrics`。数据已经到位，缺的是画图 |
+| A6 | 从截屏中隐藏 | `App/AppSettings.swift:178-187 hidesFromScreenCapture`（注释写明 `NSWindow.sharingType = .none`）、`Panel/FloatingPanelController.swift:334 panel.sharingType = settings.hidesFromScreenCapture ? .none : .readOnly`、设置项在 `Settings/PlacementPane.swift:72-73` | 零命中：`hidesFromScreenCapture` 与 `WDA_EXCLUDEFROMCAPTURE` 在 `src-tauri/src` 与 `src` 里都不存在 | Windows 侧对应 `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)`，缺一个设置开关加一次调用 |
+| A7 | `--install-statusline` / `--uninstall-statusline` | `App/PulseApp.swift:22` 与 `:26`，把 statusline 装进 shell 提示符 | `src-tauri/src/main.rs:8` 只认 `--json` 与 `--statusline`，没有安装/卸载子命令 | 缺两个参数与写入提示符配置的逻辑；只读输出本身已经有了 |
+
+### B. 账号面板缺的一整套分组
+
+原版 `Sources/Pulse/Settings/` 有 75 个文件，账号页由下面这些分组拼成；这里账号页只有 7 个 provider 特化分组（`src/Settings.tsx:162-172`：DeepSeek 控制台、OpenCode 控制台、官方状态页、自动开启窗口、prompt cache、扩展程序、Codex signals），没有一个是通用账号分组。
+
+| 原版文件 | 行数 | 这里 |
+| --- | --- | --- |
+| `AccountConnectionGroup.swift` | 394 | 无，只有较薄的 `AccountIdentity` |
+| `ModelSpendDetailView.swift` | 383 | 无 |
+| `ChartHoverOverlay.swift` | 155 | Token 页有 hover，账号页图表没有 |
+| `QoderCreditsGroup.swift` | 149 | 无 |
+| `CurrencySettingsGroup.swift` | 134 | 无（见 A2） |
+| `PromptCacheSessionsView.swift` | 127 | 无，只有 `PromptCacheGroup` 的到期条 |
+| `AccountLiveUsageGroup.swift` | 116 | 无 |
+| `AccountHistoryGroup.swift` | 102 | 无 |
+| `ExtensionMetricsGroup.swift` | 86 | 无（见 A5） |
+| `EstimatedValueGroup.swift` | 66 | 无 |
+
+这一节与上表第 50 行「完整设置导航」有重叠，但第 50 行只写了「原版还有这些页面」，没有给出每一项的原版位置与这里的现状，所以单列。
+
+### C. 能直接补代码 vs 必须真机或真账号验证
+
+**能直接补代码**（代码写出来就能用，fixture 能验）：A2 货币换算、A4 时间区间、A5 扩展指标渲染、A6 截屏隐藏、A7 statusline 安装、A3 的 day/week 两档与 `--recap` 入口、B 里除 `AccountConnectionGroup` 之外的多数分组。
+
+**必须真机或真账号验证**（代码写完也不算完成）：A1 的每个服务商状态页都要打真实响应确认地址与组件规则没写错；A2 的汇率抓取要验真实端点、离线回退与 429（`ExchangeRates.swift:1-18` 的注释写明每天约一次，频繁请求会被 429 二十分钟）；A6 要在真实 Windows 截屏/录屏工具下确认窗口确实不出现；A7 要在真实 shell 里确认提示符生效；A1 的宕机通知要真实宕机才能验。
+
+### D. 建议的补齐顺序与工作量
+
+工作量是按相邻已有模块的规模估的，不是承诺值；同一阶段内的项改的文件基本不重叠，可以并行，唯一的交汇点是 `src/Settings.tsx`。
+
+**阶段一（你指定的两块，可并行）**
+
+1. **A2 货币换算** —— 约 400～600 行（新增 Rust 约 250～350 行含汇率抓取与落盘，前端约 150～250 行），另加 1 个设置分组、5 个金额格式化点改造、`preferences.ts` 加字段。比 A1 小一个量级，但会把「所有金额」的表示方式统一掉，先做能避免后面每加一处金额都要再改一遍。
+2. **A1 官方服务状态** —— 约 1200～2000 行 Rust，测试同量级。拆开是：`StatusFeed` 形态枚举与 `StatusPage` 声明表 300～500 行（44 个服务商各 5～15 行规则）、10 个缺失形态的解析器各 60～150 行、通知与设置门控 100～200 行。建议一次只加一种形态，配一个 fixture 加一次真实探测，形态验完再补服务商条目，避免 46 家一起改完才发现某个形态解析是错的。
+
+**阶段二（前端小活，可并行）**
+
+3. **A4 时间区间** —— 约 150～250 行，全是前端口径与 UI。
+4. **A5 扩展指标渲染** —— 约 120～200 行。注意 `package.json` 里只有 react/react-dom，没有图表库，原版 `MetricSeriesChart` 的折线要用手写 SVG 补，不能引依赖。
+5. **A6 截屏隐藏** —— 约 60～100 行，一个设置字段加一次 `SetWindowDisplayAffinity` 调用。
+
+**阶段三（补完整度）**
+
+6. **A3 回顾 day/week 与 `--recap`** —— 约 200～300 行数据与卡片，加 `--recap` 入口约 80～120 行 Rust（复用 `RecapReport` 已有的模型）。
+7. **A7 statusline 安装/卸载** —— 约 100～200 行。
+8. **B 的账号分组** —— 1712 行 Swift 对应约 1500～2500 行前端，其中 `AccountConnectionGroup`（394 行）和 `ModelSpendDetailView`（383 行）占一半以上，且 `AccountConnectionGroup` 依赖还没有的 `ConnectionRemedy` 那套补救动作（见上表第 44 行），所以它要排在连接诊断之后。
+
 
 ## 当前验证边界
 
