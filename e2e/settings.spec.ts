@@ -233,7 +233,7 @@ test('local Codex analysis requires consent, uses requested range and cancels on
 })
 
 test('prompt cache countdown refreshes, errors discard readings and navigation stops polling',async({page})=>{
-  await page.clock.install({time:new Date('2026-10-11T00:00:00Z')});await page.clock.pauseAt(new Date('2026-10-11T00:00:00Z'));await page.getByRole('button',{name:'暂不设置'}).click()
+  await page.clock.install({time:new Date('2026-10-10T23:59:00Z')});await page.clock.pauseAt(new Date('2026-10-11T00:00:00Z'));await page.getByRole('button',{name:'暂不设置'}).click()
   await page.evaluate(()=>{const w=window as any;w.testCache={live:[{id:'cache',title:'可计时会话',project:'工程',lastRequest:new Date().toISOString(),expiresAt:new Date(Date.now()+31*60_000).toISOString(),lifetime:1800,isMinimum:true}],lastLapsed:null,notes:[]};return w.__TAURI_INTERNALS__.invoke('save_preferences',{value:{...w.testPrefs,tokenSpendEnabled:true}})})
   await page.getByRole('button',{name:'Codex',exact:true}).click();const group=page.getByRole('region',{name:'提示词缓存'})
   await expect(group.getByText('可计时会话',{exact:true})).toBeVisible();await expect(group.getByText('至少 31分 0秒',{exact:true})).toBeVisible()
