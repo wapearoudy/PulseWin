@@ -1,8 +1,8 @@
 {
- "version": "0.1.17",
- "status": "interim-published",
- "releaseHold": true,
- "reason": "User requested commit, push and release on 2026-10-18 after the 0.1.17 token-source implementation. The 0.1.17 GitHub release is published; the user then waived post-publication anonymous asset verification. This release does not establish full Pulse parity, so the release hold is restored for the remaining parity work.",
+ "version": "0.1.18",
+ "status": "prepared-not-built",
+ "releaseHold": false,
+ "reason": "User requested commit, push and release on 2026-10-20 (\"提交代码，发布一版\"). The code is committed and pushed and the version is bumped to 0.1.18, but this aarch64-apple-darwin workspace cannot build the nsis/msi installers the project ships, and the updater signing key `~/.pulsewin-signing/updater.key` is not on this machine. The hold is lifted so the Windows build machine can finish with `npm run tauri -- build` then `npm run prepare:github -- wapearoudy/PulseWin` then `npm run publish:github`; nothing is published yet. This release does not establish full Pulse parity.",
  "upstream": "1.9.0",
  "publishedVersion": "0.1.17",
  "implementedVerified": [
@@ -25,37 +25,46 @@
   "Seventeen additional Pulse 1.9 native Token readers: Roo Code, Kilo Code and Cline VS Code task logs plus Cline CLI sessions; Cherry Studio, Command Code, OpenCodeReview, ZCode, JCode, Augment, Gajae Code, Junie and Fx session stores; Mux and Codebuff chats; Unsloth Studio and LM Studio local databases/logs; Reasonix daily statistics. Streaming snapshots merge by field maximum, abandoned branches count, store-reported totals settle cache relations, and ambiguous fields stay visible notes. Sidecar fingerprints cover JCode journals, Fx session metadata, editor conversation histories, Command Code config and ZCode/Unsloth WAL files.",
   "All 54 Pulse 1.9 Token sources registered with a reader each: Grok Build, Devin, Devin Desktop, CodeBuddy, WorkBuddy, Antigravity CLI, Antigravity IDE, Trae, Warp, Copilot, OmO Native, Prime Agent and Freebuff added on top of the 41 already present; Warp and Freebuff report no token counts by the original design and say so instead of estimating",
   "Window starter: per-provider opt-in with a risk confirmation, shared local hours, reset-plus-grace scheduling, first-account-only rule, one attempt per reset, recorded outcome, and a settings group on the Claude Code and Codex panes",
-  "User extensions: manifest scan with schema/id/executable-path validation, off by default, per-extension switch, 1-60 s timeout, output ceiling and JSON validation, failure classification, one account per extension in the panel, a User extensions settings pane and a per-extension account group"
+  "User extensions: manifest scan with schema/id/executable-path validation, off by default, per-extension switch, 1-60 s timeout, output ceiling and JSON validation, failure classification, one account per extension in the panel, a User extensions settings pane and a per-extension account group",
+  "Official service status rewritten as a 45-entry catalogue (44 providers plus the second MiniMax storefront) over 12 feed shapes with the original's five-rule component matching, 7 palettes, per-feed single-request outage checks and OutageMemory keyed by provider id",
+  "Currency conversion for the original's 7 display currencies: estimates only (a service's own balance, credits and console charges keep the currency the service stated), network only when the chosen currency is not USD, manual rate overrides",
+  "Token spend spans widened from 3 to the original's 9 including a custom start/end day pair; a one-day range swaps the day bars for the hour profile as the original does",
+  "Extension metrics rendered with hand-written SVG trends on the card (at most two, like the original's metricTrendLimit) and in Settings (every series), with no new dependency",
+  "Hide from screen capture via Tauri's set_content_protected, which tao maps to SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE) on Windows and the original's NSWindow.sharingType on macOS; off by default, and a request rather than a guarantee"
  ],
  "verification": {
-  "rust": "1060 passed, 0 failed, 2 explicitly ignored real-account checks (1062 total)",
-  "frontendUnit": "205 passed in 20 files",
-  "browser": "81 passed in the full browser suite on the 0.1.17 working tree; browser IPC responses are synthetic.",
-  "native": "PASS on the rebuilt 0.1.17 Windows/WebView2 binary: light/bottom/horizontal assistant and obsolete-layout rejection; repeated account switching and disabled collection; 41 registered token sources with 13 fixture counters; Codex measured speed/TTFT, local evidence and cache TTL; full-size 1080x1920 PNG export; preference persistence; CLI isolated cache; real signed updater download, tamper/version rejection and same-version skip. No installer executed.",
-  "localUpdateFeed": "Signed local 0.1.17 feed published to updates/latest.json and verified by the native updater; the GitHub release was published as v0.1.17 with the same signed assets.",
+  "rust": "1176 passed, 35 failed, 2 explicitly ignored. The 35 failures are the pre-existing macOS run of Windows-only path/PATH tests and their names are identical to the pre-change baseline (comm -23 and comm -13 against /tmp/baseline_failures.txt are both empty).",
+  "frontendUnit": "260 passed in 25 files; tsc --noEmit and vite build clean.",
+  "browser": "81 passed, three consecutive full-suite runs. Two test-side defects were fixed: the status mock did not answer the new status_pages command, and the prompt-cache countdown test raced its own fake clock (install({time: T}) then pauseAt(T) throws \"Cannot fast-forward to the past\"; it failed on pristine specs too, about one full-suite run in three).",
+  "native": "NOT RUN for 0.1.18. The last verified native artifact remains the 0.1.17 Windows/WebView2 binary.",
+  "localUpdateFeed": "No 0.1.18 artifact exists; the last promoted feed is 0.1.17.",
+  "buildBlocker": "aarch64-apple-darwin host with nsis/msi bundle targets and no updater signing key; see docs/release-0.1.18.json buildBlocker.",
+  "publicRelease": "0.1.18 is NOT published. The last published release remains 0.1.17, whose post-publication anonymous asset verification the user waived on 2026-10-18.",
   "externalLimitations": [
+   "44 status pages verified against fixtures only; gemini-cli, command-code and hugging-face timed out from this network (curl times out too) and stay unverified",
+   "Exchange-rate endpoint, offline and 429 behaviour not exercised against the real service",
    "Anonymous GitHub backup API rate limited; live fallback not accepted",
-   "DeepSeek official status network/TLS request failed",
-   "Real Harness read-only integrity check failed because source logs changed during its 57.8-second scan; no stable live-source acceptance. Full offline fixture regression remains passing."
-  ],
-  "authenticatedConsole": "DeepSeek official interactive login and actual 30-day billing read passed. OpenCode official interactive login and resume passed: 20,364 Go request IDs, all unique, pending ranges 0, complete=true. Private credentials/ledger are ignored; this validates live reads, not full original card/renewal parity. Both encrypted connections and complete OpenCode ledger restored after restart. Live OpenCode forced read cancelled on account disable, disabled read rejected, DeepSeek unaffected. OpenCode Go explicit live quota GET passed.",
-  "publicRelease": "0.1.17 was published on GitHub (v0.1.17: latest.json matches the local 0.1.17 manifest; NSIS exe, MSI and both signatures uploaded). At the user's request on 2026-10-18, post-publication anonymous asset verification was skipped, so no public SHA-256 comparison or old-client public-download check is recorded for 0.1.17. The last fully public verification remains 0.1.16. No installer executed."
+   "Real Harness read-only integrity check failed because source logs changed during its 57.8-second scan; no stable live-source acceptance"
+  ]
  },
  "pending": [
-  "DeepSeek console renewal/import and detailed-card integration; complete login-to-bill comparison still needs documented acceptance",
-  "OpenCode Go session renewal and detailed-card integration; authenticated read/resume/restart/account-scope cancellation now passed",
-  "Original recap visual parity, native recap flow, notification click navigation, interactive clipboard/file-dialog acceptance",
+  "Build, sign and publish 0.1.18 on a Windows host: npm run tauri -- build, then npm run prepare:github -- wapearoudy/PulseWin, then npm run publish:github (do not run npm run release, which would bump the version again)",
+  "Acceptance of the 44 official status pages against real responses; outage notification needs a real outage",
+  "Acceptance of hide-from-capture under real Windows capture and recording tools",
+  "Exchange-rate endpoint, offline fallback and 429 behaviour on the real network",
+  "Real extension metric series (long, mixed units, non-monotonic timestamps)",
+  "Custom spend ranges across month, year and DST boundaries on real data",
+  "DeepSeek console renewal/import and detailed-card integration",
+  "OpenCode Go session renewal and detailed-card integration",
+  "Original recap visual parity, native recap flow, notification click navigation",
   "Prompt-cache hover-card integration and complete per-model output/TTFT rows",
-  "Background warming timer/cancellation acceptance",
-  "Remaining provider authentication/diagnostics, stable quota identities and full 77-route audit",
-  "Complete JSON/integration fields and account deep links remain listed in README coverage",
-  "Window starter: real CLI send and Windows no-window launch acceptance (scheduler, settings pane and outcome recording are implemented)",
-  "User extensions: acceptance with a real installed extension program (scan, enable, timeout, output validation and account rendering are implemented)",
+  "Developer integrations, deep links, --recap, statusline installation and the account-panel groups remain unimplemented",
   "Windows multi-DPI/multi-monitor, full-screen and live-account regression acceptance",
-  "Live official outage notification and backup update acceptance",
-  "Stable real Harness source integrity acceptance; initial read-before/read-after verification failed on changing source logs"
+  "Window starter real CLI send and Windows no-window launch acceptance",
+  "User extensions acceptance with a real installed extension program",
+  "Stable real Harness source integrity acceptance"
  ],
- "checkpointDate": "2026-10-18",
+ "checkpointDate": "2026-10-20",
  "reference": "Pulse v1.9.0 tag objects, alongside the unchanged old checkout",
  "implementedPartial": [
   "DeepSeek independent encrypted console login, 30-day actual billing and 60-second cache; interactive live read passed, renewal/import and detailed-card acceptance pending",
@@ -64,5 +73,5 @@
   "Prompt-cache and console billing currently settings-only; full detailed-card integration pending",
   "OpenCode encrypted independent login, workspace resolution and adaptive pager; 20,364 unique live Go IDs, zero pending ranges, restart recovery and account disable cancellation passed. Renewal and detailed-card acceptance pending."
  ],
- "interimReleaseAuthorization": "先发布一版，未实现的token来源先隐藏了"
+ "interimReleaseAuthorization": "提交代码，发布一版（2026-10-20）"
 }

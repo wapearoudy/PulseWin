@@ -1,0 +1,53 @@
+{
+ "version": "0.1.18",
+ "status": "prepared-not-built",
+ "authorization": "提交、推送、发版（2026-10-20，用户指令「提交代码，发布一版」）",
+ "releaseHold": false,
+ "buildBlocker": [
+  "This workspace is aarch64-apple-darwin. `src-tauri/tauri.conf.json` bundles `nsis` and `msi` only, and `scripts/tauri.mjs` only enters its release path when `process.platform === 'win32'`, so the installers this project ships cannot be produced here.",
+  "The updater signing key `~/.pulsewin-signing/updater.key` does not exist on this machine and `TAURI_SIGNING_PRIVATE_KEY` is unset. `updater.requireSignedVersion` is true, so a package built without it could not be accepted by any installed client, and the key must not be regenerated (docs/updates.md: losing it ends update signing for installed users).",
+  "`scripts/publish-github.mjs` uploads `updates/github/{exe,sig,msi,msi.sig,latest.json}`, which only `npm run tauri -- build` on Windows creates. Publishing a Release without `latest.json` would 404 the endpoint every installed client reads (`releases/latest/download/latest.json`) and break update checks, so no Release was created."
+ ],
+ "toFinishOnWindows": [
+  "git pull, then `npm run tauri -- build` — builds and signs 0.1.18 at the version already committed here, and publishes the local `updates/latest.json` feed because releaseHold is now false",
+  "`npm run prepare:github -- wapearoudy/PulseWin`",
+  "`npm run publish:github` — pushes main, creates the draft Release, uploads the five assets, then publishes",
+  "Do not run `npm run release`: it bumps the patch version again and would skip 0.1.18."
+ ],
+ "tests": {
+  "rust": {
+   "passed": 1176,
+   "failed": 35,
+   "ignored": 2,
+   "note": "35 failures are the pre-existing macOS run of Windows-only path/PATH tests; the failed-test name list is byte-identical to the pre-change baseline (`comm -23` and `comm -13` against /tmp/baseline_failures.txt are both empty)"
+  },
+  "frontend": {
+   "passed": 260,
+   "files": 25
+  },
+  "browser": {
+   "passed": 81,
+   "runs": 3,
+   "note": "Three consecutive full-suite runs of 81 passed. Two test-side defects were fixed on the way: the status mock did not answer the new `status_pages` command, and `prompt cache countdown` raced its own fake clock (`install({time: T})` then `pauseAt(T)` throws \"Cannot fast-forward to the past\" once a millisecond has passed; it failed on pristine specs too, about one full-suite run in three)."
+  }
+ },
+ "implementedVerified": [
+  "All 54 Pulse 1.9 Token sources registered with a fixture-backed reader each; Warp and Freebuff report no token counts by the original's own design and say so instead of estimating",
+  "Window starter: per-provider opt-in with a risk confirmation, shared local hours, reset-plus-grace scheduling, first-account-only rule, one attempt per reset, recorded outcome",
+  "User extensions: manifest scan with schema/id/executable-path validation, off by default, per-extension switch, 1-60 s timeout, output ceiling and JSON validation, failure classification, one account per extension in the panel, metrics drawn on the card and in Settings",
+  "Official service status: 45-entry catalogue (44 providers plus the second MiniMax storefront) over 12 feed shapes, the original's five-rule component matching, 7 palettes, one request per feed for outage notifications, OutageMemory keyed by provider id",
+  "Currency: 7 display currencies, estimates only (a service's own balance/credits/console charge stays in its own currency), network only when the chosen currency is not USD, manual rate overrides",
+  "Token spend spans: all 9 of the original's, including custom start/end days, with the one-day range switching to the hour profile",
+  "Hide from screen capture: `capture::protected` via Tauri's `set_content_protected`, which tao maps to `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)` on Windows and to the original's `NSWindow.sharingType` on macOS"
+ ],
+ "installationExecuted": false,
+ "fullParity": false,
+ "publicVerification": null,
+ "limitations": [
+  "No 0.1.18 installer, signature or update manifest exists yet: the Windows build has not run",
+  "Every status page is verified against fixtures, not against 44 live responses; gemini-cli, command-code and hugging-face timed out from this network (curl times out too) and are therefore unverified",
+  "Outage notification, hide-from-capture, the exchange-rate endpoint (including offline and 429), real extension metric series, real accounts and multi-monitor acceptance remain unproven",
+  "Developer integrations and deep links, `--recap`, statusline installation, the account-panel groups and the remaining parity rows are still unimplemented"
+ ],
+ "testedAt": "2026-10-20"
+}

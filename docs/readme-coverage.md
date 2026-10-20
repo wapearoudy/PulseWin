@@ -3,6 +3,7 @@
 2026-10-11 已同步原版 1.7.0–1.9.0 的 [发布说明与新增缺口](upstream-release-notes.md)。本次移植依据为已获取的 v1.9.0 标签对象；原版工作目录仍停在下述旧提交。下面的历史对照不是对 1.9.0 的完整验收，新增浅色助手、月报年报、官方服务状态等能力以新清单追踪。
 
 2026-10-17 继续实现检查点：服务状态、活动视图、回顾计算与 PNG 导出、Codex 本地分析、缓存时限、精确计数和计价，以及额外 Token 来源已有实现和专项测试。0.1.17 再移植 17 个 Token 来源（Roo Code、Kilo Code、Cline、Cherry Studio、Command Code、OpenCodeReview、ZCode、Unsloth、Mux、Codebuff、JCode、Augment、Gajae Code、Junie、Fx、LM Studio、Reasonix），0.1.18 再移植最后 13 项，当前登记 54 个来源（含只识别费用、不生成 Token 的 Crush），已无未移植来源；部分已登记来源仍需导出文件。DeepSeek 控制台、完整详情卡、回顾原版视觉/原生流程和真实账号验收仍未完成。下方历史表不自动升级为全部通过，最新缺口与证据见 [release-progress.json](release-progress.json)，用户于 2026-10-11 改为授权先发布 0.1.16；未实现来源在 UI 隐藏，内部开发清单继续保留。2026-10-18 用户要求提交、推送并发布 0.1.17；该版本已重新构建 Windows 产物，并通过 native 冒烟、CLI 与签名更新检查。
+2026-10-20 用户要求提交并发布一版：代码已提交推送、版本已提到 0.1.18，但本机（aarch64-apple-darwin）无法构建 nsis/msi 安装包，更新签名私钥 `~/.pulsewin-signing/updater.key` 也不在本机，所以 0.1.18 只做到“已准备、未构建”；最后一个已发布版本仍是 0.1.17，完成步骤见 [release-0.1.18.json](release-0.1.18.json) 的 buildBlocker 与 toFinishOnWindows。
 
 验收来源：[官方 README.zh-CN.md](https://github.com/qunqin24/Pulse/blob/main/README.zh-CN.md)，2026-10-02 阅读在线版本；实现依据为同目录 `Pulse-original` 的 Swift 源码和 Docs。README 中的截图是外观参考，具体默认值和交互以对应源码与专题文档为准。上游当前有 77 个配额服务商，Token 消耗的 54 种客户端来源是另一套功能，不能混算。
 
@@ -186,6 +187,8 @@ A1（官方服务状态）、A2（货币换算）、A4（时间区间）、A5（
 
 
 ## 当前验证边界
+
+本轮（0.1.18 发版准备：54 来源 / 自动开启窗口 / 用户扩展 / 44 服务商状态 / 货币换算 / 9 种区间 / 扩展指标 / 截屏隐藏）验证：Rust **1176 项通过、35 项失败、2 项默认忽略**；35 项失败按测试名与改动前基线逐条完全相同（`comm -23` 与 `comm -13` 均为空），全部是 macOS 上跑 Windows 路径 / PATH 的既有失败，没有新增失败。前端 **260 项通过（25 个文件）**、`tsc --noEmit` 与 `vite build` 通过。浏览器全套件 **81 项连续三次全通过**；期间修掉两个测试自身的缺陷：状态页 mock 没有回答新增的 `status_pages` 命令，以及 `prompt cache countdown` 与自己的假时钟抢跑（`clock.install({time: T})` 之后 `pauseAt(T)` 会抛 “Cannot fast-forward to the past”，改动前的代码同样约每三次完整套件失败一次）。**本版没有构建、没有签名、没有发布**：本机是 aarch64-apple-darwin，`tauri.conf.json` 只打 nsis/msi，`scripts/tauri.mjs` 只在 `process.platform === 'win32'` 才走发布路径，更新签名私钥也不在本机，而 `updater.requireSignedVersion` 为真。发布一个没有 `latest.json` 的 Release 会让所有已安装客户端读取的 `releases/latest/download/latest.json` 变成 404，所以没有创建 Release。完成步骤见 [release-0.1.18.json](release-0.1.18.json)：在 Windows 上 `npm run tauri -- build`（按已提交的 0.1.18 构建签名，不再加版本号）→ `npm run prepare:github -- wapearoudy/PulseWin` → `npm run publish:github`。
 
 本轮（A4 时间区间 / A5 扩展指标渲染 / A6 截屏隐藏，三块分开提交）验证：Rust **1176 项通过、35 项失败、2 项默认忽略**；35 项失败按测试名与改动前基线逐条完全相同（`comm` 双向比对均为空），全部是 macOS 上跑 Windows 路径 / PATH 的既有失败，没有新增失败。前端 **260 项通过（25 个文件）**、`tsc --noEmit` 与 `vite build` 通过。新代码的专项计数：`preferences::capture_tests` 2 项、`token-spend` 区间口径专项、`src/metricTrend.test.ts` 11 项（A5 的纯函数都在 `src/metricTrend.ts`，组件只负责画）、`cardLayout` 的卡片高度预算用例。A6 的实现比预估少一半代码，因为不必自己写 FFI：Tauri 的 `set_content_protected` 在 Windows 上由 `tao` 落到 `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)`、在 macOS 上落到原版同一个 `NSWindow.sharingType`，手写一遍只是重复它。以上均为 fixture 与进程级验证，不代替真实 Windows 截屏/录屏工具下的实机验收、真实扩展给出的指标序列、真实数据上的跨月跨年与夏令时区间，也不代替真实账号与真实宕机的实机验收。
 

@@ -1,13 +1,18 @@
-PulseWin 0.1.17
+PulseWin 0.1.18
 
 本版按用户要求提交并发布当前已验证的改进。本版不宣称与 Pulse 1.9.0 达到 100% 功能覆盖。
 
-- Token 消耗本机读取来源从 24 个补齐到 41 个（共对照 Pulse 1.9.0 的 54 个）。新增 Roo Code、Kilo Code、Cline 的 VS Code 任务日志与 Cline CLI 会话；Cherry Studio、Command Code、OpenCodeReview、ZCode、JCode、Augment、Gajae Code、Junie、Fx 的会话记录；Mux、Codebuff 的对话统计；Unsloth Studio、LM Studio 的本地数据库/日志；Reasonix 的每日统计。
-- 新增来源按各自语义计数：流式快照按字段最大值合并而不重复累加，被放弃的对话分支照实计数，缓存关系优先采用来源自报的 total，无法判定的缓存/推理字段保留为中文说明而不猜测数字。
-- 缓存指纹补充侧车文件：JCode 日志、Fx 会话元数据、编辑器对话历史、Command Code 配置以及 ZCode/Unsloth 的 WAL 文件变化都会触发重新读取。
-- 仍未移植的 13 个来源继续从界面隐藏并记录在 docs/token-source-backlog.md；已有 reader 的「未检测到目录/无数据」状态保留。
-- Rust 单元/集成测试 1060 通过、2 个需真实账号的用例显式忽略；前端单测 205 通过（20 个文件）；浏览器全套件 81 通过；原生构建包完成本机冒烟验证。
+- Token 消耗本机读取来源补齐到 54 个，与 Pulse 1.9.0 登记的来源数量一致：新增 Grok Build、Devin、Devin Desktop、CodeBuddy、WorkBuddy、Antigravity CLI、Antigravity IDE、Trae、Warp、Copilot、OmO Native、Prime Agent、Freebuff。Warp 与 Freebuff 按原版语义不产生 Token 计数（只报说明，不把字符估算画成数字）；Crush 仍只识别费用来源。Cursor、Antigravity（导出）、Hindsight、MCode 与原版一样需要用户提供导出 / 捕获文件。
+- 新增「自动开启窗口」：按服务商单独开启，需先确认风险；按共享的本地工作时段与「重置时间 + 宽限」调度，每个重置周期只尝试一次并记录结果，且只对每个服务商的第一个账号生效。
+- 新增「用户扩展」：读取扩展清单并校验 schema、id、可执行路径；默认关闭，逐个开关，1-60 秒超时与输出上限，失败分类；每个扩展在面板里是一个独立账号，并可给出自己的指标。
+- 官方服务状态从 3 家扩到原版的 44 个服务商、12 种 feed 形态：statuspage、incident.io、Flashcat、Better Stack、Instatus、Uptime、Gatus、UptimeRobot、OpenCode、DeepInfra、IBM Bob、Google Cloud。页面按原版 7 组配色绘制，宕机通知改为每个 feed 只读一次再按各服务的组件规则分发。
+- 新增货币换算 7 种（美元、人民币、港币、新台币、日元、韩元、卢布）：只有估算金额换算，服务自报的余额 / 额度 / 控制台账单保持原币种；选美元时完全不联网，非美元时读取公开汇率并支持手填。
+- Token 消耗时间区间从 3 种扩到原版的 9 种（今天、本周、近 30 天、近 90 天、本月、上月、今年、全部、自定义起止日）；单日范围改为小时分布，与原版一致。
+- 扩展自己给出的指标在设置页与详情卡上都会绘制折线（手写 SVG，不新增依赖），指标不参与圆环与好坏判断。
+- 新增「截图时隐藏」：调用系统的窗口截屏保护，支持该设置的截图工具不会截到悬浮面板；这是对合成器的请求而非保证，录屏与共享屏幕仍可能包含它，默认关闭。
+
+Rust 单元/集成测试 1176 项通过、35 项失败、2 项默认忽略，35 项失败全部是 macOS 上跑 Windows 路径 / PATH 的既有失败且与改动前逐条同名；前端单元 260 项通过（25 个文件）；浏览器全套件 81 项通过。以上均为本机 fixture 与进程级验证。
 
 现有账号、凭据、设置和时间进度额度告警规则保留。可从「设置 → 通用 → 软件更新」更新并重启。
 
-仍待补齐：其余 13 个本地 Token 来源、完整详情卡/回顾视觉与分享流程、部分登录续期和扩展/集成功能。多屏、部分真实通知和真实 Harness 稳定日志验收仍未完成。
+仍待补齐：完整详情卡/回顾视觉与分享流程、部分登录续期、开发者集成与深链接、`--recap` 回顾命令行、statusline 安装、账号面板的分组。真实账号、真实宕机通知、真实 Windows 截屏工具、44 家状态页逐家响应、真实汇率端点与多屏验收仍未完成。
