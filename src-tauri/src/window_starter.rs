@@ -1371,14 +1371,17 @@ mod tests {
             }
         };
         let listed = managed_dirs("claude", home, &versions);
-        let name = names("claude")[0].clone();
-        assert_eq!(
-            listed,
-            vec![
-                home.join(".nvm/versions/node/v24.1.0/bin").join(&name),
-                home.join(".nvm/versions/node/v20.0.0/bin").join(&name),
-            ]
-        );
+        // Every name the platform gives a command, per version: Windows asks a
+        // folder for `claude.exe`, `claude.cmd` and `claude.bat`, so expecting a
+        // single file name only holds on a platform with one extension.
+        let mut expected = Vec::new();
+        for version in ["v24.1.0", "v20.0.0"] {
+            let folder = home.join(".nvm/versions/node").join(version).join("bin");
+            for name in names("claude") {
+                expected.push(folder.join(name));
+            }
+        }
+        assert_eq!(listed, expected);
     }
 
     #[test]

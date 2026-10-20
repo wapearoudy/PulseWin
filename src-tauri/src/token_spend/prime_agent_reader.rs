@@ -497,9 +497,16 @@ mod tests {
 {"type":"message","id":"pm1","timestamp":"2026-01-02T03:05:00Z","message":{"role":"assistant","model":"gpt-5","responseId":"parent-reply","usage":{"input":200,"output":100,"cacheRead":0,"cacheWrite":0,"totalTokens":300}}}
 {"type":"child_usage_attributed","id":"ab12cd34","targetId":"pm1","childUsage":{"input":30,"output":10,"cacheRead":0,"cacheWrite":0},"aggregateUsage":{"input":200,"output":100,"cacheRead":0,"cacheWrite":0}}"#;
 
+    /// A path as a JSON string literal. A Windows path's backslashes are escape
+    /// characters in JSON, so interpolating one raw makes the header row
+    /// unparsable and the child silently vanishes from the store.
+    fn quoted(text: &str) -> String {
+        serde_json::to_string(text).unwrap_or_else(|_| String::from("\"\""))
+    }
+
     fn child(parent: &str) -> String {
         format!("{}\n{}",
-            format_args!(r#"{{"type":"session","id":"child","cwd":"/work/pulse","parentSession":"{parent}","rlmDepth":1}}"#),
+            format_args!(r#"{{"type":"session","id":"child","cwd":"/work/pulse","parentSession":{},"rlmDepth":1}}"#, quoted(parent)),
             r#"{"type":"message","id":"cm1","timestamp":"2026-01-02T03:04:30Z","message":{"role":"assistant","model":"helper","responseId":"child-reply","usage":{"input":30,"output":10,"cacheRead":0,"cacheWrite":0,"totalTokens":40}}}"#)
     }
 
@@ -591,7 +598,7 @@ mod tests {
         fs::write(&first, PARENT).unwrap();
         let body = PARENT.split_once('\n').map(|(_, rest)| rest).unwrap_or_default();
         let fork = sessions.join("fork.jsonl");
-        fs::write(&fork, format!("{}\n{body}", format_args!(r#"{{"type":"session","id":"fork","cwd":"/work/pulse","parentSession":"{}"}}"#, first.to_string_lossy()))).unwrap();
+        fs::write(&fork, format!("{}\n{body}", format_args!(r#"{{"type":"session","id":"fork","cwd":"/work/pulse","parentSession":{}}}"#, quoted(&first.to_string_lossy())))).unwrap();
         fs::write(artifacts.join("child.jsonl"), child(&first.to_string_lossy())).unwrap();
 
         // Both copies fold by response id, so the reduction is not applied twice.
