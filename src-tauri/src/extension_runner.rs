@@ -13,6 +13,8 @@
 //! deadlock it was trying to avoid.
 
 use std::ffi::{OsStr, OsString};
+#[cfg(windows)]
+use std::path::PathBuf;
 use std::process::Stdio;
 
 use tokio::io::AsyncReadExt;
@@ -251,6 +253,8 @@ where
 mod tests {
     use std::path::{Path, PathBuf};
     use super::*;
+    // Only the unix test below asks for it; on Windows the import would be dead.
+    #[cfg(unix)]
     use crate::extension::account_id;
     use std::fs;
     use std::sync::atomic::{AtomicUsize, Ordering};
