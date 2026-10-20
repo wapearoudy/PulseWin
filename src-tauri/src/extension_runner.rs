@@ -391,34 +391,54 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn a_program_that_runs_past_its_limit_is_stopped() {
-        let (extension, root) = service(
-            "runner-timeout",
-            "#!/bin/sh\necho $$ > pidfile\nexec sleep 300\n",
-            Some(1.0),
-        );
-        let started = Instant::now();
-        let usage = fetch(&extension).await;
-        assert_eq!(usage.error.as_deref(), Some(TIMED_OUT));
-        assert!(started.elapsed() < std::time::Duration::from_secs(120), "the deadline has to hold");
+        // **The deadline must not be racing the program's own startup.** One
+        // second is enough for the shell to write its pid on an idle machine,
+        // but the suite runs its tests in parallel and a loaded machine can
+        // take longer than that just to load `/bin/sh` — the pid file is then
+        // never written, and the check below would report the runner broken
+        // when what actually happened is that the program never started. That
+        // attempt proves nothing about killing, so it is discarded and tried
+        // again with a longer deadline. The first attempt is the common case
+        // and keeps the test fast; only a contended machine pays for a retry.
+        for deadline_secs in [1.0, 5.0, 15.0] {
+            let (extension, root) = service(
+                "runner-timeout",
+                "#!/bin/sh\necho $$ > pidfile\nexec sleep 300\n",
+                Some(deadline_secs),
+            );
+            let started = Instant::now();
+            let usage = fetch(&extension).await;
+            assert_eq!(usage.error.as_deref(), Some(TIMED_OUT));
+            assert!(started.elapsed() < std::time::Duration::from_secs(120), "the deadline has to hold");
 
-        // The program is gone, not merely ignored: it was killed with the run.
-        let pid = fs::read_to_string(root.join("acme").join("pidfile")).unwrap().trim().to_owned();
-        let deadline = Instant::now() + std::time::Duration::from_secs(10);
-        while Instant::now() < deadline {
-            let alive = std::process::Command::new("/bin/ps")
-                .args(["-p", &pid])
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status()
-                .map(|status| status.success())
-                .unwrap_or(false);
-            if !alive {
+            // The program is gone, not merely ignored: it was killed with the
+            // run. A pid file that was never written means the run never got
+            // far enough to be killed, which is the machine's timing and not
+            // the runner's behaviour.
+            let Ok(pid) = fs::read_to_string(root.join("acme").join("pidfile")) else {
                 let _ = fs::remove_dir_all(root);
-                return;
+                continue;
+            };
+            let pid = pid.trim().to_owned();
+            let deadline = Instant::now() + std::time::Duration::from_secs(10);
+            while Instant::now() < deadline {
+                let alive = std::process::Command::new("/bin/ps")
+                    .args(["-p", &pid])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()
+                    .map(|status| status.success())
+                    .unwrap_or(false);
+                if !alive {
+                    let _ = fs::remove_dir_all(root);
+                    return;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             }
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            let _ = fs::remove_dir_all(root);
+            panic!("the program was still running ten seconds after its deadline");
         }
-        panic!("the program was still running ten seconds after its deadline");
+        panic!("the program never started far enough to be killed, even with a fifteen-second deadline");
     }
 
     #[cfg(unix)]

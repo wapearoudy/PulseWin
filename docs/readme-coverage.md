@@ -78,7 +78,7 @@
 
 ## 当前验证边界
 
-本轮（54 来源 + 自动开启窗口 + 用户扩展）验证：Rust 1150 项通过、35 项失败、2 项默认忽略；35 项失败按测试名与改动前基线逐条完全相同，全部是 macOS 上跑 Windows 路径 / PATH 的既有失败，没有新增失败。前端 210 项通过（21 个文件）、`tsc --noEmit` 与 `vite build` 通过。新代码的专项计数：10 个新 reader 模块 74 项、`window_starter` 18 项、`extension` 28 项、`extension_runner` 8 项，新增前端 4 项（`WindowStarterGroup.test.ts`）。以上均为 fixture 与进程级验证，不代替真实账号、真实 CLI 发送、Windows 无窗口启动与真实扩展程序的实机验收。
+本轮（54 来源 + 自动开启窗口 + 用户扩展）验证：Rust 1150 项通过、35 项失败、2 项默认忽略；35 项失败按测试名与改动前基线逐条完全相同，全部是 macOS 上跑 Windows 路径 / PATH 的既有失败，没有新增失败。前端 210 项通过（21 个文件）、`tsc --noEmit` 与 `vite build` 通过。新代码的专项计数：10 个新 reader 模块 74 项、`window_starter` 18 项、`extension` 28 项、`extension_runner` 8 项，新增前端 4 项（`WindowStarterGroup.test.ts`）。本次另修掉一个测试自身的竞态：`extension_runner::tests::a_program_that_runs_past_its_limit_is_stopped` 在并行满载时 1 秒时限会先到、程序还没写出 pid 文件，导致误报；改为在时限内没启动起来时换更长时限重试，修复后连续 60 次完整套件零差异（修复前约每 95 次出现一次）。以上均为 fixture 与进程级验证，不代替真实账号、真实 CLI 发送、Windows 无窗口启动与真实扩展程序的实机验收。
 
 0.1.10 本轮补齐网络与刷新、关于：861 项 Rust 回归（另 1 项默认忽略）、181 项前端测试、58 项完整浏览器流程及 13 项最终专项流程通过。原生 CONNECT 代理取消、重查与重启恢复验证见 [networking.md](networking.md)，发布及签名更新证据见 [release-0.1.10.json](release-0.1.10.json)。仍不声称 100% 功能覆盖。0.1.11 补回损坏 Windows 系统代理地址的启动容错，新增两项 Rust 回归；本次最终发布证据见 [release-0.1.11.json](release-0.1.11.json)。
 
