@@ -19,12 +19,23 @@ const TRANSCRIPT_VERSION: u32 = 9;
 const MAX_LINE: usize = 8 * 1024 * 1024;
 const MAX_FILES: usize = 50_000;
 const MAX_RECORDS: usize = 1_000_000;
-const AGENTS: [(&str, &str); 41] = [("claude", "Claude Code"), ("codex", "Codex"), ("qwen", "Qwen Code"),
-    ("gemini", "Gemini CLI"), ("cursor", "Cursor"), ("antigravity", "Antigravity"), ("hindsight", "Hindsight"), ("mcode", "MCode"),
+/// Every agent store this build reads, in the original's catalogue order.
+///
+/// **A source without a reader stays out of this list**, and a source outside it
+/// is never scanned — the list is the whole catalogue, not a wish list. The 13
+/// entries below the 0.1.17 batch are the rest of Pulse 1.9's groups A–F.
+const AGENTS: [(&str, &str); 54] = [("claude", "Claude Code"), ("codex", "Codex"), ("qwen", "Qwen Code"),
+    ("gemini", "Gemini CLI"), ("cursor", "Cursor"), ("antigravity", "Antigravity (export)"), ("hindsight", "Hindsight"), ("mcode", "MiniMax Code"),
     ("opencode", "OpenCode"), ("kilo", "Kilo CLI"), ("micode", "MiMo Code"), ("dsh", "DeepSeek Harness"),("pi","Pi"),("omp","Oh My Pi"),("kimchi","Kimchi"),("amp","Amp"),("droid","Droid"),("openclaw","OpenClaw"),("goose","Goose"),("hermes","Hermes"),("zed","Zed"),("crush","Crush"),("kiro","Kiro"),("kimi","Kimi CLI"),
     // Ported from Pulse 1.9's Groups B–D in this batch. Every id here has a
     // reader below; a source without one stays hidden in the backlog instead.
-    ("roocode","Roo Code"),("kilocode","Kilo Code"),("cline","Cline"),("cherrystudio","Cherry Studio"),("commandcode","Command Code"),("opencodereview","OpenCodeReview"),("zcode","ZCode"),("unsloth","Unsloth"),("mux","Mux"),("codebuff","Codebuff"),("jcode","JCode"),("augment","Augment"),("gjc","Gajae Code"),("junie","Junie"),("fx","Fx"),("lmstudio","LM Studio"),("reasonix","Reasonix")];
+    ("roocode","Roo Code"),("kilocode","Kilo Code"),("cline","Cline"),("cherrystudio","Cherry Studio"),("commandcode","Command Code"),("opencodereview","OpenCodeReview"),("zcode","ZCode"),("unsloth","Unsloth"),("mux","Mux"),("codebuff","Codebuff"),("jcode","JCode"),("augment","Augment"),("gjc","Gajae Code"),("junie","Junie"),("fx","FX"),("lmstudio","LM Studio"),("reasonix","Reasonix"),
+    // Pulse 1.9's remaining catalogue. `senpi`, `prime-agent` and `freebuff`
+    // close the 54: the first two read the Pi transcript with their own roots,
+    // and `freebuff` has no counters to read, so it reports a limitation rather
+    // than an estimate.
+    ("grok","Grok Build"),("devin-cli","Devin"),("codebuddy","CodeBuddy"),("workbuddy","WorkBuddy"),("antigravity-cli","Antigravity CLI"),("antigravity-ide","Antigravity IDE"),("devin-desktop","Devin Desktop"),("trae","Trae"),("warp","Warp"),("copilot","GitHub Copilot"),
+    ("senpi","OmO Native"),("prime-agent","Prime Agent"),("freebuff","Freebuff")];
 #[path = "token_spend/dsh_reader.rs"]
 mod dsh_reader;
 #[path = "token_spend/measured_readers.rs"]
@@ -60,6 +71,19 @@ mod junie_reader;
 mod fx_reader;
 mod lmstudio_reader;
 mod reasonix_reader;
+// Pulse 1.9's remaining groups A–F. Each file owns one store format (or one
+// family of sibling stores); the dispatcher below is the only place that
+// decides which id reaches which reader.
+mod grok_reader;
+mod senpi_reader;
+mod prime_agent_reader;
+mod freebuff_reader;
+mod devin_reader;
+mod devin_desktop_reader;
+mod tencent_reader;
+mod antigravity_reader;
+mod captured_extra_reader;
+mod copilot_reader;
 pub fn watch(app:tauri::AppHandle){warmer::watch(app)}
 pub fn reading_changed(){warmer::changed()}
 pub fn forget_kept(){warmer::forget()}
@@ -410,6 +434,12 @@ fn roots(home: &Path, agent: &str, environment: impl Fn(&str) -> Option<String>)
             let v = v.trim(); if v == "~" { home.to_path_buf() } else if let Some(rest) = v.strip_prefix("~/").or_else(|| v.strip_prefix("~\\")) { home.join(rest) } else { PathBuf::from(v) }
         }).unwrap_or_else(|| home.join(".gemini")).join("tmp")],
         "cursor" | "antigravity" | "hindsight" | "mcode" => measured_readers::roots(home, agent, &environment),
+        // Group E's remaining captures. Their roots include PulseWin's own
+        // UsageImports drop folder, which is where a reader puts a Trae page.
+        "trae" | "warp" => captured_extra_reader::roots(home, agent, &environment),
+        // Copilot is not a captured source: its three lanes are read from the
+        // product's own stores, so `origin` stays "native".
+        "copilot" => copilot_reader::roots(home, agent, &environment),
         "opencode" | "kilo" | "micode" => opencode_store::roots(home,agent,&environment),
         "dsh" => dsh_reader::roots(home, &environment),
         "zed"=>zed_reader::roots(home,&environment),
@@ -421,15 +451,20 @@ fn roots(home: &Path, agent: &str, environment: impl Fn(&str) -> Option<String>)
         _ => Vec::new(),
     }
 }
-/// Sources whose readers were ported from Pulse 1.9 Groups B–D. Ids outside
-/// this set have no reader, stay out of AGENTS, and are never scanned.
+/// Sources whose readers were ported from Pulse 1.9's Groups A–F. Ids outside
+/// this set have no reader, stay out of AGENTS, and are never scanned. The two
+/// Antigravity clients share one reader but not one root, so both ids appear.
 fn ported_source(agent: &str) -> bool {
-    matches!(agent, "roocode"|"kilocode"|"cline"|"cherrystudio"|"commandcode"|"opencodereview"|"zcode"|"unsloth"|"mux"|"codebuff"|"jcode"|"augment"|"gjc"|"junie"|"fx"|"lmstudio"|"reasonix")
+    matches!(agent, "roocode"|"kilocode"|"cline"|"cherrystudio"|"commandcode"|"opencodereview"|"zcode"|"unsloth"|"mux"|"codebuff"|"jcode"|"augment"|"gjc"|"junie"|"fx"|"lmstudio"|"reasonix"
+        |"grok"|"devin-cli"|"devin-desktop"|"codebuddy"|"workbuddy"|"antigravity-cli"|"antigravity-ide"
+        |"senpi"|"prime-agent"|"freebuff")
 }
 /// File-based stores keep per-file history so a deleted task log keeps its last
 /// complete read. An accumulated SQLite ledger instead goes through StoreHistory.
 fn ported_history(agent: &str) -> bool {
-    matches!(agent, "roocode"|"kilocode"|"cline"|"cherrystudio"|"commandcode"|"opencodereview"|"zcode"|"mux"|"codebuff"|"jcode"|"augment"|"gjc"|"junie"|"fx"|"lmstudio"|"reasonix")
+    matches!(agent, "roocode"|"kilocode"|"cline"|"cherrystudio"|"commandcode"|"opencodereview"|"zcode"|"mux"|"codebuff"|"jcode"|"augment"|"gjc"|"junie"|"fx"|"lmstudio"|"reasonix"
+        |"grok"|"devin-cli"|"devin-desktop"|"codebuddy"|"workbuddy"|"antigravity-cli"|"antigravity-ide"
+        |"senpi"|"prime-agent"|"freebuff")
 }
 fn ported_roots(home: &Path, agent: &str, env: &impl Fn(&str) -> Option<String>) -> Vec<PathBuf> {
     match agent {
@@ -448,6 +483,14 @@ fn ported_roots(home: &Path, agent: &str, env: &impl Fn(&str) -> Option<String>)
         "fx" => fx_reader::roots(home,agent,env),
         "lmstudio" => lmstudio_reader::roots(home,agent,env),
         "reasonix" => reasonix_reader::roots(home,agent,env),
+        "grok" => grok_reader::roots(home,agent,env),
+        "devin-cli" => devin_reader::roots(home,agent,env),
+        "devin-desktop" => devin_desktop_reader::roots(home,agent,env),
+        "codebuddy"|"workbuddy" => tencent_reader::roots(home,agent,env),
+        "antigravity-cli"|"antigravity-ide" => antigravity_reader::roots(home,agent,env),
+        "senpi" => senpi_reader::roots(home,agent,env),
+        "prime-agent" => prime_agent_reader::roots(home,agent,env),
+        "freebuff" => freebuff_reader::roots(home,agent,env),
         _ => Vec::new(),
     }
 }
@@ -468,6 +511,14 @@ fn ported_candidate(path: &Path, agent: &str) -> bool {
         "fx" => fx_reader::candidate(path,agent),
         "lmstudio" => lmstudio_reader::candidate(path,agent),
         "reasonix" => reasonix_reader::candidate(path,agent),
+        "grok" => grok_reader::candidate(path,agent),
+        "devin-cli" => devin_reader::candidate(path,agent),
+        "devin-desktop" => devin_desktop_reader::candidate(path,agent),
+        "codebuddy"|"workbuddy" => tencent_reader::candidate(path,agent),
+        "antigravity-cli"|"antigravity-ide" => antigravity_reader::candidate(path,agent),
+        "senpi" => senpi_reader::candidate(path,agent),
+        "prime-agent" => prime_agent_reader::candidate(path,agent),
+        "freebuff" => freebuff_reader::candidate(path,agent),
         _ => false,
     }
 }
@@ -488,6 +539,14 @@ fn ported_read(path: &Path, agent: &str, cancel: &AtomicBool) -> Result<(Vec<Spe
         "fx" => fx_reader::read(path,agent,cancel),
         "lmstudio" => lmstudio_reader::read(path,agent,cancel),
         "reasonix" => reasonix_reader::read(path,agent,cancel),
+        "grok" => grok_reader::read(path,agent,cancel),
+        "devin-cli" => devin_reader::read(path,agent,cancel),
+        "devin-desktop" => devin_desktop_reader::read(path,agent,cancel),
+        "codebuddy"|"workbuddy" => tencent_reader::read(path,agent,cancel),
+        "antigravity-cli"|"antigravity-ide" => antigravity_reader::read(path,agent,cancel),
+        "senpi" => senpi_reader::read(path,agent,cancel),
+        "prime-agent" => prime_agent_reader::read(path,agent,cancel),
+        "freebuff" => freebuff_reader::read(path,agent,cancel),
         _ => Ok((Vec::new(), Vec::new())),
     }
 }
@@ -501,6 +560,8 @@ fn candidate(path: &Path, agent: &str) -> bool {
     else if agent == "dsh" { dsh_reader::candidate(path) }
     else if opencode_store::agent(agent) { opencode_store::candidate(path, agent) }
     else if session_readers::agent(agent) { session_readers::candidate(path, agent) }
+    else if agent == "trae" || agent == "warp" { captured_extra_reader::candidate(path, agent) }
+    else if agent == "copilot" { copilot_reader::candidate(path, agent) }
     else if ported_source(agent) { ported_candidate(path, agent) }
     else { measured_readers::candidate(path, agent) }
 }
@@ -554,12 +615,15 @@ fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl
         let mut files = Vec::new(); for root in &inputs { enumerate(root, agent, &mut files, cancel, &mut snapshot.notes)?; }
         files.sort(); files.dedup();
         let mut source = SpendSource { id: (*agent).into(), name: (*name).into(), status: if detected { "no-data" } else { "not-detected" }.into(), files: files.len(), cached_files: 0, records: 0, retained_records:0,
-            origin: if measured_readers::captured(agent) { "export" } else { "native" }.into(), roots: inputs.iter().map(|p| p.to_string_lossy().into_owned()).collect() };
+            origin: if measured_readers::captured(agent) || captured_extra_reader::captured(agent) { "export" } else { "native" }.into(), roots: inputs.iter().map(|p| p.to_string_lossy().into_owned()).collect() };
         let mut per_file = Vec::new(); let mut raw_count = 0;
-        for file in files {
+        // Copilot's reading is a merge across lanes, not a sum of files: the
+        // generic loop would count one call three times. Its files are still
+        // enumerated so the pane can show where the stores are.
+        for file in files.iter().filter(|_| *agent != "copilot") {
             check(cancel)?;
             if snapshot.records.len() + raw_count >= MAX_RECORDS { snapshot.notes.push("记录超过读取上限，计数可能不完整".into()); break; }
-            let before = match stamp(&file, agent) { Ok(s) => s, Err(e) => { snapshot.notes.push(format!("读取文件元信息失败 {}：{e}", file.display())); continue; } };
+            let before = match stamp(file, agent) { Ok(s) => s, Err(e) => { snapshot.notes.push(format!("读取文件元信息失败 {}：{e}", file.display())); continue; } };
             let cache_name = format!("transcript-{TRANSCRIPT_VERSION}-{}-{:016x}.json", agent, hash(file.to_string_lossy().to_string()));
             let cached = fs::read(cache.join(&cache_name)).ok().and_then(|b| serde_json::from_slice::<FileCache>(&b).ok()).filter(|c|
                 c.version == TRANSCRIPT_VERSION && c.agent == *agent && c.fingerprint == before && c.records.iter().all(|record|
@@ -570,21 +634,35 @@ fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl
                     && (*agent != "dsh" || (record.deduplication_id.is_some() && record.source_timestamp.is_some()))
                     && (*agent != "cursor" || (record.source_timestamp.is_some() && record.source_scope.is_some()))));
             let records = if let Some(c) = cached { source.cached_files += 1; c.records } else {
-                let (records, notes) = match parse_file(&file, agent, cancel) {
+                let (records, notes) = match parse_file(file, agent, cancel) {
                     Ok(value) => value,
                     Err(error) if check(cancel).is_err() => return Err(error),
                     Err(error) => { snapshot.notes.push(error); continue; }
                 };
-                if notes.is_empty() && stamp(&file, agent).ok() == Some(before) { let _ = write_cache(cache, &cache_name, &FileCache { version: TRANSCRIPT_VERSION, agent: (*agent).into(), fingerprint: before, records: records.clone() }, cancel); }
-                else if stamp(&file, agent).ok() != Some(before) { snapshot.notes.push(format!("扫描期间文件发生变化：{}；本次结果未缓存", file.display())); }
+                if notes.is_empty() && stamp(file, agent).ok() == Some(before) { let _ = write_cache(cache, &cache_name, &FileCache { version: TRANSCRIPT_VERSION, agent: (*agent).into(), fingerprint: before, records: records.clone() }, cancel); }
+                else if stamp(file, agent).ok() != Some(before) { snapshot.notes.push(format!("扫描期间文件发生变化：{}；本次结果未缓存", file.display())); }
                 snapshot.notes.extend(notes); records
             };
             check(cancel)?;
-            raw_count += records.len(); per_file.push((history::file_key(&file),records));
+            raw_count += records.len(); per_file.push((history::file_key(file),records));
         }
         if *agent=="cursor" {
             let records=measured_readers::reconcile_cursor(per_file.into_iter().map(|(_,r)|r).collect(),&mut snapshot.notes,cancel)?;
             per_file=vec![("reconciled-cursor-store".into(),records)];
+        }
+        // Trae splits one session across page digests that overlap; the reader
+        // folds them so a shared turn is counted once. The fold has to happen
+        // here, where every page's records are together.
+        if *agent=="trae" {
+            let records=captured_extra_reader::reconcile(per_file.into_iter().map(|(_,r)|r).collect(),&mut snapshot.notes,cancel)?;
+            per_file=vec![("reconciled-trae-store".into(),records)];
+        }
+        // Copilot's three lanes describe overlapping calls, so its reading is one
+        // merge across every file rather than a sum of per-file reads.
+        if *agent=="copilot" {
+            let (records,notes)=copilot_reader::scan(&inputs,cancel)?;
+            snapshot.notes.extend(notes);
+            per_file=vec![("merged-copilot-store".into(),records)];
         }
         let stable=snapshot.notes.len()==note_start && snapshot.records.len()+raw_count<=MAX_RECORDS;
         history::order_live(&mut per_file);
@@ -640,6 +718,8 @@ fn parse_file(path: &Path, agent: &str, cancel: &AtomicBool) -> Result<(Vec<Spen
     if agent == "dsh" { return dsh_reader::read(path, cancel); }
     if opencode_store::agent(agent) { return opencode_store::read(path, agent, cancel); }
     if session_readers::agent(agent){return session_readers::parse(path,agent,cancel);}
+    if matches!(agent, "trae" | "warp") { return captured_extra_reader::read(path, agent, cancel); }
+    if agent == "copilot" { return copilot_reader::read(path, agent, cancel); }
     if matches!(agent, "gemini" | "cursor" | "antigravity" | "hindsight" | "mcode") { return measured_readers::parse_file(path, agent, cancel); }
     let file = File::open(path).map_err(|e| format!("无法读取 {}：{e}", path.display()))?;
     let mut reader = BufReader::with_capacity(64 * 1024, file);
@@ -1270,7 +1350,7 @@ mod tests {
              "text":"{\"tokensIn\":100,\"tokensOut\":20,\"cacheWrites\":5,\"cacheReads\":10}"}]).to_string());
         let scan=||scan_roots(&fixture.dir.join("cache"),&Prices::new(),&AtomicBool::new(false),|_,_|{},|id|roots(&home,id,|_|None)).unwrap();
         let first=scan();
-        assert_eq!(first.sources.len(), 41, "every registered agent reports one source");
+        assert_eq!(first.sources.len(), AGENTS.len(), "every registered agent reports one source");
         assert!(first.notes.is_empty(), "unexpected notes: {:?}", first.notes);
         let counted=|snapshot:&SpendSnapshot,id:&str|snapshot.sources.iter().find(|source|source.id==id).unwrap().records;
         assert_eq!(counted(&first,"augment"), 1); assert_eq!(counted(&first,"mux"), 1); assert_eq!(counted(&first,"roocode"), 1);

@@ -59,6 +59,12 @@ export interface Preferences {
   followActiveDisplay: boolean
   accountAppearance: Record<string, AccountAppearance>
   pinnedWindows: Record<string, string>
+  /** The window starter. Empty means off; it is the one setting that
+   *  sends something on the reader's behalf, so nothing is on by default. */
+  primedProviders: string[]
+  primerHours: { start: number; end: number }
+  primerRunTimes: Record<string, number>
+  primerRunOutcomes: Record<string, string>
 }
 export const defaultPreferences: Preferences = {
   networkProxy: { ...defaultNetworkProxy },
@@ -71,6 +77,7 @@ export const defaultPreferences: Preferences = {
   labelAbove: false, autoCollapse: true, warningThreshold: 0.75, refreshSeconds: 120, refreshAutomatic: true,
   showSecondRing: false, topShowPercentages: false, animateActivity: true, dockAlertColour: true, accountAppearance: {},
   showResetClock: false, clockRemaining: false, showForecast: false, hideInFullscreen:true, followActiveDisplay:false, pinnedWindows: {},
+  primedProviders: [], primerHours: { start: 7, end: 23 }, primerRunTimes: {}, primerRunOutcomes: {},
 }
 export const savePreferences = (value: Preferences) => invoke<void>('save_preferences', { value })
 

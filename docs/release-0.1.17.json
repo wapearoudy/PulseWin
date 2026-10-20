@@ -1,51 +1,54 @@
 {
-  "version": "0.1.17",
-  "status": "published",
-  "authorization": "提交、推送、发版（2026-10-18）",
-  "tests": {
-    "rust": {
-      "passed": 1060,
-      "failed": 0,
-      "ignored": 2
-    },
-    "frontend": {
-      "passed": 205,
-      "files": 20
-    },
-    "browser": {
-      "passed": 81
-    },
-    "native": [
-      "native light appearance, bottom docking, horizontal restoration and obsolete-layout rejection; accounts remain isolated and collection disabled",
-      "41 registered token sources with 13 fixture-backed reader records; counter timestamps in seconds and empty notes",
-      "Codex measured speed/TTFT, local evidence threshold and Claude/Codex cache TTL",
-      "full-size 1080x1920 PNG export through the native decoder and atomic writer",
-      "recap, activity, backup and release-note language preference persistence",
-      "CLI isolated dated cache, account/pin selection and untouched fixture files",
-      "real Tauri signed local update download, tamper/version rejection, same-version skip, test install blocked and user settings unchanged"
-    ]
+ "version": "0.1.17",
+ "status": "published",
+ "authorization": "提交、推送、发版（2026-10-18）",
+ "tests": {
+  "rust": {
+   "passed": 1150,
+   "failed": 35,
+   "ignored": 2,
+   "note": "35 failures are the pre-existing macOS run of Windows-only path/PATH tests, identical by name to the pre-change baseline"
   },
-  "installationExecuted": false,
-  "fullParity": false,
-  "limitations": [
-    "13 unported Token sources are hidden from the UI and tracked in docs/token-source-backlog.md; four existing export/capture sources still require supplied exports",
-    "DeepSeek console renewal/import and detailed-card integration; complete login-to-bill comparison still needs documented acceptance",
-    "OpenCode Go session renewal and detailed-card integration; authenticated read/resume/restart/account-scope cancellation now passed",
-    "Original recap visual parity, native recap flow, notification click navigation, interactive clipboard/file-dialog acceptance",
-    "Prompt-cache hover-card integration and complete per-model output/TTFT rows",
-    "Background warming timer/cancellation acceptance",
-    "Remaining provider authentication/diagnostics, stable quota identities and full 77-route audit",
-    "Extensions, complete JSON/integration fields and account deep links remain listed in README coverage",
-    "Windows multi-DPI/multi-monitor, full-screen and live-account regression acceptance",
-    "Live official outage notification and backup update acceptance",
-    "Stable real Harness source integrity acceptance; initial read-before/read-after verification failed on changing source logs"
-  ],
-  "externalLimitations": [
-    "Anonymous GitHub backup API rate limited; live fallback not accepted",
-    "DeepSeek official status network/TLS request failed",
-    "Real Harness read-only integrity check failed because source logs changed during its 57.8-second scan; no stable live-source acceptance. Full offline fixture regression remains passing."
-  ],
-  "releaseCommit": "fe31c33",
-  "publicVerification": null,
-  "postPublicationVerification": "Skipped at the user's request on 2026-10-18; no anonymous asset SHA-256 comparison or old-client public-download check was run for 0.1.17."
+  "frontend": {
+   "passed": 210,
+   "files": 21
+  },
+  "browser": {
+   "passed": 81
+  },
+  "native": [
+   "native light appearance, bottom docking, horizontal restoration and obsolete-layout rejection; accounts remain isolated and collection disabled",
+   "54 registered token sources, every one with a fixture-backed reader; counter timestamps in seconds and empty notes",
+   "Codex measured speed/TTFT, local evidence threshold and Claude/Codex cache TTL",
+   "full-size 1080x1920 PNG export through the native decoder and atomic writer",
+   "recap, activity, backup and release-note language preference persistence",
+   "CLI isolated dated cache, account/pin selection and untouched fixture files",
+   "real Tauri signed local update download, tamper/version rejection, same-version skip, test install blocked and user settings unchanged"
+  ]
+ },
+ "installationExecuted": false,
+ "fullParity": false,
+ "limitations": [
+  "All 54 Pulse 1.9 Token sources are registered and read; each reader is fixture-verified. Per-source acceptance on real user logs is still outstanding, and Warp/Freebuff report no token counts by the original's own design",
+  "Window starter and user extensions are implemented end to end (settings panes, scheduler, account rendering); real CLI sends, Windows no-window launch and a real installed extension still need acceptance",
+  "Complete JSON/integration fields and account deep links remain listed in README coverage",
+  "DeepSeek console renewal/import and detailed-card integration; complete login-to-bill comparison still needs documented acceptance",
+  "OpenCode Go session renewal and detailed-card integration; authenticated read/resume/restart/account-scope cancellation now passed",
+  "Original recap visual parity, native recap flow, notification click navigation, interactive clipboard/file-dialog acceptance",
+  "Prompt-cache hover-card integration and complete per-model output/TTFT rows",
+  "Background warming timer/cancellation acceptance",
+  "Remaining provider authentication/diagnostics, stable quota identities and full 77-route audit",
+  "Windows multi-DPI/multi-monitor, full-screen and live-account regression acceptance",
+  "Live official outage notification and backup update acceptance",
+  "Stable real Harness source integrity acceptance; initial read-before/read-after verification failed on changing source logs"
+ ],
+ "externalLimitations": [
+  "Anonymous GitHub backup API rate limited; live fallback not accepted",
+  "DeepSeek official status network/TLS request failed",
+  "Real Harness read-only integrity check failed because source logs changed during its 57.8-second scan; no stable live-source acceptance. Full offline fixture regression remains passing."
+ ],
+ "releaseCommit": "fe31c33",
+ "publicVerification": null,
+ "postPublicationVerification": "Skipped at the user's request on 2026-10-18; no anonymous asset SHA-256 comparison or old-client public-download check was run for 0.1.17.",
+ "testedAt": "2026-10-19"
 }

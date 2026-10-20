@@ -44,6 +44,17 @@ pub struct Preferences {
     pub follow_active_display: bool,
     pub account_appearance: std::collections::HashMap<String, AccountAppearance>,
     pub pinned_windows: std::collections::HashMap<String, String>,
+    /// The window starter: which providers it acts for, when, and what it last
+    /// did. **Off or empty by default** — this is the one setting that sends
+    /// something on the reader's behalf, so nothing is switched on by a default
+    /// and nothing is inferred from the absence of a value.
+    pub primed_providers: Vec<String>,
+    pub primer_hours: crate::window_starter::PrimerHours,
+    /// Epoch seconds of the last attempt per provider, and its outcome as the
+    /// starter's own string, so a value written by one build is still read by the
+    /// next and the pane can show why a window did not start.
+    pub primer_run_times: std::collections::HashMap<String, i64>,
+    pub primer_run_outcomes: std::collections::HashMap<String, String>,
 }
 
 impl Default for Preferences {
@@ -52,7 +63,9 @@ impl Default for Preferences {
             rail_spacing: 1.0, round_ends: false, shows_remaining: false,
             show_percentages: true, label_above: false, auto_collapse: true,
             warning_threshold: 0.75, refresh_seconds: 120, refresh_automatic: true, show_reset_clock: false,
-            clock_remaining: false, show_second_ring: false, top_show_percentages: false, animate_activity: true, dock_alert_colour: true, show_forecast: false, hide_in_fullscreen: true, follow_active_display: false, account_appearance: Default::default(), pinned_windows: Default::default() }
+            clock_remaining: false, show_second_ring: false, top_show_percentages: false, animate_activity: true, dock_alert_colour: true, show_forecast: false, hide_in_fullscreen: true, follow_active_display: false, account_appearance: Default::default(), pinned_windows: Default::default(),
+            primed_providers: Vec::new(), primer_hours: Default::default(),
+            primer_run_times: Default::default(), primer_run_outcomes: Default::default() }
     }
 }
 
@@ -61,7 +74,15 @@ impl Preferences {
         self.network_proxy.normalize();
         if !["black","light"].contains(&self.panel_colour.as_str()) {self.panel_colour="black".into();}
         let mut seen_accounts=std::collections::HashSet::new();
-        self.accounts.retain(|a| crate::accounts::valid(a) && seen_accounts.insert(a.id.clone()));
+        // An extension is an account of its own but has no credential and no
+        // provider in `accounts::SUPPORTED`, which is the list the add-account
+        // pane offers. Its id is the one proof it belongs here.
+        self.accounts.retain(|a| {
+            let usable = crate::accounts::valid(a)
+                || (a.provider == crate::extension::ACCOUNT_PROVIDER
+                    && crate::extension::id_from_account_id(&a.id).is_some());
+            usable && seen_accounts.insert(a.id.clone())
+        });
         self.accounts.truncate(64);
         let known=known.iter().cloned().chain(self.accounts.iter().map(|a|a.id.clone())).collect::<Vec<_>>();
         let known=known.as_slice();
@@ -90,6 +111,13 @@ impl Preferences {
         self.rail_spacing = finite_clamp(self.rail_spacing, 0.6, 1.4, 1.0);
         self.warning_threshold = finite_clamp(self.warning_threshold, 0.6, 0.9, 0.75);
         self.refresh_seconds = self.refresh_seconds.clamp(120, 1800);
+        // The starter acts for a closed list of providers. An id from a build
+        // that knew a longer list is dropped rather than carried into a send.
+        self.primed_providers.retain(|id| crate::window_starter::PROVIDERS.contains(&id.as_str()));
+        let mut primed = std::collections::HashSet::new();
+        self.primed_providers.retain(|id| primed.insert(id.clone()));
+        self.primer_hours.start = self.primer_hours.start.min(23);
+        self.primer_hours.end = self.primer_hours.end.min(23);
     }
 }
 
@@ -165,6 +193,42 @@ mod tests {
     #[test] fn clamps_external_preferences() {
         let mut p = Preferences { panel_size: f64::NAN, warning_threshold: 5.0, refresh_seconds: 0, ..Default::default() };
         p.normalize(&[]); assert_eq!(p.panel_size, 1.0); assert_eq!(p.warning_threshold, 0.9); assert_eq!(p.refresh_seconds, 120);
+    }
+    #[test] fn the_window_starter_is_off_and_between_seven_and_twenty_three() {
+        // **Off is the shipped state.** It is the one setting that sends
+        // something on the reader's behalf, so an absent value must not mean
+        // "on" and must not pick hours nobody chose.
+        let p:Preferences=serde_json::from_str("{}").unwrap();
+        assert!(p.primed_providers.is_empty());
+        assert_eq!(p.primer_hours.start,7);assert_eq!(p.primer_hours.end,23);
+        assert!(p.primer_run_times.is_empty());assert!(p.primer_run_outcomes.is_empty());
+    }
+    #[test] fn the_window_starter_only_keeps_providers_it_can_start() {
+        let mut p=Preferences { primed_providers: vec!["codex".into(),"codex".into(),"cursor".into(),"claude-code".into()], ..Default::default() };
+        p.primer_hours=crate::window_starter::PrimerHours { start: 31, end: 40 };
+        p.normalize(&["codex".into()]);
+        // A source from a build that knew a longer list is dropped rather than
+        // carried into a send; the duplicate would start one window twice.
+        assert_eq!(p.primed_providers, vec!["codex", "claude-code"]);
+        assert_eq!(p.primer_hours.start,23);assert_eq!(p.primer_hours.end,23);
+        let roundtrip:Preferences=serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+        assert_eq!(p,roundtrip);
+    }
+    #[test] fn an_extension_account_survives_normalising_without_a_credential() {
+        // An extension is an account with no credential and no provider in
+        // `accounts::SUPPORTED`. Its derived id is the one proof it belongs.
+        let mut p=Preferences::default();
+        let account=crate::extension::account_id("acme-quota");
+        p.accounts.push(crate::accounts::Account { id: account.clone(), provider: crate::extension::ACCOUNT_PROVIDER.into() });
+        p.enabled_providers.push(account.clone());
+        p.normalize(&[]);
+        assert_eq!(p.accounts.len(),1);
+        assert!(p.enabled_providers.contains(&account));
+        // A forged provider or a mangled id is still refused.
+        p.accounts.push(crate::accounts::Account { id: account.clone(), provider: "extension--account-zz".into() });
+        p.accounts.push(crate::accounts::Account { id: "extension--account-zzzz".into(), provider: crate::extension::ACCOUNT_PROVIDER.into() });
+        p.normalize(&[]);
+        assert_eq!(p.accounts.len(),1);
     }
 }
 

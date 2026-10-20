@@ -257,3 +257,64 @@ Public 0.1.14 acceptance: all five anonymous release downloads match local
 SHA-256. The default GitHub feed reports the current version and the real
 0.1.4 client downloads and verifies the published signed upgrade package.
 No installer was executed; evidence is in `release-0.1.14.json`.
+
+
+### Unreleased — the remaining Token sources, the window starter and user extensions
+
+Three things were listed as missing in [readme-coverage.md](readme-coverage.md) and are
+now implemented.
+
+**All 54 Token sources are read.** The thirteen that were still unported — Grok Build,
+Devin, Devin Desktop, CodeBuddy, WorkBuddy, Antigravity CLI, Antigravity IDE, Trae, Warp,
+Copilot, OmO Native, Prime Agent and Freebuff — each have a reader and are registered in
+the `AGENTS` catalogue, so every source now either reports figures or says why it does
+not. Two of them, Warp and Freebuff, report no token counts *by the original's own
+design* (Warp's snapshot has request and spend counts only; Freebuff persists character
+estimates and no counters), and they say so instead of drawing an inferred number.
+Prime Agent needed the parent/child reconciliation the original does: a parent assistant
+message can carry an `aggregateUsage` that already includes a child invocation that is
+also scanned on its own, so the parent is reduced by exactly the stated child usage,
+clamped at zero, and keeps its aggregate when the child cannot be found.
+
+**The window starter** starts Claude Code's five-hour window and Codex's five-hour or
+weekly window as soon as they reset, by sending one short message through the CLI the
+reader has already logged in to. It is off by default, per provider, behind a
+confirmation that says it is not the provider's feature and may cost the account. It
+acts only inside a local time span shared by both providers, only for the first account
+of each provider, once per reset — a failure is recorded like a success so an
+uninstalled tool is not fired at every look — and the pane shows when it last ran and
+what came of it.
+
+**User extensions** are programs the reader adds to a folder, each a directory with a
+`pulse-extension.json` and its own executable. They are scanned, never run on sight;
+each is off until switched on; each gets a timeout between one and sixty seconds and a
+bounded output the app validates before drawing anything; a program that will not start,
+times out, exits non-zero or prints something unreadable gets a sentence rather than a
+guessed figure. Each enabled extension is an account of its own on the panel and in the
+About list, with a settings pane listing what was found, what could not be used and why.
+No extension is given any credential.
+
+Evidence: the Rust suite is **1150 passed, 35 failed, 2 ignored**; the 35 failures are
+the pre-existing macOS run of Windows-only path and PATH tests and are identical by name
+to the pre-change baseline. The frontend is **210 passed in 21 files** and typechecks
+clean. Per-source acceptance on real user logs, a real CLI send, a real Windows
+no-window launch and a real installed extension remain outstanding and are listed in
+[release-progress.json](release-progress.json).
+
+Verified per module, so that "it compiles" is not mistaken for "it is tested": the
+ten new reader modules carry 74 tests (Grok Build 6, Devin 8, Devin Desktop 9,
+CodeBuddy/WorkBuddy 8, Antigravity 7, Trae/Warp 8, Copilot 11, OmO Native 5, Prime
+Agent 7, Freebuff 5), the window starter 18, the extension catalogue 28 and the
+extension runner 8.
+
+**One test was racing its own deadline and has been fixed.**
+`extension_runner::tests::a_program_that_runs_past_its_limit_is_stopped` ran the
+program with a one-second timeout and then read the pid the program writes before
+settling into `sleep`. On a loaded machine the deadline could arrive before the shell
+had written that file, and the check failed with `NotFound` — reporting the runner
+broken when in fact the program never started far enough to be killed. It surfaced
+once in 95 runs, then reproduced at run 61 of a 250-run hunt. The attempt now treats
+a missing pid as "the program never started" and retries with a five- and then a
+fifteen-second deadline; every assertion is unchanged, and a program that really
+survives its deadline still fails the test. After the fix, 60 consecutive full-suite
+runs produced zero divergence.

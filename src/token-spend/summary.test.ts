@@ -58,10 +58,21 @@ describe('Token Spend calendar and measured totals', () => {
   })
   it('names the actual native and captured readers without replacing unknown ids', () => {
     expect(agentName('dsh')).toBe('DeepSeek Harness')
-    expect(agentName('gemini')).toBe('Gemini CLI'); expect(agentName('antigravity')).toBe('Antigravity')
+    expect(agentName('gemini')).toBe('Gemini CLI'); expect(agentName('antigravity')).toBe('Antigravity (export)')
     expect(agentName('opencode')).toBe('OpenCode'); expect(agentName('kilo')).toBe('Kilo CLI'); expect(agentName('micode')).toBe('MiMo Code')
-    expect(agentName('hindsight')).toBe('Hindsight'); expect(agentName('mcode')).toBe('MCode')
+    expect(agentName('hindsight')).toBe('Hindsight'); expect(agentName('mcode')).toBe('MiniMax Code')
     expect(agentName('not-implemented')).toBe('not-implemented')
+  })
+  it('names the thirteen sources ported after 0.1.17 exactly as the original does', () => {
+    // Three Antigravity entries are separate products with separate stores;
+    // their qualifiers are the whole difference between them.
+    expect(agentName('grok')).toBe('Grok Build'); expect(agentName('devin-cli')).toBe('Devin')
+    expect(agentName('devin-desktop')).toBe('Devin Desktop'); expect(agentName('senpi')).toBe('OmO Native')
+    expect(agentName('prime-agent')).toBe('Prime Agent'); expect(agentName('codebuddy')).toBe('CodeBuddy')
+    expect(agentName('workbuddy')).toBe('WorkBuddy'); expect(agentName('antigravity-cli')).toBe('Antigravity CLI')
+    expect(agentName('antigravity-ide')).toBe('Antigravity IDE'); expect(agentName('freebuff')).toBe('Freebuff')
+    expect(agentName('trae')).toBe('Trae'); expect(agentName('warp')).toBe('Warp')
+    expect(agentName('copilot')).toBe('GitHub Copilot'); expect(agentName('fx')).toBe('FX')
   })
   it('includes Harness in totals and filters its models without losing cache usage', () => {
     const all = [record(), record({ agent: 'dsh', model: 'deepseek-chat', tally: { input: 100, output: 40, cacheWrite: 10, cacheRead: 200 } }),

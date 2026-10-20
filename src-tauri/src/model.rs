@@ -93,6 +93,37 @@ impl UsageWindow {
     }
 }
 
+/// One number a reading carries beside its windows, with the series it was
+/// drawn from.
+///
+/// **An addition, never a substitute.** A metric is something the program
+/// stated — a request count, a cache hit rate — and it is drawn next to the
+/// limits, not instead of them. A reading that carries no metric is a normal
+/// reading; a metric that cannot be read is dropped on its own and leaves the
+/// limits beside it exactly as they were.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageMetric {
+    /// Stable across runs, so a card can keep pointing at the same number.
+    pub id: String,
+    pub label: String,
+    pub value: f64,
+    /// A short unit the reporter chose, e.g. "%" or "req". Never translated.
+    #[serde(default)]
+    pub unit: Option<String>,
+    /// Oldest first, one point per moment.
+    #[serde(default)]
+    pub history: Vec<UsageMetricPoint>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageMetricPoint {
+    /// RFC3339 timestamp, as the reporter stated it.
+    pub at: String,
+    pub value: f64,
+}
+
 /// Aggregate result for a single provider, as shown on one card in the panel.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -124,6 +155,10 @@ pub struct ProviderUsage {
     /// place. Here the registry is fixed and every provider is asked, so the
     /// verdict has to travel with the result.
     pub configured: bool,
+    /// Numbers a reading carries beside its windows. Empty for every built-in
+    /// provider: only a user extension states these.
+    #[serde(default)]
+    pub metrics: Vec<UsageMetric>,
     /// RFC3339 timestamp of when this snapshot was taken.
     pub fetched_at: String,
 }
@@ -139,6 +174,7 @@ impl ProviderUsage {
             windows,
             error: None,
             configured: true,
+            metrics: Vec::new(),
             fetched_at: now_rfc3339(),
         }
     }
@@ -153,6 +189,7 @@ impl ProviderUsage {
             windows: Vec::new(),
             error: Some(error.into()),
             configured: true,
+            metrics: Vec::new(),
             fetched_at: now_rfc3339(),
         }
     }
@@ -172,6 +209,7 @@ impl ProviderUsage {
             windows: Vec::new(),
             error: Some(reason.into()),
             configured: false,
+            metrics: Vec::new(),
             fetched_at: now_rfc3339(),
         }
     }

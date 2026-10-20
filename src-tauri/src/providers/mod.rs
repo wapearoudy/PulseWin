@@ -301,23 +301,50 @@ pub async fn collect_accounts(ctx: Arc<Ctx>, enabled: &[String], prefs: &crate::
     let tasks=prefs.accounts.iter().filter(|a|enabled.contains(&a.id)).map(|account| {
         let ctx=Arc::clone(&ctx);let account=account.clone();
         async move {
-            let name=registry().into_iter().find(|p|p.id()==account.provider).map(|p|p.name()).unwrap_or("Account");
+            // An extension has no provider in the registry; its manifest name is
+            // the one its own pane shows, so a reading that arrives before the
+            // label is applied is still named correctly.
+            let name = if account.provider == crate::extension::ACCOUNT_PROVIDER {
+                crate::extension::ExtensionCatalog::find(&account.id).map(|e| e.name).unwrap_or_else(|| "Extension".into())
+            } else {
+                registry().into_iter().find(|p|p.id()==account.provider).map(|p|p.name()).unwrap_or("Account").to_string()
+            };
             let doc=crate::settings::read_credential_document(&account.id);
-            let mut usage=match doc {
+            // An extension is an account with no credential: its program is the
+            // reader, so it is asked the same way a provider is and behind the
+            // same ceiling. The id is decoded rather than trusted, because the
+            // frontend can name any account and only a derived id names a folder.
+            let mut usage=if account.provider==crate::extension::ACCOUNT_PROVIDER {
+                let task=async {
+                    // `id_from_account_id` is the gate, not the lookup: it is
+                    // what proves this id names a folder and not a path.
+                    match crate::extension::id_from_account_id(&account.id) {
+                        Some(_)=>match crate::extension::ExtensionCatalog::find(&account.id) {
+                            Some(extension)=>crate::extension_runner::fetch(&extension).await,
+                            None=>ProviderUsage::failed(&account.id,&name,"这个扩展已不在扩展文件夹中。"),
+                        },
+                        None=>ProviderUsage::failed(&account.id,&name,"这个扩展的标识无效。"),
+                    }
+                };
+                tokio::time::timeout(Duration::from_secs(45),task).await.unwrap_or_else(|_|ProviderUsage::failed(&account.id,&name,"Usage check timed out. Try again."))
+            } else { match doc {
                 Ok(Some(doc)) if crate::accounts::token(&doc).is_some()=>{
                     let task=async {match account.provider.as_str() {
                         "claude-code"=>claude_code::fetch_inner(ctx,Some(doc)).await,
                         "codex"=>codex::fetch_inner(ctx,Some(doc)).await,
                         "grok"=>grok::fetch_inner(ctx,Some(doc)).await,
                         "grok-bot"=>grok_bot::fetch_inner(ctx,Some(doc)).await,
-                        _=>ProviderUsage::failed(&account.id,name,"Unknown account provider"),
+                        _=>ProviderUsage::failed(&account.id,&name,"Unknown account provider"),
                     }};
-                    tokio::time::timeout(Duration::from_secs(45),task).await.unwrap_or_else(|_|ProviderUsage::failed(&account.id,name,"Usage check timed out. Try again."))
+                    tokio::time::timeout(Duration::from_secs(45),task).await.unwrap_or_else(|_|ProviderUsage::failed(&account.id,&name,"Usage check timed out. Try again."))
                 }
-                Ok(_)=>ProviderUsage::failed(&account.id,name,"此账号缺少独立登录信息，请重新导入或填写凭据。"),
-                Err(_)=>ProviderUsage::failed(&account.id,name,"此账号凭据无法解密，请使用原 Windows 用户。"),
-            };
-            usage.id=account.id;usage.source=Some("此账号独立保存的登录".into());usage
+                Ok(_)=>ProviderUsage::failed(&account.id,&name,"此账号缺少独立登录信息，请重新导入或填写凭据。"),
+                Err(_)=>ProviderUsage::failed(&account.id,&name,"此账号凭据无法解密，请使用原 Windows 用户。"),
+            }};
+            // The extension arm already asked whose reading this is; naming the
+            // stored login over it would be a claim about how it was fetched.
+            if account.provider!=crate::extension::ACCOUNT_PROVIDER {usage.source=Some("此账号独立保存的登录".into());}
+            usage.id=account.id;usage
         }
     });
     let (mut readings,additional)=futures::future::join(primary,futures::future::join_all(tasks)).await;

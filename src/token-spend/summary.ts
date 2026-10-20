@@ -52,8 +52,15 @@ function groups(records: SpendRecord[], key: (record: SpendRecord) => string | n
   }
   return [...buckets].map(([id, bucket]) => ({ id, ...bucket, ...amounts(bucket.records) })).sort((a, b) => compareTokens(b,a) || a.name.localeCompare(b.name))
 }
-const agentNames: Record<string, string> = { claude: 'Claude Code', codex: 'Codex', qwen: 'Qwen Code', gemini: 'Gemini CLI', cursor: 'Cursor', antigravity: 'Antigravity', hindsight: 'Hindsight', mcode: 'MCode', opencode: 'OpenCode', kilo: 'Kilo CLI', micode: 'MiMo Code', dsh: 'DeepSeek Harness',pi:'Pi',omp:'Oh My Pi',kimchi:'Kimchi',amp:'Amp',droid:'Droid',openclaw:'OpenClaw',goose:'Goose',hermes:'Hermes',zed:'Zed',crush:'Crush',kiro:'Kiro',kimi:'Kimi CLI',
-  roocode:'Roo Code',kilocode:'Kilo Code',cline:'Cline',cherrystudio:'Cherry Studio',commandcode:'Command Code',opencodereview:'OpenCodeReview',zcode:'ZCode',unsloth:'Unsloth',mux:'Mux',codebuff:'Codebuff',jcode:'JCode',augment:'Augment',gjc:'Gajae Code',junie:'Junie',fx:'Fx',lmstudio:'LM Studio',reasonix:'Reasonix' }
+const agentNames: Record<string, string> = { claude: 'Claude Code', codex: 'Codex', qwen: 'Qwen Code', gemini: 'Gemini CLI', cursor: 'Cursor', antigravity: 'Antigravity (export)', hindsight: 'Hindsight', mcode: 'MiniMax Code', opencode: 'OpenCode', kilo: 'Kilo CLI', micode: 'MiMo Code', dsh: 'DeepSeek Harness',pi:'Pi',omp:'Oh My Pi',kimchi:'Kimchi',amp:'Amp',droid:'Droid',openclaw:'OpenClaw',goose:'Goose',hermes:'Hermes',zed:'Zed',crush:'Crush',kiro:'Kiro',kimi:'Kimi CLI',
+  roocode:'Roo Code',kilocode:'Kilo Code',cline:'Cline',cherrystudio:'Cherry Studio',commandcode:'Command Code',opencodereview:'OpenCodeReview',zcode:'ZCode',unsloth:'Unsloth',mux:'Mux',codebuff:'Codebuff',jcode:'JCode',augment:'Augment',gjc:'Gajae Code',junie:'Junie',fx:'FX',lmstudio:'LM Studio',reasonix:'Reasonix',
+  // Ported from Pulse 1.9's remaining Groups A–F. Three Antigravity entries are
+  // separate products with separate stores and are never pooled, so the
+  // qualifiers are load-bearing. `devin` stays "Devin" rather than "Devin CLI":
+  // Desktop embeds the same core, and the database cannot say which client
+  // drove it — calling the rows CLI usage would name a program the reader may
+  // never have installed.
+  grok:'Grok Build','devin-cli':'Devin',senpi:'OmO Native','prime-agent':'Prime Agent',codebuddy:'CodeBuddy',workbuddy:'WorkBuddy','antigravity-cli':'Antigravity CLI','antigravity-ide':'Antigravity IDE','devin-desktop':'Devin Desktop',freebuff:'Freebuff',trae:'Trae',warp:'Warp',copilot:'GitHub Copilot' }
 export const agentName = (id: string) => agentNames[id] ?? id
 export const modelKey = (record: SpendRecord) => record.modelName ?? record.model
 function projectKey(record: SpendRecord): string | null {

@@ -34,6 +34,9 @@ mod console_reads;
 pub mod opencode_console;
 pub mod codex_signals;
 pub mod prompt_cache;
+pub mod window_starter;
+pub mod extension;
+mod extension_runner;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -148,6 +151,14 @@ pub struct AppState {
     pub rail_metrics: std::sync::Mutex<(f64, f64, f64, f64)>,
     /// Set while the rail is being dragged off the edge. See `watch_pointer`.
     pub drag: std::sync::Mutex<Option<Drag>>,
+    /// The resets the window starter has noted and not yet acted on, keyed
+    /// `account|window`. Held in memory only: a reset noted by a run that has
+    /// exited is no longer coming, and the next reading that still states it
+    /// will note it again.
+    pub primer_resets: std::sync::Mutex<std::collections::BTreeMap<String,i64>>,
+    /// One send at a time per process. The periodic look and the look that
+    /// follows a refresh can otherwise both decide the same window is due.
+    pub primer_busy: std::sync::atomic::AtomicBool,
 }
 
 impl AppState {
@@ -191,6 +202,8 @@ impl AppState {
             placement_updates: std::sync::Mutex::new(()),
             rail_metrics: std::sync::Mutex::new((0.0, 0.0, 64.0, 100.0)),
             drag: std::sync::Mutex::new(None),
+            primer_resets: std::sync::Mutex::new(std::collections::BTreeMap::new()),
+            primer_busy: std::sync::atomic::AtomicBool::new(false),
         }
     }
 }
@@ -300,8 +313,25 @@ async fn refresh_pass(app:&AppHandle,state:&AppState,target:Option<&str>,due_onl
 
     update_tray(app, &snapshot);
     let _ = app.emit(EVENT_USAGE_UPDATED, &snapshot);
+    // The window starter looks at the readings that were just taken. Spawned,
+    // because a send waits on the provider's own tool and no ring on screen
+    // should wait with it.
+    look_at_primer(app);
     state.refresh_wake.notify_one();
     snapshot
+}
+
+/// Hand the window starter a fresh look without waiting for it.
+///
+/// A free function, not an inline `spawn` in `refresh_pass`: the future a
+/// spawn holds would otherwise be part of that async fn's own inferred type
+/// and the compiler reports a cycle.
+fn look_at_primer(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<AppState>();
+        primer_look(&app, &state).await;
+    });
 }
 
 fn watch_refresh(app:AppHandle) {
@@ -387,6 +417,197 @@ fn get_activity(state: State<'_, AppState>) -> activity::Activity { state.activi
 #[tauri::command]
 fn get_resets(state:State<'_,AppState>)->std::collections::HashMap<String,i64>{state.resets.lock().unwrap().clone()}
 
+
+// ---------------------------------------------------------------------------
+// Settings: the window starter and user extensions
+// ---------------------------------------------------------------------------
+
+/// What the extensions pane shows: every program found, and every folder that
+/// could not be read as one.
+///
+/// A scan and nothing more — it runs no program, so opening the pane cannot
+/// start anything the reader has not switched on.
+#[tauri::command]
+fn extensions_settings() -> extension::ScanView {
+    let scan = extension::ExtensionCatalog::scan();
+    match extension::ExtensionCatalog::folder() {
+        Some(folder) => scan.view(&folder),
+        None => extension::ScanView {
+            folder: String::new(),
+            extensions: Vec::new(),
+            problems: vec![extension::ProblemView {
+                folder: String::new(),
+                message: "无法获取 PulseWin 的数据目录，扩展没有可读的位置。".into(),
+            }],
+        },
+    }
+}
+
+/// Open the extensions folder so a program can be put in it.
+///
+/// Created first: opening a folder that does not exist is an error in Explorer,
+/// and "there is nowhere to put it" is the one thing this button must not say.
+#[tauri::command]
+fn open_extensions_folder(app: AppHandle) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let folder = extension::ExtensionCatalog::folder().ok_or("无法获取 PulseWin 的数据目录。")?;
+    std::fs::create_dir_all(&folder).map_err(|_| "无法创建扩展文件夹。".to_string())?;
+    app.opener().open_path(folder.display().to_string(), None::<&str>)
+        .map_err(|_| "无法打开扩展文件夹。".to_string())
+}
+
+/// Switch one extension's account on or off.
+///
+/// **An extension account is a stored account with no credential.** It is
+/// written to `accounts` rather than only to `enabled_providers`, because that
+/// is where the rest of the app looks for "this id is an account" — the rail's
+/// label, the cache, the appearance overrides. The id is decoded rather than
+/// trusted: only a derived id names a folder, and the frontend can send any
+/// string.
+#[tauri::command]
+async fn set_extension_enabled(app: AppHandle, state: State<'_, AppState>, account: String, enabled: bool) -> Result<(), String> {
+    let _guard = state.account_mutations.lock().await;
+    let manifest = extension::id_from_account_id(&account).ok_or("这个扩展的标识无效。")?;
+    let mut prefs = state.preferences.lock().unwrap().clone();
+    prefs.accounts.retain(|a| a.id != account);
+    prefs.enabled_providers.retain(|id| id != &account);
+    if enabled {
+        // Resolved through the catalogue, so switching on an id whose folder
+        // has gone away says so instead of storing an account nothing can read.
+        let found = extension::ExtensionCatalog::find(&account)
+            .ok_or("这个扩展已不在扩展文件夹中，请重新检查扩展文件夹。")?;
+        prefs.accounts.push(accounts::Account { id: account.clone(), provider: extension::ACCOUNT_PROVIDER.into() });
+        prefs.account_labels.entry(account.clone()).or_insert_with(|| found.name.clone());
+        prefs.enabled_providers.push(account.clone());
+        prefs.provider_order.push(account.clone());
+    } else {
+        prefs.account_labels.remove(&account);
+        prefs.provider_order.retain(|id| id != &account);
+        prefs.pinned_windows.remove(&account);
+        prefs.account_appearance.remove(&account);
+    }
+    let _ = manifest;
+    apply_preferences(app, &state, prefs).await
+}
+
+/// What the window starter last did for each provider, and when.
+///
+/// Read from the preferences rather than kept beside them, so the pane and a
+/// `--json` dump cannot disagree about the last attempt.
+#[derive(serde::Serialize)]
+#[serde(rename_all="camelCase")]
+struct PrimerStatus {
+    provider: String,
+    /// Epoch seconds of the last send, or null when there has not been one.
+    last_run: Option<i64>,
+    /// The starter's own outcome string — `sent`, `toolMissing`, `failed` or
+    /// `timedOut` — or null when there has not been one.
+    last_outcome: Option<String>,
+}
+
+#[tauri::command]
+fn primer_status(state: State<'_, AppState>) -> Vec<PrimerStatus> {
+    let prefs = state.preferences.lock().unwrap().clone();
+    window_starter::PROVIDERS.iter().map(|provider| PrimerStatus {
+        provider: (*provider).to_owned(),
+        last_run: prefs.primer_run_times.get(*provider).copied(),
+        last_outcome: prefs.primer_run_outcomes.get(*provider).cloned(),
+    }).collect()
+}
+
+/// One look at the readings, and a send for whoever is due.
+///
+/// The timer and the look that follows a settings save both come through here,
+/// so a reader who has just switched it on does not have to wait five minutes
+/// to find out whether it works. Guarded by `primer_busy`: two looks at once
+/// would both decide the same window is due and send twice.
+async fn primer_look(app: &AppHandle, state: &AppState) {
+    use std::sync::atomic::Ordering::SeqCst;
+    if state.primer_busy.swap(true, SeqCst) {
+        return;
+    }
+    let prefs = state.preferences.lock().unwrap().clone();
+    // Nothing turned on is the normal state: leave immediately, before touching
+    // the snapshot or the clock.
+    let done = if prefs.primed_providers.is_empty() {
+        Vec::new()
+    } else {
+        let readings = state.snapshot.lock().await.providers.clone();
+        let mut resets = state.primer_resets.lock().unwrap().clone();
+        let folder = window_starter::directory();
+        let done = window_starter::advance(
+            &mut resets,
+            &readings,
+            &prefs.primed_providers,
+            &prefs.enabled_providers,
+            &prefs.primer_run_times,
+            &prefs.primer_hours,
+            &folder,
+            chrono::Utc::now().timestamp(),
+        ).await;
+        *state.primer_resets.lock().unwrap() = resets;
+        done
+    };
+    state.primer_busy.store(false, SeqCst);
+    if done.is_empty() {
+        return;
+    }
+    let _guard = state.account_mutations.lock().await;
+    let mut prefs = state.preferences.lock().unwrap().clone();
+    let now = chrono::Utc::now().timestamp();
+    let mut sent = false;
+    for finished in done {
+        if finished.outcome == window_starter::Outcome::Sent { sent = true; }
+        // **A failure is recorded like a success.** The next look must not send
+        // again for a reset that has already been answered, or a tool that is
+        // not installed would be fired once every five minutes all day.
+        prefs.primer_run_times.insert(finished.provider.clone(), now);
+        prefs.primer_run_outcomes.insert(finished.provider, finished.outcome.as_str().to_owned());
+    }
+    drop(_guard);
+    if let Err(error) = apply_preferences(app.clone(), state, prefs).await {
+        eprintln!("PulseWin: the window starter could not record what it did ({error}).");
+        return;
+    }
+    // **Read the account again, so the next start is scheduled from the window
+    // this one opened.** Without it the remembered reset stays the one that has
+    // just been answered, and the next start waits for whatever refresh happens
+    // to come round instead of following the window it just opened.
+    if sent {
+        refresh(app, state).await;
+    }
+}
+
+/// The window starter's timer.
+///
+/// **The look is the timer's own, not a hook on a reading.** The original
+/// observed each provider fetch; here a window can come due while nothing is
+/// being fetched at all — a cached reading is minutes old — so the soonest
+/// moment anything could be due is what the loop sleeps to, capped at
+/// [`window_starter::MAX_WAIT_SECS`] so a provider used in the meantime is
+/// noticed without waiting out a five-hour window.
+fn watch_primer(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        loop {
+            let state = app.state::<AppState>();
+            primer_look(&app, &state).await;
+            let wait = {
+                let prefs = state.preferences.lock().unwrap().clone();
+                if prefs.primed_providers.is_empty() {
+                    window_starter::MAX_WAIT_SECS
+                } else {
+                    let resets = state.primer_resets.lock().unwrap().clone();
+                    let now = chrono::Utc::now().timestamp();
+                    window_starter::next_wake(&resets, now, &prefs.primer_hours)
+                        .map(|at| at.saturating_sub(now))
+                        .unwrap_or(window_starter::MAX_WAIT_SECS)
+                }
+            };
+            let wait = wait.max(window_starter::MIN_WAIT_SECS) as u64;
+            tokio::time::sleep(Duration::from_secs(wait)).await;
+        }
+    });
+}
 fn watch_activity(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut observed_generation=u64::MAX;
@@ -486,6 +707,12 @@ async fn apply_preferences(app: AppHandle, state: &AppState, mut value: preferen
         state.fullscreen_hidden.store(false,std::sync::atomic::Ordering::SeqCst);
         if let Some(window) = app.get_webview_window("main") { let _ = window.hide(); }
     } else if previous.enabled_providers.is_empty() || !previous.panel_visible { show_panel(&app); }
+    // Switching the starter on, or changing its hours, is answered at once:
+    // a reader who has just turned it on should not sit through a whole wait
+    // to find out whether the tool it drives is installed.
+    if value.primed_providers != previous.primed_providers || value.primer_hours != previous.primer_hours {
+        look_at_primer(&app);
+    }
     if value.enabled_providers != previous.enabled_providers || value.provider_order != previous.provider_order || value.account_labels != previous.account_labels {
         let mut snapshot = state.snapshot.lock().await;
         snapshot.providers.retain(|p| value.enabled_providers.contains(&p.id));
@@ -607,7 +834,10 @@ fn provider_settings(state: State<'_,AppState>) -> Vec<ProviderSetting> {
         let result=settings::read_credential_document(&account.id);
         let error=result.as_ref().err().map(|_|"保存的凭据无法解密，请使用原 Windows 账户。".to_string());
         let stored=result.ok().flatten().is_some_and(|d|accounts::token(&d).is_some());
-        let name=providers::registry().into_iter().find(|p|p.id()==account.provider).map(|p|p.name()).unwrap_or("Account");
+        // An extension is an account with no credential and no provider in the
+        // registry: its name comes from its own manifest, which is also where
+        // the settings pane just read it from.
+        let name=if account.provider==extension::ACCOUNT_PROVIDER { extension::ExtensionCatalog::find(&account.id).map(|e|e.name).unwrap_or_else(||"Extension".into()) } else { providers::registry().into_iter().find(|p|p.id()==account.provider).map(|p|p.name()).unwrap_or("Account").to_string() };
         let path=settings::credential_file(&account.id).map(|p|p.display().to_string());
         entries.push(ProviderSetting {id:account.id.clone(),provider_id:account.provider.clone(),additional:true,
             name:prefs.account_labels.get(&account.id).cloned().unwrap_or_else(||name.into()),
@@ -1506,6 +1736,10 @@ pub fn run() {
             ,updates::check_app_update
             ,updates::install_app_update
             ,updates::verify_app_update_smoke
+            ,extensions_settings
+            ,open_extensions_folder
+            ,set_extension_enabled
+            ,primer_status
         ])
         .setup(|app| {
             application::apply(app.handle());
@@ -1541,6 +1775,7 @@ pub fn run() {
             watch_pointer(app.handle().clone());
             watch_activity(app.handle().clone());
             watch_desktop(app.handle().clone());
+            watch_primer(app.handle().clone());
 
             Ok(())
         })

@@ -20,6 +20,9 @@ import { PromptCacheGroup } from './PromptCacheGroup'
 import { CodexSignalsGroup } from './CodexSignalsGroup'
 import {DeepSeekConsoleGroup} from './DeepSeekConsoleGroup'
 import { TokenSpendPane, releaseSpendSession } from './token-spend/TokenSpendPane'
+import { WindowStarterGroup } from './WindowStarterGroup'
+import { ExtensionsSettingsView, ExtensionProgramGroup } from './ExtensionsSettingsView'
+import { invoke } from '@tauri-apps/api/core'
 
 function SidebarSymbol({children}:{children:ReactNode}) {
   return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" focusable="false">{children}</svg>
@@ -35,6 +38,7 @@ const settingsPanes:[string,string,ReactNode,string][]=[
   ['network','网络与刷新',<SidebarSymbol><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18M5 6h14M5 18h14"/></SidebarSymbol>,'代理 proxy HTTP SOCKS5 主机 端口 刷新 检查间隔'],
   ['about','关于',<SidebarSymbol><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7" r=".7" fill="currentColor"/></SidebarSymbol>,'版本 开源 致谢 许可 软件 更新'],
   ['general','通用',<SidebarSymbol><path d="M3 6h4m4 0h10M3 12h10m4 0h4M3 18h3m4 0h11"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/></SidebarSymbol>,'启动 快捷键 软件 更新'],
+  ['extensions','用户扩展',<SidebarSymbol><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><path d="M16.5 13v7M13 16.5h7"/></SidebarSymbol>,'扩展 程序 extension 清单 脚本'],
 ]
 
 export default function Settings() {
@@ -45,6 +49,16 @@ export default function Settings() {
   const [pane, setPane] = useState(()=>new URLSearchParams(window.location.search).get('account') ?? 'appearance'), [query, setQuery] = useState('')
   useEffect(()=>{let live=true,off:(()=>void)|undefined;void onSettingsAccount(id=>{if(live){setPane(id);setChoose(false);setDismissed(true)}}).then(fn=>{if(live)off=fn;else fn()}).catch(()=>undefined);return()=>{live=false;off?.()}},[])
   const [error, setError] = useState<string | null>(null), [busy, setBusy] = useState(false)
+  // The window starter's last attempts. Read through its own command rather
+  // than out of the preferences, so the pane and the starter report the same
+  // thing even when one has just written and the other has not re-read.
+  const [primer, setPrimer] = useState<Record<string, {lastRun: number | null; lastOutcome: string | null}>>({})
+  useEffect(() => { let live = true
+    void invoke<{provider: string; lastRun: number | null; lastOutcome: string | null}[]>('primer_status')
+      .then(rows => { if (live) setPrimer(Object.fromEntries(rows.map(row => [row.provider, row]))) })
+      .catch(() => undefined)
+    return () => { live = false }
+  }, [prefs.primedProviders, prefs.primerRunTimes])
   const [selection, setSelection] = useState<string[]>([]), [choose, setChoose] = useState(false), [dismissed, setDismissed] = useState(false)
   const [position,setPosition]=useState<'left'|'right'|'top'|'bottom'|'free'|'free-horizontal'>('right')
   useEffect(()=>{let live=true,off:(()=>void)|undefined;const sync=(p:{dockEdge:'left'|'right'|'top'|'bottom'|null;facingEdge?:'left'|'right'|'top'|'bottom'|null;railPosition:[number,number]|null})=>{if(live)setPosition(p.dockEdge??(p.railPosition?(p.facingEdge==='top'||p.facingEdge==='bottom'?'free-horizontal':'free'):'right'))};panelPlacement().then(sync).catch(()=>undefined);onPlacementChanged(sync).then(fn=>{if(live)off=fn;else fn()}).catch(()=>undefined);return()=>{live=false;off?.()}},[])
@@ -93,7 +107,7 @@ export default function Settings() {
     <aside className="settings-sidebar" aria-label="设置导航">
       <div className="settings-brand"><span className="brand-mark">◉</span><strong>Pulse</strong><span>Windows</span></div>
       <input type="search" aria-label="搜索设置与账号" placeholder="搜索设置与账号" value={query} onChange={e => setQuery(e.target.value)} />
-      <nav>{[['面板', ['appearance', 'rings', 'behavior']], ['应用', ['general', 'notifications', 'network', 'accounts', 'token-spend']]].map(([title, ids]) => {
+      <nav>{[['面板', ['appearance', 'rings', 'behavior']], ['应用', ['general', 'notifications', 'network', 'accounts', 'token-spend', 'extensions']]].map(([title, ids]) => {
         const entries = settingsPanes.filter(([id, name,,terms]) => (ids as string[]).includes(id) && `${id} ${name} ${terms}`.toLowerCase().includes(query.toLowerCase())).sort((a,b) => (ids as string[]).indexOf(a[0]) - (ids as string[]).indexOf(b[0]))
         return entries.length > 0 && <div key={String(title)}><p className="nav-section">{title}</p>{entries.map(([id,name,icon]) => <button key={id} className={pane === id ? 'selected' : ''} onClick={() => { setPane(id); setChoose(false); setDismissed(true) }}><span className="settings-nav-icon" aria-hidden="true">{icon}</span><span className="settings-nav-label">{name}</span></button>)}</div>
       })}
@@ -129,6 +143,7 @@ export default function Settings() {
         : pane === 'general' ? <GeneralPane/>
         : pane === 'network' ? <NetworkPane preferences={prefs} disabled={busy} onChange={change}/>
         : pane === 'about' ? <AboutPane/>
+        : pane === 'extensions' ? <ExtensionsSettingsView enabled={prefs.enabledProviders}/>
         : pane === 'token-spend' ? <TokenSpendPane enabled={prefs.tokenSpendEnabled} onEnabledChange={v=>change({tokenSpendEnabled:v})} span={prefs.tokenSpendSpan} onSpanChange={v=>change({tokenSpendSpan:v})} activityView={prefs.spendActivityView} onActivityViewChange={v=>change({spendActivityView:v})} recapMonthlyPrice={prefs.recapMonthlyPrice} recapHidesProjects={prefs.recapHidesProjects} onRecapChange={change}/>
         : pane === 'accounts' ? <>
         <h1>管理账号</h1><p className="page-description">控制面板显示的服务和排列顺序。</p><button onClick={() => { setSelection(prefs.enabledProviders); setChoose(true) }}>选择服务</button>
@@ -147,7 +162,13 @@ export default function Settings() {
         {provider.id==='deepseek'&&<DeepSeekConsoleGroup enabled={enabled} onChanged={reload}/>}
     {provider.id==='opencode-go'&&<OpenCodeConsoleGroup enabled={enabled} onChanged={reload}/>}
         {['codex','claude-code','deepseek'].includes(provider.providerId??provider.id)&&<ServiceStatusGroup provider={provider.id} base={provider.providerId??provider.id}/>}
+        {['codex','claude-code'].includes(provider.providerId??provider.id)&&<WindowStarterGroup provider={(provider.providerId??provider.id) as 'claude-code'|'codex'}
+          primed={prefs.primedProviders.includes(provider.providerId??provider.id)} hours={prefs.primerHours} status={primer[provider.providerId??provider.id]} disabled={busy}
+          onToggle={on=>change({primedProviders: on ? [...prefs.primedProviders.filter(id=>id!==(provider.providerId??provider.id)), provider.providerId??provider.id] : prefs.primedProviders.filter(id=>id!==(provider.providerId??provider.id))})}
+          onHours={hours=>change({primerHours:hours})}/>}
+
         {['codex','claude-code'].includes(provider.providerId??provider.id)&&<PromptCacheGroup provider={provider.providerId??provider.id} enabled={prefs.tokenSpendEnabled}/>}
+        {(provider.providerId??provider.id)==='extension'&&<ExtensionProgramGroup accountId={provider.id}/>}
         {(provider.providerId??provider.id)==='codex'&&<CodexSignalsGroup enabled={prefs.tokenSpendEnabled}/>}
       </Fragment> : null}
     </main>

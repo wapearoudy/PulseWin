@@ -2,7 +2,7 @@
 
 2026-10-11 已同步原版 1.7.0–1.9.0 的 [发布说明与新增缺口](upstream-release-notes.md)。本次移植依据为已获取的 v1.9.0 标签对象；原版工作目录仍停在下述旧提交。下面的历史对照不是对 1.9.0 的完整验收，新增浅色助手、月报年报、官方服务状态等能力以新清单追踪。
 
-2026-10-17 继续实现检查点：服务状态、活动视图、回顾计算与 PNG 导出、Codex 本地分析、缓存时限、精确计数和计价，以及额外 Token 来源已有实现和专项测试。0.1.17 再移植 17 个 Token 来源（Roo Code、Kilo Code、Cline、Cherry Studio、Command Code、OpenCodeReview、ZCode、Unsloth、Mux、Codebuff、JCode、Augment、Gajae Code、Junie、Fx、LM Studio、Reasonix），当前登记 41 个来源（含只识别费用、不生成 Token 的 Crush），还有 13 项未移植；部分已登记来源仍需导出文件。DeepSeek 控制台、完整详情卡、回顾原版视觉/原生流程和真实账号验收仍未完成。下方历史表不自动升级为全部通过，最新缺口与证据见 [release-progress.json](release-progress.json)，用户于 2026-10-11 改为授权先发布 0.1.16；未实现来源在 UI 隐藏，内部开发清单继续保留。2026-10-18 用户要求提交、推送并发布 0.1.17；该版本已重新构建 Windows 产物，并通过 native 冒烟、CLI 与签名更新检查。
+2026-10-17 继续实现检查点：服务状态、活动视图、回顾计算与 PNG 导出、Codex 本地分析、缓存时限、精确计数和计价，以及额外 Token 来源已有实现和专项测试。0.1.17 再移植 17 个 Token 来源（Roo Code、Kilo Code、Cline、Cherry Studio、Command Code、OpenCodeReview、ZCode、Unsloth、Mux、Codebuff、JCode、Augment、Gajae Code、Junie、Fx、LM Studio、Reasonix），0.1.18 再移植最后 13 项，当前登记 54 个来源（含只识别费用、不生成 Token 的 Crush），已无未移植来源；部分已登记来源仍需导出文件。DeepSeek 控制台、完整详情卡、回顾原版视觉/原生流程和真实账号验收仍未完成。下方历史表不自动升级为全部通过，最新缺口与证据见 [release-progress.json](release-progress.json)，用户于 2026-10-11 改为授权先发布 0.1.16；未实现来源在 UI 隐藏，内部开发清单继续保留。2026-10-18 用户要求提交、推送并发布 0.1.17；该版本已重新构建 Windows 产物，并通过 native 冒烟、CLI 与签名更新检查。
 
 验收来源：[官方 README.zh-CN.md](https://github.com/qunqin24/Pulse/blob/main/README.zh-CN.md)，2026-10-02 阅读在线版本；实现依据为同目录 `Pulse-original` 的 Swift 源码和 Docs。README 中的截图是外观参考，具体默认值和交互以对应源码与专题文档为准。上游当前有 77 个配额服务商，Token 消耗的 54 种客户端来源是另一套功能，不能混算。
 
@@ -26,17 +26,17 @@
 | 收起细线与额度预警 | Panel/DockBerthShape；Docs/ui/input.md | 部分：贴边 320ms 收起、浮动保持展开、收起预警色已接通；原生点击命中复用实际 SVG 轮廓，悬停宽容区域保持原版但不接管透明区点击；真实下层窗口穿透、快速跨边界点击和采样竞态尚未完整验收 |
 | 系统通知 | Usage/UsageAlerts；Docs/notifications.md | 部分：默认关闭；阈值、用尽、明确重置、连续三次故障、真实货币余额阈值及持久去重已接通，旧缓存不证明重置，30 分钟新缓存保护故障通知；Windows 实际横幅、点击进入对应账号、跨路由稳定窗口身份尚未验收或补齐 |
 | 全屏避让与工作区行为 | Panel/FloatingPanel；Docs/ui/panel-geometry.md | 部分：默认开启 Windows 前台全屏检测、同屏避让和恢复；排除桌面、自身窗口与普通最大化窗口；实际游戏/视频/虚拟桌面尚未验收 |
-| 黑色 / Liquid Glass 材质 | Panel/PanelSurface；Docs/ui/rings-and-surface.md | 黑色已接通；Windows 玻璃材质仍缺，不以半透明 CSS 宣称等价 |
+| 黑色 / Liquid Glass 材质 | Panel/PanelSurface；Docs/ui/rings-and-surface.md | 部分：黑色已接通；Windows 玻璃材质仍缺，不以半透明 CSS 宣称等价 |
 | 按账号机器人开关 | Panel/BotMark；Settings 账号外观 | 已接通，默认供应商图标，按账号启用机器人 |
 | 八种人格 / 十八种形状 / 自定义颜色 | BotMarkPersona、Body、Choreography | 已接通设置与动画；原版完整编排表直接导入，原始身体/眼睛资源原样使用；人格与身体独立 |
 | 机器人完整动作 | BotMarkEngine、Morphs、Particles、Programme | 部分：原版持久弹簧、表情序列、注视、全部任务形态、前后粒子带、随机手势时序、形态连续性与 6.4 秒重置庆祝已移植，完成动作只由见证过的工作结束触发；默认不重播旧重置，减少动态效果使用稳定静态帧；公式和编排有测试，随机动画不声称逐帧图像一致 |
 | 右键悬浮栏 / 收起细线菜单 | AppDelegate.panelMenu；Docs/ui/input.md | 已接通原生设置/退出菜单、菜单打开期间保留展开；检查更新菜单和通用设置更新入口已接通；真实安装覆盖/重启仍需单独验收 |
 | 菜单栏用量与按账号标签页 | README 菜单栏用量；原版菜单栏面板 | 部分：0.1.9 接通托盘左键用量概览、逐账号标签页、完整配额/重置/真实余额/旧读数、按账号刷新、已知官方用量页与开关启用后的主账号本机消费统计；通用设置可选自动或指定账号及数字/迷你圆环/双额度图标，尊重置顶、剩余量和警戒线。桌面助手显隐持久保存，隐藏仍监测。Windows 托盘只能用图标内数字与 tooltip，不能在图标旁排 macOS 文字；真实任务栏点击、系统缩放图标清晰度、多屏混合 DPI 尚未验收，不能宣称像素一致 |
-| 重置后自动开启窗口 | README 原生丝滑、静默无扰 | 缺失：没有 Claude Code/Codex 在重置后、设定时间段内通过 CLI 启动新窗口的开关、确认和调度；重置庆祝动画不等同于此功能 |
+| 重置后自动开启窗口 | README 原生丝滑、静默无扰；Docs/window-starter.md | 已接通：Claude Code（5 小时窗口）与 Codex（5 小时 / 每周窗口）各自独立开关，默认关闭；开启前有明确的「非官方功能、可能违反用量政策」确认；可设只在某个本地时间段内启动（两服务共用）；调度按读到的重置时刻加 60 秒宽限，只对每个服务的第一个账号动作，失败后不重试直到下一个重置；设置页显示上次启动时刻与结果。发送内容由本机已登录的 CLI 完成，不经 Pulse 的凭据。真实 CLI 发送与 Windows 上的无窗口启动仍需单独验收 |
 | 可配置全局快捷键 | App/GlobalShortcut；Docs/ui/input.md | 部分：打开设置和显隐助手两个快捷键默认未设置；录入、取消、删除、系统注册和逐项冲突提示已接通；真实 OS 按键响应单独记录，浏览器录入测试不算全局响应验收 |
 | 五种语言 | Resources/*.lproj；Docs/development.md | 部分：设置中文、供应商原名；面板统一翻译、其他四语及大数规则尚缺 |
 | 同服务多账号 / 自定义标签 | AccountKey；Docs/providers/README.md | 部分：Claude Code/Codex/Grok/Grok Bot 的独立账号身份、DPAPI 凭据、CLI 登录快照导入、手动 Token/登录 JSON/Cookie、自定义名称、单独显隐/刷新/排序/外观/置顶及移除已接通；原版内置网页登录、自动续期和附加账号日志归属仍缺。新增账号不回退到主账号 CLI，也不借用主账号本机历史 |
-| Token 消耗本机读取开关 / 54 来源 | Docs/token-spend.md | 部分：默认关闭，41/54 登记来源。新增 Pi、Oh My Pi、Kimchi、Amp、Droid、OpenClaw、Goose、Hermes、Zed、Kiro、Kimi CLI，以及 0.1.17 的 Roo Code、Kilo Code、Cline、Cherry Studio、Command Code、OpenCodeReview、ZCode、Unsloth、Mux、Codebuff、JCode、Augment、Gajae Code、Junie、Fx、LM Studio、Reasonix；Crush 只识别费用来源，不推算 Token。Cursor、Antigravity、Hindsight、MCode 仍需用户提供导出 / 捕获文件。真实 DeepSeek 与 OpenCode 网页账单读取已跑通，但不代替其余本地来源的真实日志验收。另有 13 来源未移植。目录、取消、精确计数、WAL / 时间侧文件失效、只读、历史保留与隐私已有 fixture 验证 |
+| Token 消耗本机读取开关 / 54 来源 | Docs/token-spend.md | 部分：默认关闭，**54/54 登记来源**。除 0.1.17 已移植的 17 项外，新增 Grok Build、Devin、Devin Desktop、CodeBuddy、WorkBuddy、Antigravity CLI、Antigravity IDE、Trae、Warp、Copilot、OmO Native、Prime Agent、Freebuff。Crush 只识别费用来源，Warp 与 Freebuff 按原版语义不产生 token 计数（只报说明，不把字符估算画成数字）。Cursor、Antigravity（导出）、Hindsight、MCode 仍需用户提供导出 / 捕获文件。真实 DeepSeek 与 OpenCode 网页账单读取已跑通，但不代替其余本地来源的真实日志验收。目录、取消、精确计数、WAL / 时间侧文件失效、只读、历史保留与隐私已有 fixture 验证 |
 | 7 天区间 / 公开价格估算 | Docs/token-spend.md | 部分：今天/7 天/30 天、公开 models.dev 价格、24 小时价格缓存与离线旧价格已接通；未知模型和未分类 Token 不伪造费用；Cursor 日聚合导出不编造小时，相关范围的小时图明确不可用；Harness 真实压缩日志已通过只读与独立脚本汇总核对；其他真实用户日志及在线价格刷新尚未验收 |
 | 模型 / Agent 明细 / 日与小时图 / 排序分页 | Settings TokenSpend；Docs/token-spend.md | 已接通模型详情、Agent、日/小时图、项目与会话排序分页、重扫/停止；离开页面停止未完成扫描，已完成快照可重用，关闭设置释放会话；使用 fixture 验证 UI，来源数量仍受上一行限制 |
 | 77 个额度服务商与各自登录来源 | Docs/providers/README.md、Docs/setup | 部分：注册 77 个适配器，不代表路由、登录回退、账户隔离或真实账号已验收；逐提供商检查另列 |
@@ -44,14 +44,41 @@
 | 缓存、连接诊断、重连与脱敏报告 | Docs/refresh-and-data.md；ConnectionRemedy | 部分：最后有效读数与采集时间持久化，24 小时缓存上限、过期窗口剔除、失败时旧读数标记、旧结果防回滚已接通；来源元数据仍依赖 adapter，完整回退轨迹、重连与脱敏报告尚缺 |
 | `--json` 只读缓存 | Usage/UsageReport；Docs/json-output.md | 部分：启动 GUI 前只读缓存、不请求服务、不读取或写入凭据，输出启用账号的顺序/置顶额度、观察时间、年龄、真实余额与窗口；原版完整窗口身份、scope、估算、设置链接等 JSON 字段尚未补齐 |
 | 开发者集成 / 账号链接 | Docs/integrations.md | 部分：只读 `--json` 和 `--statusline` 已接通；原版完整集成协议与账号深链缺失 |
-| 用户扩展 | Docs/extensions.md | 缺失清单、禁用默认、运行时限、输出校验与账号呈现 |
+| 用户扩展 | Docs/extensions.md | 已接通清单扫描（`pulse-extension.json`，含 schema 版本、id 校验、可执行文件必须在自己的文件夹内）、默认全部关闭、逐扩展开关、1–60 秒运行时限、输出上限与 JSON 校验、失败分类（找不到程序 / 超时 / 非零退出）与中文说明；每个扩展作为一个账号出现在面板与关于页，设置页有「用户扩展」入口、一键打开文件夹、重新读取，扩展自己的账号页显示程序路径、时限与标识。扩展不获得任何凭据 |
 | 首次选择 / 升级提示 | Docs/architecture.md | 部分：首次全不选、完成后才采集、禁用不请求已接通；升级新来源一次性建议未覆盖 |
 | 系统代理 / 手动代理 / 自适应刷新 | Docs/networking.md、refresh-and-data.md | 部分：系统代理、手动间隔、按服务的 2/5/15/30 分钟单次调度、真实 Windows 节电/低电量约束、系统恢复通知及时间跳变到期重查已接通；活动/查看/额度变化更新节奏，外部消费最多 5 分钟，隐藏或节电 30 分钟，频繁活动不推迟到期请求；0.1.10 已接通 HTTP / SOCKS5 手动代理及 Kiro / Alibaba 辅助进程环境、取消旧刷新与启用账号重查；PAC、代理认证、热限制和独立显示器休眠尚缺，真实休眠恢复未操控验收 |
-| 完整设置导航与页面 | Settings/SettingsView.swift | 部分：0.1.10 新增网络与刷新、关于，九个固定入口及账号页按面板 / 应用 / 账号分组；版本、更新、源码、致谢、许可已接通；开发者集成、扩展及原版部分设置仍缺，不能以侧栏图标一致表示设置 UI 已全部还原 |
+| 完整设置导航与页面 | Settings/SettingsView.swift | 部分：0.1.10 新增网络与刷新、关于，九个固定入口及账号页按面板 / 应用 / 账号分组；版本、更新、源码、致谢、许可已接通；0.1.18 新增「用户扩展」入口，以及各服务页内的「自动开启窗口」分组；开发者集成与原版部分设置仍缺，不能以侧栏图标一致表示设置 UI 已全部还原 |
 | 手动凭据本地加密 | Auth；README 隐私章节 | 部分：Windows 当前用户 DPAPI 加密完整凭据文档，旧 JSON 读取后原子迁移，保留 Cookie/站点等字段；损坏或不可解密文件不覆盖、不降级明文，设置显示错误；同用户往返与损坏文件有测试，跨 Windows 用户场景尚未实测 |
 | 安装、开机启动、更新、托盘行为 | App；Docs/releasing.md | 部分：NSIS/MSI、单实例、托盘、实际登录启动状态与设置已接通；第二次启动打开设置；打包后修复本次产物的 Medium 完整性标签以避免 NSIS 临时文件报错；签名更新器支持本机发布目录与 GitHub Releases，启动/定期检查、版本提示、下载进度和更新重启入口已接通；签名绑定版本，拒绝降级；登录启动写入与真实覆盖重启还需验收 |
 
+## 仍未对齐与刻意留空
+
+上表 38 行里 13 行「已接通」、25 行「部分」，没有「缺失」。这个分布是真实状态，不折算成完成率。
+下面把「部分」再分成两类，因为这个区分决定了它是不需要再做的，还是需要有人动手的：
+
+### A. 刻意留空：原版就是这样，或按设计不产生数字
+
+不需要再补，补了反而是错：
+
+- **Warp、Freebuff 不产生 token 计数。** 原版 `SpendAgent.reportsTokenCounts` 把 `.crush`、`.warp`、`.freebuff` 列为 false。Warp 快照只有请求数与花费；Freebuff 只存约四字符一 token 的估算，原版明确不把推测值当上报数字，也不给一个「0」。两者都仍登记在来源目录里，各给一条中文说明。
+- **Crush 只识别费用来源**，不从金额反推 token 数。
+- **Liquid Glass 材质**：Windows 上原版那份玻璃效果没有等价实现，黑色已接通；表中写「仍缺」，不以半透明 CSS 冒充。
+- **菜单栏文字**：Windows 托盘只能在图标内画数字与 tooltip，不能在图标旁排 macOS 那样的文字，这是平台限制。
+- **机器人完整动作的随机性**：编排表与公式已导入且有测试，但原版动画的随机时序不声称逐帧一致 —— 这是刻意不承诺，不是未移植。
+
+### B. 仍未对齐：实现或验收确实还缺
+
+需要人动手，或需要在真机上验收：
+
+- **验收类（代码已接通，缺真实环境）**：真实用户日志逐来源核对（54 个来源目前都是 fixture 级验证）、真实 CLI 发送与 Windows 无窗口启动（自动开启窗口）、真实安装的扩展程序、Windows 多屏 / 混合 DPI / 热插拔、真实通知横幅、开机启动写入、跨 Windows 用户凭据解密。
+- **功能缺口（明确没做）**：DeepSeek 控制台续期与详情卡整合、OpenCode Go 会话续期与详情卡整合、回顾（recap）原版视觉与原生流程、prompt cache 到期接入详情卡、背景预热计时器、77 个额度服务商逐条路由审计、`--json` 的完整窗口身份 / scope / 估算 / 设置链接字段、开发者集成协议与账号深链、其余四种语言的界面翻译。
+- **已知边界（有实现但证据有限）**：Trae 的跨页去重依赖摘要存在，缓存命中时削弱这部分核对；Cursor / Antigravity（导出）/ Hindsight / MCode 仍需用户自己提供导出或捕获文件。
+
+完整清单与每条证据见 [release-progress.json](release-progress.json)（12 条 pending、5 条 implementedPartial）。
+
 ## 当前验证边界
+
+本轮（54 来源 + 自动开启窗口 + 用户扩展）验证：Rust 1150 项通过、35 项失败、2 项默认忽略；35 项失败按测试名与改动前基线逐条完全相同，全部是 macOS 上跑 Windows 路径 / PATH 的既有失败，没有新增失败。前端 210 项通过（21 个文件）、`tsc --noEmit` 与 `vite build` 通过。新代码的专项计数：10 个新 reader 模块 74 项、`window_starter` 18 项、`extension` 28 项、`extension_runner` 8 项，新增前端 4 项（`WindowStarterGroup.test.ts`）。以上均为 fixture 与进程级验证，不代替真实账号、真实 CLI 发送、Windows 无窗口启动与真实扩展程序的实机验收。
 
 0.1.10 本轮补齐网络与刷新、关于：861 项 Rust 回归（另 1 项默认忽略）、181 项前端测试、58 项完整浏览器流程及 13 项最终专项流程通过。原生 CONNECT 代理取消、重查与重启恢复验证见 [networking.md](networking.md)，发布及签名更新证据见 [release-0.1.10.json](release-0.1.10.json)。仍不声称 100% 功能覆盖。0.1.11 补回损坏 Windows 系统代理地址的启动容错，新增两项 Rust 回归；本次最终发布证据见 [release-0.1.11.json](release-0.1.11.json)。
 

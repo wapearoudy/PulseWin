@@ -436,8 +436,10 @@ mod tests {
         assert_eq!(roots(home,"mcode",&env)[0],PathBuf::from("fixture-cache/headless/mcode"));
         assert_eq!(roots(home,"hindsight",&env)[0],PathBuf::from("fixture-hindsight/usage"));
         assert!(roots(home,"warp",&env).is_empty());
-        // 24 measured/original sources plus the 17 Pulse 1.9 readers ported in later.
-        assert_eq!(AGENTS.len(),41);
+        // 24 measured/original sources, the 17 Pulse 1.9 readers ported first,
+        // then the 13 of the remaining catalogue that have a reader of their own
+        // — the last three close Pulse 1.9's 54-source list.
+        assert_eq!(AGENTS.len(),54);
     }
     #[test] fn gemini_session_cache_overlap_tool_and_reasoning_are_disjoint() {
         let fixture = Fixture::new();
