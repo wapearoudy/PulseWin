@@ -1,0 +1,22 @@
+/* Extension metrics: a figure and, under it, the series behind it. */
+
+.metric-value{font-size:13px;font-weight:500;font-variant-numeric:tabular-nums}
+.metric-divider{height:1px;background:#ececef;margin:0 15px}
+.metric-chart{padding:0 14px 11px}
+.metric-plot{position:relative;margin-top:2px}
+.metric-plot svg{display:block;overflow:visible}
+.metric-line{stroke:#007aff}
+.metric-dot{fill:#007aff}
+.metric-guide{stroke:#c9c9d0;stroke-dasharray:2 2}
+.metric-tooltip{position:absolute;top:-4px;padding:2px 6px;border-radius:5px;background:#3a3a3f;color:#fff;font-size:10px;white-space:nowrap;pointer-events:none;z-index:1}
+.metric-axis{display:flex;justify-content:space-between;gap:8px;margin-top:4px;color:#7a7a82;font-size:10px}
+.metric-note{margin:8px 12px 0;color:#7a7a82;font-size:11px}
+
+@media(prefers-color-scheme:dark){
+  .metric-divider{background:#45454a}
+  .metric-line{stroke:#5ea9ff}
+  .metric-dot{fill:#5ea9ff}
+  .metric-guide{stroke:#4a4a50}
+  .metric-tooltip{background:#1d1d21}
+  .metric-axis,.metric-note{color:#a7a7b0}
+}

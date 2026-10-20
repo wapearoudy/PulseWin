@@ -55,6 +55,29 @@ describe('detailCardHeight', () => {
     expect(detailCardHeight(l, 1)).toBe(detailCardHeight(l, 0) + l.contentSpacing + row)
     expect(detailCardHeight(l, 2)).toBe(detailCardHeight(l, 0) + l.contentSpacing + row * 2 + l.contentSpacing)
   })
+
+  // An extension's figures are drawn in the same card but are not limits: each
+  // is one line of text with no bar, and only the ones carrying a series add a
+  // chart. The frame is worked out before a card opens, so this arithmetic is
+  // what keeps a series from falling outside the outline.
+  it('budgets an extension metric as a line, and its series as a chart', () => {
+    expect(l.metricChartHeight).toBe(30)
+    const one = detailCardHeight(l, 1, 1)
+    expect(one).toBe(detailCardHeight(l, 1) + l.contentSpacing + l.rowTextLineHeight)
+    const trended = detailCardHeight(l, 1, 1, 1)
+    expect(trended).toBe(one + l.metricChartHeight + l.rowInternalSpacing)
+    // Two metrics, no limits: both lines and one gap between them.
+    expect(detailCardHeight(l, 0, 2)).toBe(
+      l.padding * 2 + l.headerHeight + l.contentSpacing + l.rowTextLineHeight * 2 + l.contentSpacing,
+    )
+  })
+
+  it('counts a metric as content, so an extension with only figures is not drawn as a refusal', () => {
+    // A card with no limits reserves room for the message saying so; a card
+    // whose body is an extension's figures is content, not that message.
+    expect(cardBox('right', l, 0, false, false, false, 1).height).toBe(detailCardHeight(l, 0, 1))
+    expect(cardBox('right', l, 0, false, false, false, 1).height).not.toBe(cardBox('right', l, 0).height)
+  })
 })
 
 describe('cardBox', () => {

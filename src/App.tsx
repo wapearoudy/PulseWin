@@ -28,6 +28,7 @@ import { quietSince, resolveMood, windowIsSpent } from './panel/botmark/mood'
 import { brandColour, deal } from './panel/botmark/tint'
 import { railHeight, Rail, type RailEntry } from './panel/Rail'
 import { cardBox, detailCardLayout } from './panel/cardLayout'
+import { cardMetricTrends } from './metricTrend'
 import { cardSurfaceRegion, cardTrackingRegion, railSurfaceRegion, sliverTrackingRegion, type ShapeHitRegion } from './panel/hitRegions'
 import { ProviderIcon } from './panel/ProviderIcon'
 import { personaAt } from './panel/botmark/programme'
@@ -316,7 +317,17 @@ export default function App() {
     () => providers.reduce((most, p) => Math.max(most, p.windows.length), 6),
     [providers],
   )
-  const tallest = useMemo(() => cardBox(edge, maximumCardLayout, maxRows, false, true, true), [edge, maximumCardLayout, maxRows])
+  // An extension's figures are not limits, but they are drawn in the same card,
+  // so the frame has to hold the tallest combination any account could open.
+  const maxMetrics = useMemo(
+    () => providers.reduce((most, p) => Math.max(most, p.metrics?.length ?? 0), 0),
+    [providers],
+  )
+  const maxTrends = useMemo(
+    () => providers.reduce((most, p) => Math.max(most, cardMetricTrends(p.metrics).filter(Boolean).length), 0),
+    [providers],
+  )
+  const tallest = useMemo(() => cardBox(edge, maximumCardLayout, maxRows, false, true, true, maxMetrics, maxTrends), [edge, maximumCardLayout, maxRows, maxMetrics, maxTrends])
 
   const isTop = edge === 'top' || edge === 'bottom'
   const gap = cardLayout.horizontalGap
@@ -345,7 +356,7 @@ export default function App() {
   )
 
   const cardSize = useMemo(
-    () => cardBox(edge, cardLayout, activeProvider?.windows.length ?? 0, balanceOnly(activeProvider),!!activeProvider?.stale,!!activeProvider?.error),
+    () => cardBox(edge, cardLayout, activeProvider?.windows.length ?? 0, balanceOnly(activeProvider),!!activeProvider?.stale,!!activeProvider?.error, activeProvider?.metrics?.length ?? 0, cardMetricTrends(activeProvider?.metrics).filter(Boolean).length),
     [edge, cardLayout, activeProvider],
   )
 

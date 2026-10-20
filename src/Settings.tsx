@@ -23,6 +23,7 @@ import {DeepSeekConsoleGroup} from './DeepSeekConsoleGroup'
 import { TokenSpendPane, releaseSpendSession } from './token-spend/TokenSpendPane'
 import { WindowStarterGroup } from './WindowStarterGroup'
 import { ExtensionsSettingsView, ExtensionProgramGroup } from './ExtensionsSettingsView'
+import { ExtensionMetricsGroup } from './ExtensionMetricsGroup'
 import { invoke } from '@tauri-apps/api/core'
 
 function SidebarSymbol({children}:{children:ReactNode}) {
@@ -173,6 +174,7 @@ export default function Settings() {
 
         {['codex','claude-code'].includes(provider.providerId??provider.id)&&<PromptCacheGroup provider={provider.providerId??provider.id} enabled={prefs.tokenSpendEnabled}/>}
         {(provider.providerId??provider.id)==='extension'&&<ExtensionProgramGroup accountId={provider.id}/>}
+        {(provider.providerId??provider.id)==='extension'&&<ExtensionMetricsGroup metrics={accountUsage?.metrics} enabled={enabled}/>}
         {(provider.providerId??provider.id)==='codex'&&<CodexSignalsGroup enabled={prefs.tokenSpendEnabled}/>}
       </Fragment> : null}
     </main>

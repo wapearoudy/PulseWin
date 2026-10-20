@@ -276,6 +276,11 @@
 .card__chart {display:flex; align-items:flex-end; flex-shrink:0;}
 .card__chart>span {flex:1; min-width:0; background:var(--panel-chart); border-radius:2px;}
 .card__model {margin-left:auto; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.card__metric {color:var(--panel-text); font-variant-numeric:tabular-nums; white-space:nowrap;}
+/* A metric's series: one colour whichever way it moves, because a metric has
+   no ceiling to read against and only the program knows which way is better. */
+.card__metric-line {stroke:var(--panel-chart);}
+.card__metric-dot {fill:var(--panel-chart);}
 .card__footnote,.card__estimate {white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 
 

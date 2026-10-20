@@ -14,6 +14,29 @@ export interface UsageWindow {
   detail: string | null
 }
 
+/**
+ * A figure a user extension states, with the series behind it.
+ *
+ * Mirrors `src-tauri/src/model.rs`. Always empty for a built-in provider: only
+ * an extension can report one. The figure is the program's own words and is
+ * never converted, averaged or judged - and because a metric has no ceiling it
+ * never drives the ring.
+ */
+export interface UsageMetricPoint {
+  /** RFC3339 timestamp. */
+  at: string
+  value: number
+}
+
+export interface UsageMetric {
+  id: string
+  label: string
+  value: number
+  /** "ms", "tok/s", "%", or absent for a plain count. */
+  unit?: string | null
+  history: UsageMetricPoint[]
+}
+
 export interface ProviderUsage {
   stale?: boolean
   source?: string | null
@@ -23,6 +46,8 @@ export interface ProviderUsage {
   plan: string | null
   account: string | null
   windows: UsageWindow[]
+  /** Only a user extension states these; empty for every built-in provider. */
+  metrics?: UsageMetric[]
   /** Set instead of `windows` when the fetch failed. */
   error: string | null
   /**

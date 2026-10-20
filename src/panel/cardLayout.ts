@@ -35,6 +35,8 @@ export interface DetailCardLayout {
   footnoteFontSize: number
   headerIconSize: number
   rowTextLineHeight: number
+  /** A metric's series in the card, the original's `DetailCardLayout.chartHeight`. */
+  metricChartHeight: number
 }
 
 /** The ring's outer edge: one circle sets every curve on the panel. */
@@ -61,14 +63,26 @@ export function detailCardLayout(size: PanelSizeName = 'standard', showForecast=
     footnoteFontSize: 11 * s,
     headerIconSize: 16 * s,
     rowTextLineHeight: 14 * s,
+    metricChartHeight: 30 * s,
   }
 }
 
-/** The card's height for `rows` limits, before the browser measures anything. */
-export function detailCardHeight(layout: DetailCardLayout, rows: number): number {
+/**
+ * The card's height for `rows` limits, before the browser measures anything.
+ *
+ * `metrics` are an extension's figures, which are not limits and have no bar:
+ * each is one line of text, and `trends` of them carry the series behind the
+ * figure as well. Nothing else changes size — the frame is still worked out
+ * before a card opens, so the numbers here are the whole story.
+ */
+export function detailCardHeight(layout: DetailCardLayout, rows: number, metrics = 0, trends = 0): number {
   const rowHeight =
     layout.rowTextLineHeight * 2 + layout.rowInternalSpacing * 2 + layout.progressBarHeight + (layout.showForecast ? layout.rowTextLineHeight + layout.rowInternalSpacing : 0) + (layout.detailed ? layout.rowTextLineHeight + layout.rowInternalSpacing : 0)
-  const body = rows > 0 ? rows * rowHeight + Math.max(rows - 1, 0) * layout.contentSpacing : 0
+  const children = rows + metrics
+  const body = children > 0
+    ? rows * rowHeight + metrics * layout.rowTextLineHeight + Math.max(children - 1, 0) * layout.contentSpacing
+      + trends * (layout.metricChartHeight + layout.rowInternalSpacing)
+    : 0
   return layout.padding * 2 + layout.headerHeight + (layout.detailed ? layout.headerLineSpacing + layout.footnoteHeight : 0) + (body > 0 ? layout.contentSpacing + body : 0) + (layout.detailed ? layout.contentSpacing + layout.activityHeight : 0)
 }
 
@@ -88,10 +102,15 @@ export function cardBox(
   hasBalance = false,
   footnote = false,
   refreshError = false,
+  metrics = 0,
+  trends = 0,
 ): { width: number; height: number } {
-  // A refusal still needs a message and the connection-settings action.
-  const content = rows>0 ? detailCardHeight(layout, rows) : hasBalance
-    ? detailCardHeight(layout,0)+layout.contentSpacing+layout.rowTextLineHeight
+  // A balance is one more line of text in the same column as an extension's
+  // figures, so it is budgeted the same way; a refusal instead still needs a
+  // message and the connection-settings action.
+  const balanceLine = hasBalance && rows === 0 ? 1 : 0
+  const content = rows>0 || metrics>0 || balanceLine>0
+    ? detailCardHeight(layout, rows, metrics + balanceLine, trends)
     : detailCardHeight(layout,0)+layout.contentSpacing+layout.rowTextLineHeight*3+layout.rowInternalSpacing+24*layout.width/250
   const body = content + (footnote ? layout.contentSpacing + layout.footnoteHeight : 0)
     + (refreshError && (rows>0 || hasBalance) ? layout.contentSpacing + layout.rowTextLineHeight*3 + layout.rowInternalSpacing + 24*layout.width/250 : 0)

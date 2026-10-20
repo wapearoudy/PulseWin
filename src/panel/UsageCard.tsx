@@ -4,7 +4,7 @@ import type { PanelEdge } from './berthShape'
 import { cardBox, type DetailCardLayout } from './cardLayout'
 import { tintColour, usageTint } from './tint'
 import { openSettings } from '../api'
-import type { ProviderUsage } from '../types'
+import type { ProviderUsage, UsageMetric } from '../types'
 import { percentFigure } from '../usagePresentation'
 import { quotaTimeFraction } from '../quotaPacing'
 import { forecastText } from '../burnRate'
@@ -15,6 +15,7 @@ import { budgetEstimate, useCardHistory } from './cardHistory'
 import { CardActivity } from './CardActivity'
 import { PanelOutline } from './PanelOutline'
 import { formatCost } from '../token-spend/summary'
+import { cardMetricTrends, metricSummary, metricText, trendPoints } from '../metricTrend'
 import './panel.css'
 
 /**
@@ -68,7 +69,13 @@ function UsageCardImpl({
   // drawn in. For a top rail the outline is the same one turned a quarter turn,
   // so its viewBox is expressed in screen coordinates with the tail's band
   // sitting *above* the body rather than beside it.
-  const box = cardBox(edge, layout, rows.length, balanceOnly(provider),!!provider.stale,!!provider.error)
+  // An extension states figures that are not limits: one line each, and the series
+  // behind the first few that carry one. The card's frame has to budget for them
+  // before anything is drawn, or the last series would fall outside the outline.
+  const metrics = provider.metrics ?? []
+  const metricTrends = cardMetricTrends(metrics)
+  const trendCount = metricTrends.filter(Boolean).length
+  const box = cardBox(edge, layout, rows.length, balanceOnly(provider),!!provider.stale,!!provider.error, metrics.length, trendCount)
   const tail = layout.pointerWidth
   const viewBox =
     `0 0 ${box.width} ${box.height}`
@@ -215,11 +222,64 @@ function UsageCardImpl({
             )
           })
         )}
+        {metrics.map((metric, index) => (
+          <MetricRow key={metric.id} metric={metric} showsTrend={metricTrends[index]} layout={layout}/>
+        ))}
         {provider.stale&&<div className="card__muted card__footnote" style={{height:layout.footnoteHeight,fontSize:layout.footnoteFontSize}}>旧读数 · 截至 {new Date(provider.fetchedAt).toLocaleString()}</div>}
         {provider.error && (rows.length>0 || balanceOnly(provider)) && <WhyNoReading message={provider.error} provider={provider.id} layout={layout} onRetry={()=>onRetry(provider.id)} refreshing={refreshing}/>}
         {layout.detailed&&<CardActivity history={history} layout={layout} now={now}/>}
       </div></div>
     </div>
+  )
+}
+
+
+/**
+ * One of an extension's figures: the number in the program's own words, and
+ * under it the series it came from.
+ *
+ * **Static, like the days chart above it** — the panel never becomes key, so a
+ * hover readout would not fire here; Settings draws the same series with one.
+ * Placed by time rather than by index, so a gap in the points stays a gap, and
+ * scaled between the series' own lowest and highest because a metric has no
+ * ceiling to read against.
+ */
+function MetricRow({ metric, showsTrend, layout }: { metric: UsageMetric; showsTrend: boolean; layout: DetailCardLayout }) {
+  const width = layout.width - layout.padding * 2
+  const height = layout.metricChartHeight
+  const points = showsTrend ? trendPoints(metric.history ?? [], width, height, 1.5) : []
+  return (
+    <section className="card__row" style={{ gap: layout.rowInternalSpacing }}>
+      <div className="card__row-line" style={{ fontSize: layout.rowFontSize, lineHeight: `${layout.rowTextLineHeight}px` }}>
+        <span className="card__row-label">{metric.label}</span>
+        <span className="card__metric" style={{ marginLeft: 'auto' }}>{metricText(metric.value, metric.unit)}</span>
+      </div>
+      {points.length >= 2 && (
+        <svg
+          width={width}
+          height={height}
+          role="img"
+          aria-label={metric.label}
+          aria-description={metricSummary(metric)}
+          style={{ display: 'block', overflow: 'visible' }}
+        >
+          <polyline
+            className="card__metric-line"
+            points={points.map((point) => `${point.x},${point.y}`).join(' ')}
+            strokeWidth={1.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill="none"
+          />
+          <circle
+            className="card__metric-dot"
+            cx={points[points.length - 1].x}
+            cy={points[points.length - 1].y}
+            r={(1.5 * 2.4) / 2}
+          />
+        </svg>
+      )}
+    </section>
   )
 }
 
