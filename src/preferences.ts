@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import type { SpendSpan } from './token-spend/types'
 
 export interface AccountAppearance {
   detailedCard: boolean
@@ -30,7 +31,10 @@ export interface Preferences {
   togglePanelShortcut: string | null
   alerts: { threshold: number | null; onReset: boolean; onFailure: boolean; lowBalance: Record<string, number>; onServiceOutage: boolean;onRecap:boolean }
   tokenSpendEnabled: boolean
-  tokenSpendSpan: 'today' | 'week' | 'month'
+  /** The nine spans the original offers: rolling, calendar, open-ended, own. */
+  tokenSpendSpan: SpendSpan
+  /** Two `YYYY-MM-DD` days for the custom span; empty until the reader picks. */
+  spendCustomDays: string[]
   spendActivityView: 'daily'|'weekly'|'cumulative'
   recapMonthlyPrice:number|null
   recapHidesProjects:boolean
@@ -78,7 +82,7 @@ export const defaultPreferences: Preferences = {
   panelVisible:true, trayShowsUsage:false, trayStyle:'figure', trayAccount:null,
   accounts: [], accountLabels: {},
   openSettingsShortcut: null, togglePanelShortcut: null,
-  alerts: { threshold: null, onReset: false, onFailure: false, lowBalance: {}, onServiceOutage: false,onRecap:false }, tokenSpendEnabled: false, tokenSpendSpan: 'week', spendActivityView:'daily', recapMonthlyPrice:null,recapHidesProjects:false,resetCelebration: true,
+  alerts: { threshold: null, onReset: false, onFailure: false, lowBalance: {}, onServiceOutage: false,onRecap:false }, tokenSpendEnabled: false, tokenSpendSpan: 'week', spendCustomDays: [], spendActivityView:'daily', recapMonthlyPrice:null,recapHidesProjects:false,resetCelebration: true,
   enabledProviders: [], providerOrder: [], panelColour: 'black', panelSize: 1, railSpacing: 1,
   roundEnds: false, showsRemaining: false, showPercentages: true,
   labelAbove: false, autoCollapse: true, warningThreshold: 0.75, refreshSeconds: 120, refreshAutomatic: true,

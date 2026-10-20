@@ -16,6 +16,11 @@ pub struct Preferences {
     pub alerts: crate::alerts::AlertPreferences,
     pub token_spend_enabled: bool,
     pub token_spend_span: String,
+    /// The reader's own span, as two `YYYY-MM-DD` days in order. Empty
+    /// until they pick one: the pane then counts the last seven days
+    /// itself rather than this file inventing two dates on a day nobody
+    /// asked about.
+    pub spend_custom_days: Vec<String>,
     pub spend_activity_view: String,
     pub recap_monthly_price:Option<f64>,
     pub recap_hides_projects:bool,
@@ -70,7 +75,7 @@ pub struct Preferences {
 
 impl Default for Preferences {
     fn default() -> Self {
-        Self { network_proxy:Default::default(), panel_visible:true, tray_shows_usage:false, tray_style:"figure".into(), tray_account:None, accounts: vec![], account_labels: Default::default(), open_settings_shortcut: None, toggle_panel_shortcut: None, alerts: Default::default(), token_spend_enabled: false, token_spend_span: "week".into(), spend_activity_view:"daily".into(),recap_monthly_price:None,recap_hides_projects:false, reset_celebration: true, enabled_providers: vec![], provider_order: vec![], panel_colour: "black".into(), panel_size: 1.0,
+        Self { network_proxy:Default::default(), panel_visible:true, tray_shows_usage:false, tray_style:"figure".into(), tray_account:None, accounts: vec![], account_labels: Default::default(), open_settings_shortcut: None, toggle_panel_shortcut: None, alerts: Default::default(), token_spend_enabled: false, token_spend_span: "week".into(), spend_custom_days: Vec::new(), spend_activity_view:"daily".into(),recap_monthly_price:None,recap_hides_projects:false, reset_celebration: true, enabled_providers: vec![], provider_order: vec![], panel_colour: "black".into(), panel_size: 1.0,
             rail_spacing: 1.0, round_ends: false, shows_remaining: false,
             show_percentages: true, label_above: false, auto_collapse: true,
             warning_threshold: 0.75, refresh_seconds: 120, refresh_automatic: true, show_reset_clock: false,
@@ -104,7 +109,18 @@ impl Preferences {
             if value.as_deref().is_some_and(|v|crate::application::validate(v).is_err()){*value=None;}
         }
         self.alerts.normalize(known);
-        if !["today","week","month"].contains(&self.token_spend_span.as_str()){self.token_spend_span="week".into();}
+        if !["today","week","month","quarter","thisMonth","lastMonth","thisYear","all","custom"]
+            .contains(&self.token_spend_span.as_str())
+        {self.token_spend_span="week".into();}
+        // Two days, in order, and never a day that does not exist: anything
+        // else is dropped whole, so a half-written range cannot narrow the
+        // pane to a span nobody asked for.
+        self.spend_custom_days = match self.spend_custom_days.as_slice() {
+            [first, last] if day(first).zip(day(last)).is_some_and(|(a, b)| a <= b) => {
+                vec![first.clone(), last.clone()]
+            }
+            _ => Vec::new(),
+        };
         if !["daily","weekly","cumulative"].contains(&self.spend_activity_view.as_str()){self.spend_activity_view="daily".into();}
         self.recap_monthly_price=self.recap_monthly_price.filter(|p|p.is_finite()&&*p>0.0&&*p<=10000.0);
         self.account_appearance.retain(|id, _| known.contains(id));
@@ -144,6 +160,13 @@ impl Preferences {
         self.primer_hours.start = self.primer_hours.start.min(23);
         self.primer_hours.end = self.primer_hours.end.min(23);
     }
+}
+
+/// A stored `YYYY-MM-DD` day, if it is one. `chrono` rejects 31 February
+/// rather than rolling it into March, which is what makes this a check.
+fn day(text: &str) -> Option<chrono::NaiveDate> {
+    if text.len() != 10 { return None }
+    chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d").ok().filter(|d| d.to_string() == text)
 }
 
 fn finite_clamp(value: f64, min: f64, max: f64, fallback: f64) -> f64 {
@@ -341,5 +364,37 @@ impl AccountAppearance {
         p.normalize(&["codex".into()]);assert_eq!(p.network_proxy.endpoint().as_deref(),Some("socks5h://127.0.0.1:1080"));
         assert_eq!(serde_json::from_str::<Preferences>(&serde_json::to_string(&p).unwrap()).unwrap(),p);
         p.network_proxy.host="http://bad/path".into();p.normalize(&["codex".into()]);assert_eq!(p.network_proxy,crate::proxy::NetworkProxySettings::default());assert_eq!(p.enabled_providers,vec!["codex"]);
+    }
+}
+#[cfg(test)] mod span_tests {
+    use super::*;
+    // The nine span names are the original's `SpendSpan`, spelled the same way:
+    // a stored id from another build must not survive as a span nothing draws.
+    #[test] fn every_span_the_original_names_is_kept_and_anything_else_is_not() {
+        for span in ["today","week","month","quarter","thisMonth","lastMonth","thisYear","all","custom"] {
+            let mut p = Preferences { token_spend_span: span.into(), ..Default::default() };
+            p.normalize(&[]);
+            assert_eq!(p.token_spend_span, span);
+        }
+        let mut p = Preferences { token_spend_span: "yesterday".into(), ..Default::default() };
+        p.normalize(&[]);
+        assert_eq!(p.token_spend_span, "week");
+    }
+    // Two days in order, both real. Anything else is dropped whole rather than
+    // repaired: a half-read range would narrow the pane to a span nobody chose.
+    #[test] fn only_two_real_days_in_order_survive() {
+        let kept = |days: Vec<&str>| {
+            let mut p = Preferences { spend_custom_days: days.into_iter().map(str::to_owned).collect(), ..Default::default() };
+            p.normalize(&[]);
+            p.spend_custom_days
+        };
+        assert_eq!(kept(vec!["2026-09-01", "2026-09-30"]), vec!["2026-09-01", "2026-09-30"]);
+        assert_eq!(kept(vec!["2026-09-01", "2026-09-01"]), vec!["2026-09-01", "2026-09-01"]);
+        assert!(kept(vec!["2026-09-30", "2026-09-01"]).is_empty());
+        assert!(kept(vec!["2026-02-30", "2026-03-01"]).is_empty());
+        assert!(kept(vec!["2026-09-01"]).is_empty());
+        assert!(kept(vec!["2026-09-01", "2026-09-30", "2026-10-01"]).is_empty());
+        assert!(kept(vec!["2026-9-1", "2026-09-30"]).is_empty());
+        assert!(kept(vec!["2026-09-01T00:00:00Z", "2026-09-30"]).is_empty());
     }
 }

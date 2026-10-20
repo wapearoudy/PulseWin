@@ -1,14 +1,84 @@
 import * as money from '../money'
-import type { SpendAmounts, SpendGroup, SpendRecord, SpendSpan, SpendSummary } from './types'
+import type { SpendAmounts, SpendDay, SpendGroup, SpendRecord, SpendSpan, SpendSummary } from './types'
 
 export function dayKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
-export function spanDays(span: SpendSpan, now = new Date()): string[] {
-  const count = span === 'today' ? 1 : span === 'month' ? 30 : 7
-  const result: string[] = []
-  for (let i = count - 1; i >= 0; i--) { const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i); result.push(dayKey(date)) }
-  return result
+/** A span that keeps the last `count` days, today included. */
+export const rollingSpans: Partial<Record<SpendSpan, number>> = { today: 1, week: 7, month: 30, quarter: 90 }
+/** The most days one series may hold: a decade. Only 「全部」 can reach it. */
+const MAX_DAYS = 3700
+function startOfDay(date: Date): Date { return new Date(date.getFullYear(), date.getMonth(), date.getDate()) }
+function addDays(date: Date, days: number): Date { return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days) }
+function parseDay(key: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key)
+  if (!match) return null
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  // `new Date(2026, 1, 31)` rolls into March; a stored 31 February is not a day.
+  return Number.isFinite(date.getTime()) && date.getMonth() === Number(match[2]) - 1 && date.getDate() === Number(match[3]) ? date : null
+}
+/** The reader's own range, as two `YYYY-MM-DD` days, in order. */
+export type CustomDays = readonly [string, string]
+/** `from` is the first day counted and `until` the day AFTER the last one, so a
+ *  calendar month ends where the next one starts. `null` means open-ended — a
+ *  rolling span has no end, and 「全部」 has neither edge. */
+export interface SpanBounds { from: string | null; until: string | null }
+/**
+ * Where a span starts and stops, as the original's `SpendSpan.bounds` reads it:
+ * the rolling spans count back from today, the calendar spans follow the
+ * calendar (a bill's 「上月」 is a month, never the last 30 days), 「全部」 is
+ * open at both ends, and 「自定义」 is the reader's own first and last day.
+ */
+export function spanBounds(span: SpendSpan, now = new Date(), custom?: CustomDays | null): SpanBounds {
+  const today = startOfDay(now)
+  const rolling = rollingSpans[span]
+  if (rolling !== undefined) return { from: dayKey(addDays(today, -(rolling - 1))), until: null }
+  switch (span) {
+    case 'thisMonth': return { from: dayKey(new Date(today.getFullYear(), today.getMonth(), 1)), until: null }
+    case 'lastMonth':
+      return { from: dayKey(new Date(today.getFullYear(), today.getMonth() - 1, 1)), until: dayKey(new Date(today.getFullYear(), today.getMonth(), 1)) }
+    case 'thisYear': return { from: dayKey(new Date(today.getFullYear(), 0, 1)), until: null }
+    case 'all': return { from: null, until: null }
+  }
+  const last = parseDay(custom?.[1] ?? '') ?? today
+  const first = parseDay(custom?.[0] ?? '') ?? addDays(today, -6)
+  return { from: dayKey(first > last ? last : first), until: dayKey(addDays(last, 1)) }
+}
+/** True for a span of a single day: 「今天」 always, 「自定义」 when both ends are
+ *  the same day. This is what decides between an hour profile and day bars. */
+/** The stored two days, if they really are two days in order. */
+export function customDaysOf(value: readonly string[] | null | undefined): CustomDays | null {
+  if (!value || value.length !== 2) return null
+  const first = parseDay(value[0]), last = parseDay(value[1])
+  return first && last && first <= last ? [dayKey(first), dayKey(last)] : null
+}
+export function spanIsOneDay(span: SpendSpan, custom?: CustomDays | null): boolean {
+  if (span === 'today') return true
+  if (span !== 'custom') return false
+  const first = parseDay(custom?.[0] ?? ''), last = parseDay(custom?.[1] ?? '')
+  return first !== null && last !== null && first.getTime() === last.getTime()
+}
+/**
+ * Every day the span covers, oldest first, so quiet days stay in the series and
+ * the chart keeps its gaps. A rolling span ends at today, but a record dated
+ * ahead of today extends it rather than being counted in a day the series omits.
+ */
+export function spanDayList(bounds: SpanBounds, now = new Date(), records: readonly SpendRecord[] = []): string[] {
+  const today = startOfDay(now)
+  const newest = records.reduce((last, record) => record.day > last ? record.day : last, '')
+  const newestDay = parseDay(newest)
+  const from = bounds.from === null ? null : parseDay(bounds.from)
+  const first = from ?? newestDay ?? today
+  const last = bounds.until !== null ? addDays(parseDay(bounds.until) ?? today, -1) : newestDay && newestDay > today ? newestDay : today
+  const end = last < first ? first : last
+  // A decade of history keeps its most recent days, not its oldest.
+  const start = addDays(end, -(MAX_DAYS - 1))
+  const days: string[] = []
+  for (let cursor = first < start ? start : first; cursor <= end; cursor = addDays(cursor, 1)) days.push(dayKey(cursor))
+  return days
+}
+export function spanDays(span: SpendSpan, now = new Date(), custom?: CustomDays | null, records: readonly SpendRecord[] = []): string[] {
+  return spanDayList(spanBounds(span, now, custom), now, records)
 }
 export function totalTokens(record: SpendRecord): number {
   return record.tally.input + record.tally.output + record.tally.cacheWrite + record.tally.cacheRead + (record.unclassifiedTokens ?? 0)
@@ -71,8 +141,8 @@ function projectKey(record: SpendRecord): string | null {
   // label or a relative path remains scoped to the source that reported it.
   return /^[a-z]:\//i.test(normalized) || normalized.startsWith('//') ? normalized.toLowerCase() : `${record.agent}:${normalized}`
 }
-export function summarize(all: SpendRecord[], span: SpendSpan, now = new Date(), agent?: string | null, model?: string | null): SpendSummary {
-  return summarizeDays(all,spanDays(span,now),agent,model)
+export function summarize(all: SpendRecord[], span: SpendSpan, now = new Date(), agent?: string | null, model?: string | null, custom?: CustomDays | null): SpendSummary {
+  return summarizeDays(all,spanDays(span,now,custom,all),agent,model)
 }
 export function summarizeBetween(all:SpendRecord[],start:Date,end:Date,agent?:string|null,model?:string|null):SpendSummary{
   const days:string[]=[]
@@ -86,12 +156,23 @@ function summarizeDays(all:SpendRecord[],days:string[],agent?:string|null,model?
   const hasAggregateTiming = records.some(record => record.aggregateTiming)
   for (const record of records) { const bucket = dayRecords.get(record.day) ?? []; bucket.push(record); dayRecords.set(record.day, bucket); if (!record.aggregateTiming) hours[record.hour] += totalTokens(record) }
   const activeDays = dayRecords.size, maxHour = Math.max(...hours)
-  return { ...amounts(records), records, days: days.map(day => ({ day, ...amounts(dayRecords.get(day) ?? []) })), hours,
+  const daySeries = days.map(day => ({ day, ...amounts(dayRecords.get(day) ?? []) }))
+  const hourTotal = hours.reduce((sum, value) => sum + value, 0)
+  return { ...amounts(records), records, days: daySeries, hours,
     models: groups(records, modelKey, modelKey), agents: groups(records, r => r.agent, r => agentName(r.agent)),
     sessions: groups(records, r => r.session ? `${r.agent}:${r.session}` : null, r => `${agentName(r.agent)} · ${r.session}`),
     projects: groups(records, projectKey, r => r.project ?? ''),
-    activeDays, hasAggregateTiming, peakHour: !hasAggregateTiming && maxHour > 0 ? hours.indexOf(maxHour) : null }
+    activeDays, hasAggregateTiming, peakHour: !hasAggregateTiming && maxHour > 0 ? hours.indexOf(maxHour) : null,
+    activeHours: hours.filter(value => value > 0).length, busiestDay: busiest(daySeries), hoursComplete: hourTotal === totalTokensSum(records) }
 }
+/** The heaviest day, and only a day that had something on it: every quiet day
+ *  ties at zero, and naming one of them would invent an event. */
+function busiest(days: SpendDay[]): SpendDay | null {
+  let best: SpendDay | null = null
+  for (const day of days) if (day.tokens > 0 && (!best || day.tokens > best.tokens)) best = day
+  return best
+}
+function totalTokensSum(records: readonly SpendRecord[]): number { return records.reduce((sum, record) => sum + totalTokens(record), 0) }
 export function shortTokens(value: number): string {
   if (value >= 1e8) return `${(value / 1e8).toFixed(value >= 1e9 ? 1 : 2).replace(/\.0+$/, '')}亿`
   if (value >= 1e4) return `${(value / 1e4).toFixed(value >= 1e5 ? 1 : 2).replace(/\.0+$/, '')}万`

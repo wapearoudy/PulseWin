@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agentName, amounts, formatCost, shortTokens, sortDays, spanDays, summarize } from './summary'
+import { agentName, amounts, customDaysOf, formatCost, shortTokens, sortDays, spanBounds, spanDays, spanIsOneDay, summarize } from './summary'
 import type { SpendRecord } from './types'
 const record = (patch: Partial<SpendRecord> = {}): SpendRecord => ({ agent: 'claude', model: 'model-one', modelName: null, day: '2026-10-03', hour: 9, session: 's1', project: 'E:\\work', tally: { input: 100, output: 20, cacheWrite: 10, cacheRead: 70 }, cost: 0.02, costBreakdown: [0.01, 0.004, 0.002, 0.004], ...patch })
 describe('Token Spend calendar and measured totals', () => {
@@ -104,5 +104,64 @@ describe('Token Spend calendar and measured totals', () => {
     const bare = record({ tally:{input:0,output:0,cacheRead:0,cacheWrite:0},unclassifiedTokens:500,cost:null,costBreakdown:null })
     const a = amounts([bare]); expect(a.tokens).toBe(500); expect(a.tally.input).toBe(0); expect(a.unclassifiedTokens).toBe(500); expect(a.cost).toBe(null)
     const b = amounts([record({unclassifiedTokens:100})]); expect(b.tokens).toBe(300); expect(b.unpricedTokens).toBe(100); expect(b.cost).toBe(0.02)
+  })
+})
+
+describe('Token Spend spans', () => {
+  const now = new Date(2026, 9, 3, 12)
+  it('bounds every span the way the original does', () => {
+    // Rolling spans count back from today inclusive; the calendar ones start at
+    // the calendar's own first day, and last month ends where this one begins.
+    expect(spanBounds('today', now)).toEqual({ from: '2026-10-03', until: null })
+    expect(spanBounds('week', now)).toEqual({ from: '2026-09-27', until: null })
+    expect(spanBounds('month', now)).toEqual({ from: '2026-09-04', until: null })
+    expect(spanBounds('quarter', now)).toEqual({ from: '2026-07-06', until: null })
+    expect(spanBounds('thisMonth', now)).toEqual({ from: '2026-10-01', until: null })
+    expect(spanBounds('lastMonth', now)).toEqual({ from: '2026-09-01', until: '2026-10-01' })
+    expect(spanBounds('thisYear', now)).toEqual({ from: '2026-01-01', until: null })
+    expect(spanBounds('all', now)).toEqual({ from: null, until: null })
+    expect(spanBounds('custom', now, ['2026-09-01', '2026-09-03'])).toEqual({ from: '2026-09-01', until: '2026-09-04' })
+  })
+  it('counts each span here and lets a custom range give its own last day', () => {
+    expect(spanDays('today', now)).toHaveLength(1); expect(spanDays('quarter', now)).toHaveLength(90)
+    expect(spanDays('thisMonth', now)).toHaveLength(3)
+    expect(spanDays('lastMonth', now)).toHaveLength(30)
+    expect(spanDays('thisYear', now)).toHaveLength(276)
+    const custom = spanDays('custom', now, ['2026-09-28', '2026-10-01'])
+    expect(custom).toEqual(['2026-09-28', '2026-09-29', '2026-09-30', '2026-10-01'])
+  })
+  it('keeps every day of the open span, from the first record to today', () => {
+    const span = spanDays('all', now, null, [record({ day: '2026-09-30' })])
+    expect(span).toEqual(['2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03'])
+    expect(spanDays('all', now)).toEqual(['2026-10-03'])
+    // A record dated ahead of today extends the span rather than being dropped
+    // into a day the series does not carry.
+    expect(spanDays('week', now, null, [record({ day: '2026-10-09' })])).toContain('2026-10-09')
+  })
+  it('treats a one-day span differently from a week', () => {
+    expect(spanIsOneDay('today')).toBe(true)
+    expect(spanIsOneDay('week')).toBe(false)
+    expect(spanIsOneDay('custom', ['2026-10-03', '2026-10-03'])).toBe(true)
+    expect(spanIsOneDay('custom', ['2026-10-02', '2026-10-03'])).toBe(false)
+  })
+  it('accepts a stored range only as two real days in order', () => {
+    expect(customDaysOf(['2026-09-01', '2026-09-30'])).toEqual(['2026-09-01', '2026-09-30'])
+    expect(customDaysOf(['2026-09-30', '2026-09-01'])).toBe(null)
+    expect(customDaysOf(['2026-02-30', '2026-03-01'])).toBe(null)
+    expect(customDaysOf(['2026-09-01'])).toBe(null); expect(customDaysOf(null)).toBe(null)
+  })
+  it('reads the hour series only over a single day', () => {
+    const hours = [record({ hour: 9 }), record({ hour: 11 }), record({ hour: 11, tally:{input:0,output:0,cacheWrite:0,cacheRead:0},unclassifiedTokens:600,cost:null,costBreakdown:null })]
+    const one = summarize(hours, 'today', now)
+    expect(one.activeHours).toBe(2); expect(one.peakHour).toBe(11); expect(one.hoursComplete).toBe(true)
+    expect(one.busiestDay?.tokens).toBe(1000)
+    // A record that states only a day cannot fill an hour, and the profile is
+    // then a partial figure that must not be presented as the whole.
+    const partial = summarize([...hours, record({ aggregateTiming: true })], 'today', now)
+    expect(partial.hoursComplete).toBe(false); expect(partial.peakHour).toBe(null)
+    const week = summarize([record()], 'week', now)
+    expect(week.busiestDay?.day).toBe('2026-10-03'); expect(week.activeDays).toBe(1)
+    // Every quiet day ties at zero and none of them is a busiest day.
+    expect(summarize([], 'week', now).busiestDay).toBe(null)
   })
 })

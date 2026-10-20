@@ -1,4 +1,6 @@
-export type SpendSpan = 'today' | 'week' | 'month'
+/** Rolling, then calendar, then the open-ended and the reader's own: three kinds
+ *  of question. Same vocabulary, in the same order, as the original. */
+export type SpendSpan = 'today' | 'week' | 'month' | 'quarter' | 'thisMonth' | 'lastMonth' | 'thisYear' | 'all' | 'custom'
 export interface TokenTally { input: number; output: number; cacheWrite: number; cacheRead: number; cacheWrite1h?:number; repliesWithoutCacheFields?:number }
 export interface SpendRecord {
   sourceTimestamp?: number | null
@@ -30,5 +32,15 @@ export interface SpendGroup extends SpendAmounts { id: string; name: string; rec
 export interface SpendSummary extends SpendAmounts {
   records: SpendRecord[]; days: SpendDay[]; hours: number[]; models: SpendGroup[]; agents: SpendGroup[]
   sessions: SpendGroup[]; projects: SpendGroup[]; activeDays: number; peakHour: number | null
+  /** Hours with anything in them, for the one-day span where 「how many of the
+   *  seven days」 is a question about one day instead. */
+  activeHours: number
+  /** The heaviest day in the span. `null` when nothing was recorded, so an
+   *  empty span does not name a busy midnight. */
+  busiestDay: SpendDay | null
+  /** Whether the hour series accounts for every token in the span: a record
+   *  with only day-level timing contributes to the total and to no hour, and
+   *  then the profile cannot stand for the whole. */
+  hoursComplete: boolean
   hasAggregateTiming: boolean
 }
