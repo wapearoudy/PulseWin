@@ -1,0 +1,125 @@
+name: Release Windows build
+
+# The installers this project ships are nsis/msi, and `scripts/tauri.mjs`
+# only enters its signing path when `process.platform === 'win32'`, so the
+# release build cannot run on the macOS development machine. This workflow
+# is that Windows host: it builds the already-committed version, signs the
+# updater artifacts with the repository secret, and publishes the release.
+#
+# It deliberately does NOT bump the version. `npm run release` would, and
+# the tree is already at the version being released; bumping here would
+# skip it. Bump in a commit, then dispatch this workflow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Create and publish the GitHub release after a successful build
+        type: boolean
+        default: true
+
+concurrency:
+  group: release-windows
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Check the updater signing key is configured
+        shell: bash
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          # The key cannot be generated here: `updater.requireSignedVersion`
+          # is true and every installed client trusts the one public key in
+          # tauri.conf.json, so a fresh key would sign packages nothing
+          # accepts. It has to be the same key previous releases used.
+          if [ -z "$KEY" ]; then
+            echo "::error::Missing repository secret TAURI_SIGNING_PRIVATE_KEY."
+            echo "Add the existing minisign private key (the file previous releases used at"
+            echo "~/.pulsewin-signing/updater.key) as a repository secret:"
+            echo ""
+            echo "  gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.pulsewin-signing/updater.key"
+            echo ""
+            echo "Then dispatch this workflow again. Do not generate a new key: the public"
+            echo "half is pinned in src-tauri/tauri.conf.json, and replacing it would end"
+            echo "updates for every installed client."
+            exit 1
+          fi
+          echo "Signing key secret is present."
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Frontend unit tests and type check
+        run: |
+          npx vitest run
+          npx tsc --noEmit
+
+      - name: Rust tests
+        working-directory: src-tauri
+        run: cargo test --all-targets
+
+      - name: Build and sign the installers
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npm run tauri -- build
+
+      - name: Read the version being released
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Not a stable version: $version" }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Releasing $version"
+
+      - name: Prepare the release assets
+        run: npm run prepare:github -- wapearoudy/PulseWin
+
+      - name: Keep the signed assets even if publishing fails
+        uses: actions/upload-artifact@v4
+        with:
+          name: PulseWin-${{ steps.version.outputs.version }}-windows
+          path: updates/github/*
+          if-no-files-found: error
+
+      - name: Publish the release
+        if: ${{ inputs.publish }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $tag = "v$version"
+          # `gh release create` writes the tag on the remote and uploads every
+          # asset in one call, which is the same five files
+          # scripts/publish-github.mjs would upload.
+          gh release create $tag updates/github/* `
+            --target main `
+            --title "PulseWin $version" `
+            --notes-file release-notes.txt `
+            --latest
+          Write-Host "Published $tag"
