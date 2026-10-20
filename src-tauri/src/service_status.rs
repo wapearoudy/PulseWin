@@ -1,7 +1,19 @@
 //! Official, anonymous service-status readings. Ported from Pulse 1.9's
-//! ServiceStatus/OutageMemory (Apache-2.0, copyright 2026 qunqin24).
-//! Missing readings are errors; uptime is always the publisher's own figure.
-use chrono::{DateTime, Days, Local, NaiveDate, TimeZone, Utc};
+//! ServiceStatus/OutageMemory/StatusPage (Apache-2.0, copyright 2026 qunqin24).
+//!
+//! Every page is read from what its own status page is drawn from: a shared
+//! feed per company, not per service. Cursor and Grok Bot both live on
+//! status.cursor.com, Codex and the OpenAI Platform both on status.openai.com,
+//! Kimi and Moonshot both on status.moonshot.cn — so the outage check reads a
+//! company's feed once and asks each provider's rule what it runs on.
+//!
+//! Missing readings are errors; uptime is always the publisher's own figure;
+//! a page that can't be read is no reading, never "all clear".
+
+mod feeds;
+
+use chrono::{DateTime, Days, Local, TimeZone, Utc};
+use feeds::DaySpan;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -12,38 +24,583 @@ use tauri::{Manager, State};
 
 const INTERVAL: Duration = Duration::from_secs(300);
 const MAX_BYTES: usize = 8 * 1024 * 1024;
-const OPENAI: &str = "https://status.openai.com/proxy/status.openai.com";
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum Page {
-    OpenAI,
-    Claude,
-    DeepSeek,
+
+// MARK: - What a page shows and what its provider runs on
+
+/// Which rows of a page belong to one provider.
+///
+/// By id where the page has stable ids (names change, ids don't), by group
+/// where rows come and go, by name only where nothing better exists.
+#[derive(Debug, Clone, Copy)]
+pub enum Rule {
+    All,
+    Ids(&'static [&'static str]),
+    Groups(&'static [&'static str]),
+    NameContains(&'static [&'static str]),
+    Except(&'static Rule),
+}
+impl Rule {
+    fn matches(&self, c: &Component) -> bool {
+        match self {
+            Self::All => true,
+            Self::Ids(ids) => ids.contains(&c.id.as_str()),
+            Self::Groups(groups) => c.group.as_deref().is_some_and(|g| groups.contains(&g)),
+            Self::NameContains(parts) => parts.iter().any(|p| c.name.contains(p)),
+            Self::Except(rule) => !rule.matches(c),
+        }
+    }
+}
+
+/// The twelve feed shapes. A feed belongs to the company, a page to the
+/// provider; two providers on one feed share one request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Feed {
+    Statuspage(&'static str),
+    IncidentIo(&'static str),
+    Flashcat(&'static str),
+    BetterStack(&'static str),
+    Instatus(&'static str),
+    Upptime(&'static str),
+    Gatus(&'static str),
+    UptimeRobot(&'static str),
+    OpenCode(&'static str),
+    DeepInfra(&'static str),
+    IbmBob(&'static str),
+    GoogleCloud(&'static str, &'static str, &'static str),
+}
+impl Feed {
+    /// The address of the one request that carries everything this feed has.
+    fn url(self) -> String {
+        match self {
+            Self::Statuspage(root) => format!("{root}/api/v2/summary.json"),
+            Self::IncidentIo(root) => format!("{}/proxy/{}", root, host_of(root)),
+            Self::BetterStack(root) => format!("{root}/index.json"),
+            Self::Instatus(root) => format!("{root}/v2/components.json"),
+            Self::Flashcat(url)
+            | Self::Upptime(url)
+            | Self::Gatus(url)
+            | Self::UptimeRobot(url)
+            | Self::OpenCode(url)
+            | Self::DeepInfra(url)
+            | Self::IbmBob(url)
+            | Self::GoogleCloud(url, _, _) => (*url).to_string(),
+        }
+    }
+}
+
+/// One provider's page.
+#[derive(Debug, Clone, Copy)]
+pub struct Page {
+    pub provider: &'static str,
+    /// The page a person opens.
+    pub address: &'static str,
+    pub company: &'static str,
+    pub feed: Feed,
+    /// The rows this pane draws.
+    pub shows: Rule,
+    /// Of those, what the provider's account actually runs on — the API, the
+    /// agent a plan pays for, not marketing pages or docs.
+    pub notifies: Rule,
+    pub day_count: u32,
 }
 impl Page {
-    fn key(self) -> &'static str {
-        match self {
-            Self::OpenAI => "codex",
-            Self::Claude => "claude-code",
-            Self::DeepSeek => "deepseek",
-        }
+    pub fn id(&self) -> &'static str {
+        self.provider
     }
-    pub fn from_provider(id: &str) -> Option<Self> {
-        match id {
-            "codex" => Some(Self::OpenAI),
-            "claude-code" => Some(Self::Claude),
-            "deepseek" => Some(Self::DeepSeek),
-            _ => None,
-        }
+    pub fn host(&self) -> String {
+        host_of(self.address)
     }
-    fn relevant(self, c: &Component) -> bool {
-        match self {
-            Self::OpenAI => true,
-            Self::Claude => ["yyzkbfz2thpt", "k8w3r06qmzrp"].contains(&c.id.as_str()),
-            Self::DeepSeek => c.name.contains("API"),
+    /// The rows whose outage is news for this provider.
+    pub fn notifies_about(&self, c: &Component) -> bool {
+        self.shows.matches(c) && self.notifies.matches(c)
+    }
+    pub fn palette(&self) -> Palette {
+        match self.feed {
+            Feed::OpenCode(_) => Palette::OpenCode,
+            _ => match self.host().as_str() {
+                "status.openai.com" => Palette::OpenAi,
+                "status.claude.com" => Palette::Claude,
+                "status.cursor.com" => Palette::Cursor,
+                _ => match self.feed {
+                    Feed::Statuspage(_) => Palette::Statuspage,
+                    Feed::IncidentIo(_) => Palette::IncidentIo,
+                    _ => Palette::Default,
+                },
+            },
         }
     }
 }
+
+pub fn host_of(url: &str) -> String {
+    url.split("://")
+        .nth(1)
+        .unwrap_or(url)
+        .split('/')
+        .next()
+        .unwrap_or("")
+        .to_string()
+}
+
+// MARK: - The catalogue
+
+const EXCEPT_CURSOR_HIDDEN: Rule = Rule::Except(&Rule::Ids(&["sm5wkcnqkvr9"]));
+const EXCEPT_DEVIN_GROUPS: Rule =
+    Rule::Except(&Rule::Groups(&["92j5h0ttqxfb", "9ydbk2b55pk1"]));
+const EXCEPT_FACTORY_GROUP: Rule = Rule::Except(&Rule::Groups(&["c9sjq8nsz2kq"]));
+const EXCEPT_KILO_GROUP: Rule = Rule::Except(&Rule::Groups(&["frgc645htq00"]));
+const EXCEPT_JETBRAINS_GROUP: Rule = Rule::Except(&Rule::Groups(&["AI Providers"]));
+const EXCEPT_ZED_GROUP: Rule = Rule::Except(&Rule::Groups(&["Delta"]));
+
+static CATALOGUE: &[Page] = &[
+    // Atlassian Statuspage
+    Page {
+        provider: "claude-code",
+        address: "https://status.claude.com",
+        company: "Anthropic",
+        feed: Feed::Statuspage("https://status.claude.com"),
+        shows: Rule::All,
+        notifies: Rule::Ids(&["yyzkbfz2thpt", "k8w3r06qmzrp"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "cursor",
+        address: "https://status.cursor.com",
+        company: "Cursor",
+        feed: Feed::Statuspage("https://status.cursor.com"),
+        shows: EXCEPT_CURSOR_HIDDEN,
+        notifies: Rule::Ids(&["rflc60xp5jp2", "vsny1qv7v86c", "mwv1g9sc7kdh"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "grok-bot",
+        address: "https://status.cursor.com",
+        company: "Cursor",
+        feed: Feed::Statuspage("https://status.cursor.com"),
+        shows: Rule::Ids(&["sm5wkcnqkvr9"]),
+        notifies: Rule::All,
+        day_count: 90,
+    },
+    Page {
+        provider: "copilot",
+        address: "https://www.githubstatus.com",
+        company: "GitHub",
+        feed: Feed::Statuspage("https://www.githubstatus.com"),
+        shows: Rule::Ids(&["pjmpxvq2cmr2", "cnnb39dkkk82"]),
+        notifies: Rule::All,
+        day_count: 90,
+    },
+    Page {
+        provider: "devin",
+        address: "https://www.devinstatus.com",
+        company: "Cognition",
+        feed: Feed::Statuspage("https://www.devinstatus.com"),
+        shows: EXCEPT_DEVIN_GROUPS,
+        notifies: Rule::Ids(&["q72cy1kjpk4r", "d87cp5jknh1c"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "windsurf",
+        address: "https://status.windsurf.com",
+        company: "Windsurf",
+        feed: Feed::Statuspage("https://status.windsurf.com"),
+        shows: Rule::Ids(&["r5wf1ykd7y1m", "8q19cygxvshj"]),
+        notifies: Rule::All,
+        day_count: 90,
+    },
+    Page {
+        provider: "augment",
+        address: "https://status.augmentcode.com",
+        company: "Augment Code",
+        feed: Feed::Statuspage("https://status.augmentcode.com"),
+        shows: Rule::All,
+        notifies: Rule::Ids(&["1k3gvg4j889s"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "factory",
+        address: "https://status.factory.ai",
+        company: "Factory",
+        feed: Feed::Statuspage("https://status.factory.ai"),
+        shows: EXCEPT_FACTORY_GROUP,
+        notifies: Rule::Ids(&["kfqc4mfdkrqx", "jfcmwr3grbyc", "z1frly8fm1l5"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "kilo-code",
+        address: "https://status.kilo.ai",
+        company: "Kilo",
+        feed: Feed::Statuspage("https://status.kilo.ai"),
+        shows: EXCEPT_KILO_GROUP,
+        notifies: Rule::Ids(&["kdk5t7ljzmm1", "rkvq7kvz2zlh"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "minimax",
+        address: "https://status.minimax.io",
+        company: "MiniMax",
+        feed: Feed::Statuspage("https://status.minimax.io"),
+        shows: Rule::All,
+        notifies: Rule::Ids(&["pr0d8qr59svt"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "minimax-cn",
+        address: "https://status.minimaxi.com",
+        company: "MiniMax",
+        feed: Feed::Statuspage("https://status.minimaxi.com"),
+        shows: Rule::All,
+        notifies: Rule::Ids(&["vwp8mgy34fck"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "kimi-code",
+        address: "https://status.moonshot.cn",
+        company: "Moonshot AI",
+        feed: Feed::Statuspage("https://status.moonshot.cn"),
+        shows: Rule::Groups(&["cyrtlddz0q8c"]),
+        notifies: Rule::All,
+        day_count: 90,
+    },
+    Page {
+        provider: "moonshot",
+        address: "https://status.moonshot.cn",
+        company: "Moonshot AI",
+        feed: Feed::Statuspage("https://status.moonshot.cn"),
+        shows: Rule::Groups(&["87jpctq5cp71"]),
+        notifies: Rule::Ids(&["8psr5dfdld0s", "pjrph68g94yr"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "warp",
+        address: "https://status.warp.dev",
+        company: "Warp",
+        feed: Feed::Statuspage("https://status.warp.dev"),
+        shows: Rule::All,
+        notifies: Rule::Ids(&["z7hlxwbqx7ry", "z90zfbttkx9f", "7z5yq9wznb4f"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "manus",
+        address: "https://status.manus.im",
+        company: "Manus",
+        feed: Feed::Statuspage("https://status.manus.im"),
+        shows: Rule::All,
+        notifies: Rule::All,
+        day_count: 90,
+    },
+    Page {
+        provider: "venice",
+        address: "https://veniceai-status.com",
+        company: "Venice",
+        feed: Feed::Statuspage("https://veniceai-status.com"),
+        shows: Rule::All,
+        notifies: Rule::Ids(&["6knqw5vybqzk"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "zoom-mate",
+        address: "https://www.zoomstatus.com",
+        company: "Zoom",
+        feed: Feed::Statuspage("https://www.zoomstatus.com"),
+        shows: Rule::Ids(&["n1llzwc1cxtr"]),
+        notifies: Rule::All,
+        day_count: 90,
+    },
+    Page {
+        provider: "replicate",
+        address: "https://www.cloudflarestatus.com",
+        company: "Cloudflare",
+        feed: Feed::Statuspage("https://www.cloudflarestatus.com"),
+        shows: Rule::Ids(&["fvgfcmy66tdr"]),
+        notifies: Rule::All,
+        day_count: 90,
+    },
+    // incident.io
+    Page {
+        provider: "codex",
+        address: "https://status.openai.com",
+        company: "OpenAI",
+        feed: Feed::IncidentIo("https://status.openai.com"),
+        shows: Rule::Groups(&["Codex"]),
+        notifies: Rule::All,
+        day_count: 91,
+    },
+    Page {
+        provider: "openai-api",
+        address: "https://status.openai.com",
+        company: "OpenAI",
+        feed: Feed::IncidentIo("https://status.openai.com"),
+        shows: Rule::Groups(&["APIs"]),
+        notifies: Rule::All,
+        day_count: 91,
+    },
+    Page {
+        provider: "jetbrains-ai",
+        address: "https://status.jetbrains.cloud",
+        company: "JetBrains",
+        feed: Feed::IncidentIo("https://status.jetbrains.cloud"),
+        shows: EXCEPT_JETBRAINS_GROUP,
+        notifies: Rule::Ids(&["01KX3EN535A0SKSZK3S84949V1"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "amp",
+        address: "https://ampcodestatus.com",
+        company: "Amp",
+        feed: Feed::IncidentIo("https://ampcodestatus.com"),
+        shows: Rule::Ids(&[
+            "01KBQ3ZK9NMBWKR7DY9H7NQ17D",
+            "01M0WN9KPF89TDEHSPQ918XHTH",
+        ]),
+        notifies: Rule::All,
+        day_count: 90,
+    },
+    Page {
+        provider: "aixy",
+        address: "https://status.aixy-gateway.com",
+        company: "AIXY",
+        feed: Feed::IncidentIo("https://status.aixy-gateway.com"),
+        shows: Rule::All,
+        notifies: Rule::Ids(&["01M08789J59XQG5AR373SVQZ6Z"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "elevenlabs",
+        address: "https://status.elevenlabs.io",
+        company: "ElevenLabs",
+        feed: Feed::IncidentIo("https://status.elevenlabs.io"),
+        shows: Rule::Groups(&["ElevenAPI"]),
+        notifies: Rule::All,
+        day_count: 90,
+    },
+    Page {
+        provider: "notion-ai",
+        address: "https://www.notion-status.com",
+        company: "Notion",
+        feed: Feed::IncidentIo("https://www.notion-status.com"),
+        shows: Rule::Groups(&["Notion AI"]),
+        notifies: Rule::All,
+        day_count: 90,
+    },
+    Page {
+        provider: "perplexity",
+        address: "https://status.perplexity.com",
+        company: "Perplexity",
+        feed: Feed::IncidentIo("https://status.perplexity.com"),
+        shows: Rule::All,
+        notifies: Rule::Ids(&["01M2R6E5FPASTEW3A3V8TSYHJ0"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "poe",
+        address: "https://status.poe.com",
+        company: "Poe",
+        feed: Feed::IncidentIo("https://status.poe.com"),
+        shows: Rule::All,
+        notifies: Rule::All,
+        day_count: 90,
+    },
+    Page {
+        provider: "v0",
+        address: "https://v0-status.com",
+        company: "Vercel",
+        feed: Feed::IncidentIo("https://v0-status.com"),
+        shows: Rule::All,
+        notifies: Rule::Ids(&[
+            "01KHYYTCKK0NS8FN857PCJB63W",
+            "01J5EED92VTMVYNWYKYS9B1G1F",
+        ]),
+        day_count: 90,
+    },
+    // Flashcat
+    Page {
+        provider: "deepseek",
+        address: "https://status.deepseek.com",
+        company: "DeepSeek",
+        feed: Feed::Flashcat("https://status.deepseek.com/"),
+        shows: Rule::All,
+        notifies: Rule::NameContains(&["API"]),
+        day_count: 90,
+    },
+    // Better Stack
+    Page {
+        provider: "hugging-face",
+        address: "https://status.huggingface.co",
+        company: "Hugging Face",
+        feed: Feed::BetterStack("https://status.huggingface.co"),
+        shows: Rule::All,
+        notifies: Rule::Ids(&["306621", "84641"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "chutes",
+        address: "https://status.chutes.ai",
+        company: "Chutes",
+        feed: Feed::BetterStack("https://status.chutes.ai"),
+        shows: Rule::All,
+        notifies: Rule::Ids(&["8599285"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "synthetic",
+        address: "https://status.synthetic.new",
+        company: "Synthetic",
+        feed: Feed::BetterStack("https://status.synthetic.new"),
+        shows: Rule::All,
+        notifies: Rule::Groups(&["Synthetic - API (Synthetic hosted Models)"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "dev-pass",
+        address: "https://status.llmgateway.io",
+        company: "LLM Gateway",
+        feed: Feed::BetterStack("https://status.llmgateway.io"),
+        shows: Rule::All,
+        notifies: Rule::Ids(&["8768001"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "raycast-ai",
+        address: "https://status.raycast.com",
+        company: "Raycast",
+        feed: Feed::BetterStack("https://status.raycast.com"),
+        shows: Rule::All,
+        notifies: Rule::Ids(&["5341215"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "typesafe",
+        address: "https://status.typesafe.ai",
+        company: "TypeSafe",
+        feed: Feed::BetterStack("https://status.typesafe.ai"),
+        shows: Rule::All,
+        notifies: Rule::Ids(&["8735312"]),
+        day_count: 90,
+    },
+    // Instatus
+    Page {
+        provider: "zed",
+        address: "https://status.zed.dev",
+        company: "Zed",
+        feed: Feed::Instatus("https://status.zed.dev"),
+        shows: EXCEPT_ZED_GROUP,
+        notifies: Rule::Ids(&["cmaw974wo0001xh7v9vfihlul", "cm75bq8t9000rsdcb9bfls8wt"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "gitkraken",
+        address: "https://cloud.gitkrakenstatus.com",
+        company: "GitKraken",
+        feed: Feed::Instatus("https://cloud.gitkrakenstatus.com"),
+        shows: Rule::All,
+        notifies: Rule::Ids(&["clvkz1ojq2917bgo9peyj3bha", "clvkz1ok12924bgo956mkaa0r"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "atlas-cloud",
+        address: "https://atlascloud.instatus.com",
+        company: "Atlas Cloud",
+        feed: Feed::Instatus("https://atlascloud.instatus.com"),
+        shows: Rule::All,
+        notifies: Rule::All,
+        day_count: 90,
+    },
+    // Monitors and companies' own pages
+    Page {
+        provider: "command-code",
+        address: "https://status.commandcode.ai",
+        company: "Command Code",
+        feed: Feed::Upptime(
+            "https://raw.githubusercontent.com/CommandCodeAI/commandcode-status/master/history/summary.json",
+        ),
+        shows: Rule::All,
+        notifies: Rule::All,
+        day_count: 90,
+    },
+    Page {
+        provider: "cline-pass",
+        address: "https://status.cline.bot",
+        company: "Cline",
+        feed: Feed::Gatus("https://status.cline.bot/api/v1/endpoints/statuses"),
+        shows: Rule::All,
+        notifies: Rule::All,
+        day_count: 90,
+    },
+    Page {
+        provider: "hyper",
+        address: "https://status.charm.sh",
+        company: "Charm",
+        feed: Feed::UptimeRobot(
+            "https://status.charm.sh/api/getMonitorList/JrppyTBzE3?page=1",
+        ),
+        shows: Rule::Ids(&["803945156"]),
+        notifies: Rule::All,
+        day_count: 90,
+    },
+    Page {
+        provider: "opencode-go",
+        address: "https://status.opencode.ai",
+        company: "OpenCode",
+        feed: Feed::OpenCode("https://status.opencode.ai/api/status"),
+        shows: Rule::All,
+        notifies: Rule::Ids(&["go"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "deepinfra",
+        address: "https://status.deepinfra.com",
+        company: "DeepInfra",
+        feed: Feed::DeepInfra("https://status.deepinfra.com/api/v1/status"),
+        shows: Rule::All,
+        notifies: Rule::Ids(&["api"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "ibm-bob",
+        address: "https://status.bob.ibm.com",
+        company: "IBM",
+        feed: Feed::IbmBob("https://status.bob.ibm.com/api/v1/status"),
+        shows: Rule::All,
+        notifies: Rule::Ids(&["Chat/Code Completion", "Login/SSO"]),
+        day_count: 90,
+    },
+    Page {
+        provider: "gemini-cli",
+        address: "https://status.cloud.google.com",
+        company: "Google Cloud",
+        feed: Feed::GoogleCloud(
+            "https://status.cloud.google.com/incidents.json",
+            "deUeOEPYanfJ9w8cpyBJ",
+            "Gemini Code Assist",
+        ),
+        shows: Rule::All,
+        notifies: Rule::All,
+        day_count: 90,
+    },
+];
+
+/// Every provider with a page, in the original's order.
+pub fn catalogue() -> &'static [Page] {
+    CATALOGUE
+}
+/// The page one provider id reads, if it has one.
+///
+/// Providers with no page are deliberate: xAI's and Mistral's status sit behind
+/// a bot check, and a stand-in page would say "all clear" about nothing.
+pub fn page(provider: &str) -> Option<&'static Page> {
+    CATALOGUE.iter().find(|p| p.provider == provider)
+}
+/// The provider ids that have a page, for the settings pane to gate on.
+///
+/// The pane doesn't keep its own copy of this list: which services publish a
+/// page is the catalogue's fact, and a second copy would drift.
+#[tauri::command]
+pub fn status_pages() -> Vec<&'static str> {
+    CATALOGUE.iter().map(|p| p.provider).collect()
+}
+
+// MARK: - Reading a page
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Health {
@@ -55,17 +612,25 @@ pub enum Health {
     FullOutage,
 }
 impl Health {
-    fn parse(s: &str) -> Self {
-        match s {
+    /// A feed's word for a state. Case and punctuation carry no meaning
+    /// (`DEGRADEDPERFORMANCE`, `degraded_performance`, `Degraded performance`
+    /// are one state), so only letters are compared.
+    pub fn parse(s: &str) -> Self {
+        let word = s
+            .to_lowercase()
+            .chars()
+            .filter(|c| c.is_ascii_alphabetic())
+            .collect::<String>();
+        match word.as_str() {
             "operational" => Self::Operational,
-            "degraded" | "degraded_performance" => Self::Degraded,
-            "partial_outage" => Self::PartialOutage,
-            "major_outage" | "full_outage" => Self::FullOutage,
-            "maintenance" | "under_maintenance" => Self::Maintenance,
+            "degradedperformance" | "degraded" => Self::Degraded,
+            "partialoutage" => Self::PartialOutage,
+            "fulloutage" | "majoroutage" | "outage" => Self::FullOutage,
+            "undermaintenance" | "maintenance" => Self::Maintenance,
             _ => Self::Unrecognised,
         }
     }
-    fn severity(self) -> u8 {
+    pub fn severity(self) -> u8 {
         match self {
             Self::Operational => 0,
             Self::Maintenance => 1,
@@ -75,26 +640,34 @@ impl Health {
             Self::FullOutage => 5,
         }
     }
+    /// An outage is something going wrong now. Maintenance is planned and
+    /// unrecognised was never witnessed, so neither is one.
     fn outage(self) -> bool {
-        self.severity() >= 3
+        matches!(self, Self::Degraded | Self::PartialOutage | Self::FullOutage)
     }
-    fn title(self) -> &'static str {
+    /// The name of the state in a notification's own words.
+    fn phrase(self) -> &'static str {
         match self {
             Self::Operational => "运行正常",
             Self::Maintenance => "计划维护",
-            Self::Unrecognised => "未知状态",
+            Self::Unrecognised => "状态未知",
             Self::Degraded => "性能下降",
             Self::PartialOutage => "部分故障",
             Self::FullOutage => "全面故障",
         }
     }
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Day {
+    /// `YYYY-MM-DD`; when a bar is shorter than a day it also carries the hour.
     date: String,
     state: Option<Health>,
+    /// The page's own drawn colour, `#rrggbb`, when it publishes one.
     colour: Option<String>,
+    /// Bar length in hours when the page draws sub-day bars (OpenCode: 3).
+    hours: Option<i64>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -104,15 +677,34 @@ pub struct Component {
     pub state: Health,
     days: Vec<Day>,
     uptime: Option<f64>,
+    /// What a group rule matches on.
+    group: Option<String>,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Palette {
+    OpenCode,
+    OpenAi,
+    Claude,
+    Cursor,
+    Statuspage,
+    IncidentIo,
+    Default,
 }
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Reading {
-    page: Page,
+    /// The provider this page belongs to; a company's page serves several.
+    page: String,
+    /// The page a person opens.
+    address: String,
+    company: String,
+    palette: Palette,
     components: Vec<Component>,
     checked_at: String,
     history_error: Option<String>,
 }
+
 fn component(id: &str, name: &str, state: Health) -> Component {
     Component {
         id: id.into(),
@@ -120,218 +712,16 @@ fn component(id: &str, name: &str, state: Health) -> Component {
         state,
         days: vec![],
         uptime: None,
-    }
-}
-fn list<'a>(v: &'a Value, k: &str) -> &'a [Value] {
-    v.get(k)
-        .and_then(Value::as_array)
-        .map(Vec::as_slice)
-        .unwrap_or(&[])
-}
-fn text<'a>(v: &'a Value, k: &str) -> Option<&'a str> {
-    v.get(k)?.as_str()
-}
-fn percent(v: Option<&Value>) -> Option<f64> {
-    let n = v.and_then(|v| v.as_f64().or_else(|| v.as_str()?.parse().ok()))?;
-    (n.is_finite() && (0.0..=100.0).contains(&n)).then_some(n)
-}
-fn stamp(v: Option<&Value>, seconds: bool) -> Option<i64> {
-    let v = v?;
-    if seconds {
-        let f = v.as_f64()?;
-        (f.is_finite() && f.abs() < 253_402_300_800.0).then_some(f as i64)
-    } else {
-        DateTime::parse_from_rfc3339(v.as_str()?)
-            .ok()
-            .map(|d| d.timestamp())
+        group: None,
     }
 }
 
-fn openai_summary(v: &Value) -> Result<Vec<Component>, String> {
-    let groups = v
-        .pointer("/summary/structure/items")
-        .and_then(Value::as_array)
-        .ok_or("无法读取 Codex 状态组件")?;
-    let g = groups
-        .iter()
-        .filter_map(|v| v.get("group"))
-        .find(|g| text(g, "name") == Some("Codex"))
-        .ok_or("官方状态页未列出 Codex")?;
-    let affected = list(&v["summary"], "affected_components");
-    nonempty(
-        list(g, "components")
-            .iter()
-            .filter(|c| c["hidden"] != true)
-            .filter_map(|c| {
-                let id = text(c, "component_id")?;
-                let name = text(c, "name")?;
-                let state = affected
-                    .iter()
-                    .find(|c| text(c, "component_id") == Some(id))
-                    .map(|c| Health::parse(text(c, "status").unwrap_or("unknown")))
-                    .unwrap_or(Health::Operational);
-                Some(component(id, name, state))
-            })
-            .collect(),
-    )
-}
-fn claude_summary(v: &Value) -> Result<Vec<Component>, String> {
-    if !v["components"].is_array() {
-        return Err("无法读取 Claude 状态页".into());
-    }
-    let mut rows = list(v, "components")
-        .iter()
-        .filter(|c| {
-            c["group"] != true
-                && !(c["only_show_if_degraded"] == true && text(c, "status") == Some("operational"))
-        })
-        .collect::<Vec<_>>();
-    rows.sort_by_key(|c| c["position"].as_i64().unwrap_or(i64::MAX));
-    nonempty(
-        rows.into_iter()
-            .filter_map(|c| {
-                Some(component(
-                    text(c, "id")?,
-                    text(c, "name")?,
-                    Health::parse(text(c, "status")?),
-                ))
-            })
-            .collect(),
-    )
-}
-fn nonempty(rows: Vec<Component>) -> Result<Vec<Component>, String> {
-    if rows.is_empty() {
-        Err("官方状态页没有可读取的组件".into())
-    } else {
-        Ok(rows)
-    }
-}
-
-/// Decode only JSON string literals in Next's flight chunks, never execute HTML.
-fn flashcat_data(html: &str) -> Result<Value, String> {
-    let mut flight = String::new();
-    for part in html.split("self.__next_f.push([1,").skip(1) {
-        let part = part.trim_start();
-        if !part.starts_with('"') {
-            continue;
-        }
-        let mut escaped = false;
-        let mut end = None;
-        for (i, ch) in part.char_indices().skip(1) {
-            if escaped {
-                escaped = false;
-                continue;
-            }
-            if ch == '\\' {
-                escaped = true
-            } else if ch == '"' {
-                end = Some(i + 1);
-                break;
-            }
-        }
-        if let Some(end) = end {
-            if let Ok(s) = serde_json::from_str::<String>(&part[..end]) {
-                flight.push_str(&s)
-            }
-        }
-    }
-    fn collect(v: &Value, out: &mut serde_json::Map<String, Value>, depth: u8) {
-        if depth > 64 {
-            return;
-        }
-        if let Some(obj) = v.as_object() {
-            if let Some(data) = obj.get("initialData").and_then(Value::as_object) {
-                for (k, v) in data {
-                    out.entry(k.clone()).or_insert_with(|| v.clone());
-                }
-            }
-            for v in obj.values() {
-                collect(v, out, depth + 1)
-            }
-        } else if let Some(a) = v.as_array() {
-            for v in a {
-                collect(v, out, depth + 1)
-            }
-        }
-    }
-    let mut merged = serde_json::Map::new();
-    for line in flight.lines().filter(|l| l.contains("\"initialData\"")) {
-        if let Some((_, json)) = line.split_once(':') {
-            if let Ok(v) = serde_json::from_str::<Value>(json) {
-                collect(&v, &mut merged, 0)
-            }
-        }
-    }
-    if !merged
-        .get("page")
-        .is_some_and(|v| v["components"].is_array())
-    {
-        return Err("无法识别 DeepSeek 官方状态页数据".into());
-    }
-    Ok(Value::Object(merged))
-}
-fn flashcat_summary(v: &Value, now: i64) -> Result<Vec<Component>, String> {
-    let page = &v["page"];
-    let mut groups: Vec<(i64, Vec<&Value>)> = vec![];
-    let visible = list(page, "components")
-        .iter()
-        .filter(|v| v["hide_all"] != true)
-        .collect::<Vec<_>>();
-    let order = |v: &Value| v["order_id"].as_i64().unwrap_or(i64::MAX);
-    for c in &visible {
-        if text(c, "section_id").unwrap_or("").is_empty() {
-            groups.push((order(c), vec![*c]))
-        }
-    }
-    for section in list(page, "sections")
-        .iter()
-        .filter(|v| v["hide_all"] != true)
-    {
-        if let Some(id) = text(section, "section_id") {
-            let mut members = visible
-                .iter()
-                .copied()
-                .filter(|c| text(c, "section_id") == Some(id))
-                .collect::<Vec<_>>();
-            members.sort_by_key(|c| order(c));
-            groups.push((order(section), members));
-        }
-    }
-    groups.sort_by_key(|g| g.0);
-    nonempty(
-        groups
-            .into_iter()
-            .flat_map(|g| g.1)
-            .filter_map(|c| {
-                let id = text(c, "component_id")?;
-                let name = text(c, "name")?;
-                let open = list(v, "component_impacts")
-                    .iter()
-                    .filter(|i| {
-                        text(i, "component_id") == Some(id)
-                            && stamp(i.get("start_at_seconds"), true).is_some_and(|s| s <= now)
-                            && stamp(i.get("end_at_seconds"), true).unwrap_or(i64::MAX) > now
-                    })
-                    .map(|i| Health::parse(text(i, "status").unwrap_or("unknown")))
-                    .max_by_key(|s| s.severity());
-                let stated = text(c, "status")
-                    .filter(|s| !s.is_empty())
-                    .map(Health::parse);
-                Some(component(
-                    id,
-                    name,
-                    stated.or(open).unwrap_or(Health::Operational),
-                ))
-            })
-            .collect(),
-    )
-}
-
-fn calendar(now: DateTime<Local>, count: u64) -> Vec<(String, i64, i64)> {
+/// The last `count` local calendar days, oldest first, today last.
+fn calendar(now: DateTime<Local>, count: u32) -> Vec<DaySpan> {
     (0..count)
         .rev()
         .filter_map(|back| {
-            let date = now.date_naive().checked_sub_days(Days::new(back))?;
+            let date = now.date_naive().checked_sub_days(Days::new(back as u64))?;
             let next = date.checked_add_days(Days::new(1))?;
             // Earliest local midnight handles repeated DST boundaries; absent
             // midnight is omitted, never silently replaced with a 24-hour UTC day.
@@ -345,151 +735,16 @@ fn calendar(now: DateTime<Local>, count: u64) -> Vec<(String, i64, i64)> {
         })
         .collect()
 }
-fn impact_history(
-    rows: &mut [Component],
-    v: &Value,
-    days: &[(String, i64, i64)],
-    now: i64,
-    seconds: bool,
-) -> Result<(), String> {
-    if !v["component_impacts"].is_array() || !v["component_uptimes"].is_array() {
-        return Err("官方历史数据未能读取".into());
-    }
-    for c in rows {
-        let uptime = list(v, "component_uptimes")
-            .iter()
-            .find(|u| text(u, "component_id") == Some(c.id.as_str()));
-        let since = uptime.and_then(|u| {
-            stamp(
-                u.get(if seconds {
-                    "available_since_seconds"
-                } else {
-                    "data_available_since"
-                }),
-                seconds,
-            )
-        });
-        c.uptime = uptime.and_then(|u| percent(u.get("uptime")));
-        let impacts = list(v, "component_impacts")
-            .iter()
-            .filter(|i| text(i, "component_id") == Some(c.id.as_str()))
-            .filter_map(|i| {
-                let start = stamp(
-                    i.get(if seconds {
-                        "start_at_seconds"
-                    } else {
-                        "start_at"
-                    }),
-                    seconds,
-                )?;
-                // A malformed non-null end is not an ongoing outage.
-                let end_value = i.get(if seconds { "end_at_seconds" } else { "end_at" });
-                let end = if end_value.is_none() || end_value == Some(&Value::Null) {
-                    now
-                } else {
-                    stamp(end_value, seconds)?
-                };
-                (end > start).then_some((start, end, Health::parse(text(i, "status")?)))
-            })
-            .collect::<Vec<_>>();
-        c.days = days
-            .iter()
-            .map(|(date, a, b)| Day {
-                date: date.clone(),
-                state: if since.is_some_and(|s| *b <= s) {
-                    None
-                } else {
-                    Some(
-                        impacts
-                            .iter()
-                            .filter(|(s, e, _)| *s < *b && *e > *a)
-                            .map(|i| i.2)
-                            .max_by_key(|s| s.severity())
-                            .unwrap_or(Health::Operational),
-                    )
-                },
-                colour: None,
-            })
-            .collect();
-    }
-    Ok(())
-}
-fn bar_colours(svg: &str) -> Vec<String> {
-    svg.split("<rect")
-        .skip(1)
-        .filter_map(|s| {
-            let tag = s.split_once('>')?.0;
-            if !tag.contains("uptime-day") {
-                return None;
-            }
-            let fill = tag.split_once("fill=\"#")?.1.get(..6)?;
-            fill.bytes()
-                .all(|b| b.is_ascii_hexdigit())
-                .then(|| format!("#{fill}"))
-        })
-        .collect()
-}
-fn claude_history(rows: &mut [Component], v: &Value) -> Result<(), String> {
-    if !v["timelines"].is_object() {
-        return Err("Claude 官方历史数据未能读取".into());
-    }
-    let mut read = 0;
-    for c in rows {
-        let t = &v["timelines"][&c.id];
-        if !t["days"].is_array() {
-            continue;
-        }
-        let since = t.pointer("/component/startDate").and_then(Value::as_str);
-        c.days = list(t, "days")
-            .iter()
-            .filter_map(|d| {
-                let date = text(d, "date")?;
-                NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()?;
-                Some(Day {
-                    date: date.into(),
-                    state: if since.is_some_and(|s| date < s) {
-                        None
-                    } else {
-                        Some(
-                            if d.pointer("/outages/m").and_then(Value::as_u64).unwrap_or(0) > 0 {
-                                Health::FullOutage
-                            } else if d.pointer("/outages/p").and_then(Value::as_u64).unwrap_or(0)
-                                > 0
-                            {
-                                Health::PartialOutage
-                            } else {
-                                Health::Operational
-                            },
-                        )
-                    },
-                    colour: None,
-                })
-            })
-            .collect();
-        if c.days.is_empty() {
-            continue;
-        }
-        read += 1;
-        let colours = v["components"][&c.id]
-            .as_str()
-            .map(bar_colours)
-            .unwrap_or_default();
-        if colours.len() == c.days.len() {
-            for (d, col) in c.days.iter_mut().zip(colours) {
-                d.colour = Some(col)
-            }
-        }
-        c.uptime = list(v, "values")
-            .iter()
-            .find(|u| text(u, "component") == Some(c.id.as_str()))
-            .and_then(|u| percent(u.get("ninety")));
-    }
-    if read == 0 {
-        Err("Claude 官方历史没有可读取的日期".into())
+
+fn nonempty(rows: Vec<Component>) -> Result<Vec<Component>, String> {
+    if rows.is_empty() {
+        Err("官方状态页没有可读取的组件".into())
     } else {
-        Ok(())
+        Ok(rows)
     }
 }
+
+// MARK: - Network
 
 async fn fetch(
     client: &reqwest::Client,
@@ -545,68 +800,170 @@ async fn json(
     serde_json::from_slice(&fetch(client, url, query, false).await?)
         .map_err(|_| "官方状态页返回了无法识别的数据".into())
 }
-pub async fn read(client: &reqwest::Client, page: Page, history: bool) -> Result<Reading, String> {
-    let now = Local::now();
+
+/// The state-only read every feed that cannot cite more than one request needs.
+///
+/// One request per feed serves the whole company: Cursor and Grok Bot, Codex
+/// and the OpenAI Platform, Kimi and Moonshot each share one.
+async fn current(client: &reqwest::Client, feed: Feed) -> Option<Vec<Component>> {
+    let v = json(client, &feed.url(), &[]).await.ok()?;
+    match feed {
+        Feed::Statuspage(_) => feeds::statuspage_components(&v),
+        Feed::IncidentIo(_) => feeds::incidentio_summary(&v).map(|(c, _)| c),
+        Feed::BetterStack(_) => feeds::better_stack(&v),
+        Feed::Instatus(_) => feeds::instatus(&v),
+        Feed::Upptime(_) => feeds::upptime(&v),
+        Feed::Gatus(_) => feeds::gatus(&v),
+        Feed::UptimeRobot(_) => feeds::uptime_robot(&v),
+        Feed::OpenCode(_) => feeds::open_code(&v, Utc::now().timestamp()),
+        Feed::DeepInfra(_) => feeds::deep_infra(&v),
+        Feed::IbmBob(_) => feeds::ibm_bob(&v),
+        Feed::GoogleCloud(_, product, name) => feeds::google_cloud(
+            &v,
+            product,
+            name,
+            Utc::now().timestamp(),
+            None,
+        ),
+        // These need the page's own payload, not JSON: see `read`.
+        Feed::Flashcat(_) => None,
+    }
+}
+
+async fn read_statuspage(
+    client: &reqwest::Client,
+    page: &Page,
+    root: &str,
+    history: bool,
+) -> Result<(Vec<Component>, Option<String>), String> {
+    let summary = json(client, &format!("{root}/api/v2/summary.json"), &[]).await?;
+    let mut rows = feeds::statuspage_components(&summary)
+        .ok_or_else(|| "官方状态页没有可读取的组件".to_string())?;
+    rows.retain(|c| page.shows.matches(c));
+    let mut rows = nonempty(rows)?;
     let mut history_error = None;
-    let components = match page {
-        Page::OpenAI => {
-            let mut c = openai_summary(&json(client, OPENAI, &[]).await?)?;
-            if history {
-                let days = calendar(now, 91);
-                if let (Some(first), Some(last)) = (days.first(), days.last()) {
-                    let iso = |s| DateTime::from_timestamp(s, 0).unwrap().to_rfc3339();
-                    let query = [("start_at", iso(first.1)), ("end_at", iso(last.2))];
-                    let result =
-                        match json(client, &format!("{OPENAI}/component_impacts"), &query).await {
-                            Ok(v) => impact_history(&mut c, &v, &days, now.timestamp(), false),
-                            Err(e) => Err(e),
-                        };
-                    history_error = result.err();
+    if history {
+        let query = [(
+            "components",
+            rows.iter()
+                .map(|c| c.id.as_str())
+                .collect::<Vec<_>>()
+                .join(","),
+        )];
+        // A page whose showcase is missing (Zoom draws no bars, Cloudflare's
+        // answers 404) still shows its states: no bars is not an error.
+        match json(client, &format!("{root}/uptime_showcase"), &query).await {
+            Ok(v) => history_error = feeds::statuspage_history(&v, &mut rows).err(),
+            Err(e) => history_error = Some(e),
+        }
+    }
+    Ok((rows, history_error))
+}
+
+async fn read_incident_io(
+    client: &reqwest::Client,
+    page: &Page,
+    root: &str,
+    days: &[DaySpan],
+    now: i64,
+    history: bool,
+) -> Result<(Vec<Component>, Option<String>), String> {
+    let url = format!("{}/proxy/{}", root, host_of(root));
+    let summary = json(client, &url, &[]).await?;
+    let (rows, shows_uptime) =
+        feeds::incidentio_summary(&summary).ok_or("官方状态页没有可读取的组件")?;
+    let mut rows = nonempty(
+        rows.into_iter()
+            .filter(|c| page.shows.matches(c))
+            .collect(),
+    )?;
+    let mut history_error = None;
+    if history {
+        if let (Some(first), Some(last)) = (days.first(), days.last()) {
+            let iso = |s: i64| DateTime::from_timestamp(s, 0).unwrap().to_rfc3339();
+            let query = [
+                ("start_at", iso(first.1)),
+                ("end_at", iso(last.2)),
+            ];
+            match json(client, &format!("{url}/component_impacts"), &query).await {
+                Ok(v) => {
+                    history_error = feeds::impact_history(&mut rows, &v, days, now, false).err()
                 }
+                Err(e) => history_error = Some(e),
             }
-            c
         }
-        Page::Claude => {
-            let mut c = claude_summary(
-                &json(client, "https://status.claude.com/api/v2/summary.json", &[]).await?,
+    }
+    // The feed carries a figure; a page set to draw bars without a percentage
+    // does not show it, so neither do we.
+    if !shows_uptime {
+        for c in rows.iter_mut() {
+            c.uptime = None;
+        }
+    }
+    Ok((rows, history_error))
+}
+
+/// Read one page. `history` false is the outage check's path: state only.
+pub async fn read(
+    client: &reqwest::Client,
+    provider: &str,
+    history: bool,
+) -> Result<Reading, String> {
+    let page = page(provider).ok_or("此服务没有受支持的官方状态页")?;
+    let now = Local::now();
+    let now_ts = now.timestamp();
+    let days = calendar(now, page.day_count);
+    let (rows, history_error) = match page.feed {
+        Feed::Statuspage(root) => read_statuspage(client, page, root, history).await?,
+        Feed::IncidentIo(root) => {
+            read_incident_io(client, page, root, &days, now_ts, history).await?
+        }
+        Feed::Flashcat(url) => {
+            let bytes = fetch(client, url, &[], true).await?;
+            let v = feeds::flashcat_data(&String::from_utf8_lossy(&bytes))?;
+            let mut rows = nonempty(
+                feeds::flashcat_summary(&v, now_ts)?
+                    .into_iter()
+                    .filter(|c| page.shows.matches(c))
+                    .collect(),
             )?;
-            if history {
-                let query = [(
-                    "components",
-                    c.iter()
-                        .map(|c| c.id.as_str())
-                        .collect::<Vec<_>>()
-                        .join(","),
-                )];
-                let result =
-                    match json(client, "https://status.claude.com/uptime_showcase", &query).await {
-                        Ok(v) => claude_history(&mut c, &v),
-                        Err(e) => Err(e),
-                    };
-                history_error = result.err();
-            }
-            c
-        }
-        Page::DeepSeek => {
-            let bytes = fetch(client, "https://status.deepseek.com/", &[], true).await?;
-            let v = flashcat_data(&String::from_utf8_lossy(&bytes))?;
-            let mut c = flashcat_summary(&v, now.timestamp())?;
+            let mut history_error = None;
             if history {
                 history_error =
-                    impact_history(&mut c, &v, &calendar(now, 90), now.timestamp(), true).err()
+                    feeds::impact_history(&mut rows, &v, &days, now_ts, true).err();
             }
-            c
+            (rows, history_error)
+        }
+        Feed::GoogleCloud(_, product, name) => {
+            let v = json(client, page.feed.url().as_str(), &[]).await?;
+            let rows = nonempty(
+                feeds::google_cloud(&v, product, name, now_ts, Some(&days))
+                    .ok_or("官方状态页没有可读取的组件")?
+                    .into_iter()
+                    .filter(|c| page.shows.matches(c))
+                    .collect(),
+            )?;
+            (rows, None)
+        }
+        feed => {
+            let rows = current(client, feed)
+                .await
+                .ok_or_else(|| "官方状态页没有可读取的组件".to_string())?;
+            (nonempty(rows.into_iter().filter(|c| page.shows.matches(c)).collect())?, None)
         }
     };
     Ok(Reading {
-        page,
-        components,
+        page: page.provider.to_string(),
+        address: page.address.to_string(),
+        company: page.company.to_string(),
+        palette: page.palette(),
+        components: rows,
         checked_at: Utc::now().to_rfc3339(),
         history_error,
     })
 }
 
-type Cache = HashMap<(Page, bool), (Instant, Result<Reading, String>)>;
+type Cache = HashMap<(String, bool), (Instant, Result<Reading, String>)>;
 #[derive(Default)]
 pub struct StatusState {
     cache: tokio::sync::Mutex<Cache>,
@@ -617,30 +974,32 @@ impl StatusState {
     async fn reading(
         &self,
         client: &reqwest::Client,
-        page: Page,
+        provider: &str,
         history: bool,
     ) -> Result<Reading, String> {
         // One in-flight public request per cache key. Failures are cached too;
         // opening a pane repeatedly cannot hammer a publisher or show stale green.
+        let key = (provider.to_string(), history);
         let mut cache = self.cache.lock().await;
-        if let Some((at, result)) = cache.get(&(page, history)) {
+        if let Some((at, result)) = cache.get(&key) {
             if at.elapsed() < INTERVAL {
                 return result.clone();
             }
         }
         if !history {
-            if let Some((at, Ok(result))) = cache.get(&(page, true)) {
+            if let Some((at, Ok(result))) = cache.get(&(provider.to_string(), true)) {
                 if at.elapsed() < INTERVAL {
                     return Ok(result.clone());
                 }
             }
         }
         let asked = Instant::now();
-        let result = read(client, page, history).await;
-        cache.insert((page, history), (asked, result.clone()));
+        let result = read(client, provider, history).await;
+        cache.insert(key, (asked, result.clone()));
         result
     }
 }
+
 #[tauri::command]
 pub async fn get_service_status(
     state: State<'_, crate::AppState>,
@@ -654,47 +1013,64 @@ pub async fn get_service_status(
         .find(|a| a.id == provider)
         .map(|a| a.provider.as_str())
         .unwrap_or(&provider);
-    let page = Page::from_provider(base).ok_or("此服务没有受支持的官方状态页")?;
+    let page = page(base).ok_or("此服务没有受支持的官方状态页")?;
     let ctx = crate::providers::Ctx::current(&state.ctx, &prefs.network_proxy)
         .map_err(|_| "无法使用当前代理访问官方状态页")?;
-    status.reading(&ctx.client, page, true).await
+    status.reading(&ctx.client, page.provider, true).await
 }
 
+// MARK: - Notifications
+
+/// What the user has already been told about each provider's page.
+///
+/// Kept in its own file (`status-alerts.json`), deliberately not a field on the
+/// limit-warning memory: that type decodes as a whole, so a missing key would
+/// throw away every limit already warned about.
 #[derive(Default, Clone, Serialize, Deserialize)]
 #[serde(default)]
 struct OutageMemory {
-    announced: HashMap<Page, HashMap<String, Health>>,
+    /// Provider id → component id → the state last announced or recorded.
+    announced: HashMap<String, HashMap<String, Health>>,
+}
+struct Change {
+    worse: Vec<Component>,
+    recovered: Vec<Component>,
 }
 impl OutageMemory {
-    fn changes(&mut self, page: Page, components: &[Component]) -> Vec<(String, String)> {
-        let before = self.announced.remove(&page).unwrap_or_default();
+    /// What is news, and what to remember. Pure: no clock, disk or window.
+    fn changes(&mut self, provider: &str, components: &[Component]) -> Change {
+        let before = self.announced.remove(provider).unwrap_or_default();
         let mut next = HashMap::new();
-        let mut notices = vec![];
-        for c in components.iter().filter(|c| page.relevant(c)) {
+        let mut change = Change {
+            worse: vec![],
+            recovered: vec![],
+        };
+        for c in components {
             let old = before.get(&c.id).copied();
             if c.state.outage() {
-                if old.map_or(true, |s| c.state.severity() > s.severity()) {
-                    notices.push((
-                        "服务故障".into(),
-                        format!("{}：{}", c.name, c.state.title()),
-                    ))
+                if old.is_none_or(|s| c.state.severity() > s.severity()) {
+                    change.worse.push(c.clone());
                 }
+                // Still down but no worse is recorded without a word, so that
+                // getting worse again is news again.
                 next.insert(c.id.clone(), c.state);
             } else if c.state == Health::Operational {
                 if old.is_some() {
-                    notices.push(("服务已恢复".into(), format!("{}：运行正常", c.name)))
+                    change.recovered.push(c.clone());
                 }
             } else if let Some(old) = old {
                 next.insert(c.id.clone(), old);
             }
         }
-        if !next.is_empty() {
-            self.announced.insert(page, next);
+        if next.is_empty() {
+            self.announced.remove(provider);
+        } else {
+            self.announced.insert(provider.to_string(), next);
         }
-        notices
+        change
     }
-    fn keep(&mut self, pages: &HashSet<Page>) {
-        self.announced.retain(|p, _| pages.contains(p));
+    fn keep(&mut self, providers: &HashSet<String>) {
+        self.announced.retain(|p, _| providers.contains(p));
     }
     fn load() -> Self {
         crate::settings::directory()
@@ -713,32 +1089,73 @@ impl OutageMemory {
             .map_err(|e| e.to_string())
     }
 }
+
+/// The providers whose pages are watched right now, in the original's order.
+fn watched(prefs: &crate::preferences::Preferences) -> Vec<&'static Page> {
+    if !prefs.alerts.on_service_outage {
+        return vec![];
+    }
+    let mut pages = prefs
+        .enabled_providers
+        .iter()
+        .filter_map(|id| {
+            let base = prefs
+                .accounts
+                .iter()
+                .find(|a| &a.id == id)
+                .map(|a| a.provider.as_str())
+                .unwrap_or(id);
+            page(base)
+        })
+        .collect::<Vec<_>>();
+    pages.sort_by_key(|p| p.provider);
+    pages.dedup_by_key(|p| p.provider);
+    pages
+}
+
 pub fn preferences_changed(app: &tauri::AppHandle) {
     let state = app.state::<crate::AppState>();
     let prefs = state.preferences.lock().unwrap().clone();
-    let pages = if prefs.alerts.on_service_outage {
-        prefs
-            .enabled_providers
-            .iter()
-            .filter_map(|id| {
-                let base = prefs
-                    .accounts
-                    .iter()
-                    .find(|a| &a.id == id)
-                    .map(|a| a.provider.as_str())
-                    .unwrap_or(id);
-                Page::from_provider(base)
-            })
-            .collect()
-    } else {
-        HashSet::new()
-    };
+    let watching = watched(&prefs);
+    let ids = watching
+        .iter()
+        .map(|p| p.provider.to_string())
+        .collect::<HashSet<_>>();
     let status = app.state::<StatusState>();
     let mut memory = status.memory.lock().unwrap();
-    memory.keep(&pages);
+    memory.keep(&ids);
     let _ = memory.save();
     status.wake.notify_one();
 }
+
+/// One notification per provider, and never about an outage nobody heard of.
+fn notice(page: &Page, change: &Change) -> Option<String> {
+    let list = |rows: &[Component], states: bool| {
+        rows.iter()
+            .map(|c| {
+                if states {
+                    format!("{}（{}）", c.name, c.state.phrase())
+                } else {
+                    c.name.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("、")
+    };
+    let mut parts = vec![];
+    if !change.worse.is_empty() {
+        parts.push(format!(
+            "{} 报告：{}。",
+            page.company,
+            list(&change.worse, true)
+        ));
+    }
+    if !change.recovered.is_empty() {
+        parts.push(format!("恢复正常：{}。", list(&change.recovered, false)));
+    }
+    (!parts.is_empty()).then(|| parts.join(" "))
+}
+
 pub fn watch(app: tauri::AppHandle) {
     *app.state::<StatusState>().memory.lock().unwrap() = OutageMemory::load();
     tauri::async_runtime::spawn(async move {
@@ -746,60 +1163,60 @@ pub fn watch(app: tauri::AppHandle) {
             let state = app.state::<crate::AppState>();
             let status = app.state::<StatusState>();
             let prefs = state.preferences.lock().unwrap().clone();
-            let pages = if prefs.alerts.on_service_outage {
-                prefs
-                    .enabled_providers
-                    .iter()
-                    .filter_map(|id| {
-                        let base = prefs
-                            .accounts
-                            .iter()
-                            .find(|a| &a.id == id)
-                            .map(|a| a.provider.as_str())
-                            .unwrap_or(id);
-                        Page::from_provider(base)
-                    })
-                    .collect::<HashSet<_>>()
-            } else {
-                HashSet::new()
-            };
+            let watching = watched(&prefs);
             {
                 let mut memory = status.memory.lock().unwrap();
-                memory.keep(&pages);
+                memory.keep(
+                    &watching
+                        .iter()
+                        .map(|p| p.provider.to_string())
+                        .collect::<HashSet<_>>(),
+                );
                 let _ = memory.save();
             }
-            for page in pages {
+            // A company's page is read once for every provider on it.
+            let mut feeds = watching
+                .iter()
+                .map(|p| p.feed)
+                .collect::<Vec<_>>();
+            feeds.sort_by_key(|f| (*f).url());
+            feeds.dedup();
+            for feed in feeds {
                 let ctx = match crate::providers::Ctx::current(&state.ctx, &prefs.network_proxy) {
                     Ok(c) => c,
                     Err(_) => continue,
                 };
-                if let Ok(reading) = status.reading(&ctx.client, page, false).await {
-                    // Recheck after network await: disabling a provider/notification
-                    // must prevent an already-running read from sending anything.
-                    let current = state.preferences.lock().unwrap().clone();
-                    let watching = current.alerts.on_service_outage
-                        && current.enabled_providers.iter().any(|id| {
-                            let base = current
-                                .accounts
-                                .iter()
-                                .find(|a| &a.id == id)
-                                .map(|a| a.provider.as_str())
-                                .unwrap_or(id);
-                            Page::from_provider(base) == Some(page)
-                        });
-                    if !watching {
+                let Some(components) = current(&ctx.client, feed).await else {
+                    continue;
+                };
+                for page in watching.iter().filter(|p| p.feed == feed) {
+                    // Recheck after the network await: disabling a provider or
+                    // the alert must stop a read already under way.
+                    let live = {
+                        let current = state.preferences.lock().unwrap().clone();
+                        let current_pages = watched(&current);
+                        let still = current_pages.iter().any(|p| p.provider == page.provider);
+                        let ctx_ok = current.network_proxy == prefs.network_proxy;
+                        still && ctx_ok
+                    };
+                    if !live {
                         continue;
                     }
+                    let shown = components
+                        .iter()
+                        .filter(|c| page.notifies_about(c))
+                        .cloned()
+                        .collect::<Vec<_>>();
                     let mut memory = status.memory.lock().unwrap();
                     let old = memory.clone();
-                    let notices = memory.changes(page, &reading.components);
+                    let change = memory.changes(page.provider, &shown);
                     use tauri_plugin_notification::NotificationExt;
                     let mut delivered = true;
-                    for (title, body) in notices {
+                    if let Some(body) = notice(page, &change) {
                         if app
                             .notification()
                             .builder()
-                            .title(format!("Pulse · {} · {title}", page.key()))
+                            .title(format!("Pulse · {} · 服务状态", page.provider))
                             .body(body)
                             .show()
                             .is_err()
@@ -819,208 +1236,4 @@ pub fn watch(app: tauri::AppHandle) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    fn fixture(name: &str) -> Value {
-        serde_json::from_str(match name {
-            "openai" => {
-                include_str!("../tests/fixtures/service-status/openai-status-operational.json")
-            }
-            "incident" => {
-                include_str!("../tests/fixtures/service-status/openai-status-incident.json")
-            }
-            "impacts" => {
-                include_str!("../tests/fixtures/service-status/openai-status-impacts.json")
-            }
-            "claude" => include_str!("../tests/fixtures/service-status/claude-status-summary.json"),
-            _ => include_str!("../tests/fixtures/service-status/claude-status-uptime.json"),
-        })
-        .unwrap()
-    }
-    fn deepseek() -> Value {
-        flashcat_data(include_str!(
-            "../tests/fixtures/service-status/deepseek-status-page.html"
-        ))
-        .unwrap()
-    }
-    fn days(count: i64) -> Vec<(String, i64, i64)> {
-        let offset = chrono::FixedOffset::east_opt(28800).unwrap();
-        let date = NaiveDate::from_ymd_opt(2026, 10, 4).unwrap();
-        (0..count)
-            .rev()
-            .map(|i| {
-                let d = date - chrono::Duration::days(i);
-                let a = offset
-                    .from_local_datetime(&d.and_hms_opt(0, 0, 0).unwrap())
-                    .unwrap()
-                    .timestamp();
-                (d.to_string(), a, a + 86400)
-            })
-            .collect()
-    }
-    fn bars(c: &Component) -> String {
-        c.days
-            .iter()
-            .map(|d| match d.state {
-                None => '-',
-                Some(Health::Operational) => '0',
-                Some(Health::Degraded) => '1',
-                Some(Health::PartialOutage) => '2',
-                Some(Health::FullOutage) => '3',
-                Some(Health::Maintenance) => 'm',
-                _ => '?',
-            })
-            .collect()
-    }
-    #[test]
-    fn codex_visible_group_and_affected_states() {
-        let c = openai_summary(&fixture("openai")).unwrap();
-        assert_eq!(
-            c.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
-            ["Codex Web", "Codex API", "CLI", "VS Code extension"]
-        );
-        assert!(c.iter().all(|c| c.state == Health::Operational));
-        let c = openai_summary(&fixture("incident")).unwrap();
-        assert_eq!(
-            c.iter().map(|c| c.state).collect::<Vec<_>>(),
-            [
-                Health::Degraded,
-                Health::Operational,
-                Health::FullOutage,
-                Health::Unrecognised
-            ]
-        );
-        assert!(openai_summary(&serde_json::json!({})).is_err());
-    }
-    #[test]
-    fn openai_history_matches_every_original_bar_and_official_uptime() {
-        let mut c = openai_summary(&fixture("openai")).unwrap();
-        impact_history(&mut c, &fixture("impacts"), &days(91), 1791096000, false).unwrap();
-        assert_eq!(bars(&c[0]),"0000000000000010011100000000000000000000000000000000000000011000000000000000000000300010000");
-        assert_eq!(bars(&c[1]),"0000000000000000011100000000000000000000000000100000000000011000000000000000000000300010000");
-        assert_eq!(bars(&c[2]),"0000000000001010011100000000000000000000000000000000000000011000000000000000000000300010000");
-        assert_eq!(bars(&c[3]), bars(&c[0]));
-        assert!(c.iter().all(|c| c.uptime == Some(99.95)));
-        assert_eq!(c[0].days.len(), 91);
-    }
-    #[test]
-    fn claude_colours_and_unknown_history_preserve_current() {
-        let mut c = claude_summary(&fixture("claude")).unwrap();
-        assert_eq!(c.len(), 6);
-        claude_history(&mut c, &fixture("uptime")).unwrap();
-        let code = c.iter().find(|c| c.id == "yyzkbfz2thpt").unwrap();
-        assert_eq!(code.days.len(), 90);
-        assert_eq!(code.days[0].state, Some(Health::PartialOutage));
-        assert_eq!(code.days[0].colour.as_deref(), Some("#e75f36"));
-        assert_eq!(code.days[1].colour.as_deref(), Some("#76ad2a"));
-        for c in &c {
-            for d in &c.days {
-                assert_eq!(
-                    d.colour.as_deref() == Some("#76ad2a"),
-                    d.state == Some(Health::Operational)
-                )
-            }
-        }
-        let mut current = claude_summary(&fixture("claude")).unwrap();
-        assert!(claude_history(&mut current, &serde_json::json!({})).is_err());
-        assert!(current.iter().all(|c| c.days.is_empty()));
-    }
-    #[test]
-    fn deepseek_flight_data_component_order_and_every_original_bar() {
-        let v = deepseek();
-        let now = DateTime::parse_from_rfc3339("2026-10-04T16:00:00+08:00")
-            .unwrap()
-            .timestamp();
-        let mut c = flashcat_summary(&v, now).unwrap();
-        assert_eq!(c.len(), 5);
-        assert_eq!(c.iter().filter(|c| Page::DeepSeek.relevant(c)).count(), 2);
-        impact_history(&mut c, &v, &days(90), now, true).unwrap();
-        assert_eq!(c.iter().map(bars).collect::<Vec<_>>(),[
-            "000000000000000001000101100120020000001000010000000000000300000000000010100000220000000100",
-            "000000000000000001000100200020020010000000010120000000000000000000000020000100220000000100",
-            "000000000000000200000000100000000000000000000000000000000000000000000020000100220000000100",
-            "---------------000000000000000000000000000000000000000000000000000000000000000000000000000",
-            "---------------000000020000000000000003000200000000000000000000000000000000000000000000000"]);
-        assert_eq!(
-            c.iter().map(|c| c.uptime).collect::<Vec<_>>(),
-            [
-                Some(99.92),
-                Some(99.69),
-                Some(99.68),
-                Some(100.),
-                Some(99.91)
-            ]
-        );
-        assert!(flashcat_data("<html>unknown redesign</html>").is_err());
-    }
-    #[test]
-    fn partial_colours_invalid_dates_and_before_data_are_not_fabricated() {
-        let mut c = vec![component("x", "X", Health::Degraded)];
-        let v = serde_json::json!({"timelines":{"x":{"component":{"startDate":"2026-10-02"},"days":[{"date":"2026-10-01"},{"date":"2026-10-02","outages":{"m":60}},{"date":"invalid"},{"date":"2026-10-03","outages":{"p":60}}]}},"components":{"x":"<rect fill=\"#000000\" class=\"uptime-day\"/>"},"values":[{"component":"x","ninety":101}]});
-        claude_history(&mut c, &v).unwrap();
-        assert_eq!(bars(&c[0]), "-32");
-        assert!(c[0].days.iter().all(|d| d.colour.is_none()));
-        assert_eq!(c[0].uptime, None);
-        assert_eq!(c[0].state, Health::Degraded);
-    }
-    #[test]
-    fn malformed_unrelated_components_do_not_drop_valid_rows() {
-        let v = serde_json::json!({"components":[{"id":"bad","name":null},{"id":"group","name":"Group","status":"operational","group":true},{"id":"quiet","name":"Quiet","status":"operational","only_show_if_degraded":true},{"id":"a","name":"API","status":"new-state","position":2}]});
-        let c = claude_summary(&v).unwrap();
-        assert_eq!(c.len(), 1);
-        assert_eq!(c[0].state, Health::Unrecognised);
-    }
-    #[test]
-    fn outages_deduplicate_escalate_deescalate_recover_and_survive_serialization() {
-        let mut m = OutageMemory::default();
-        let c = |s| vec![component("a", "API", s)];
-        assert!(m.changes(Page::OpenAI, &c(Health::Operational)).is_empty());
-        assert_eq!(m.changes(Page::OpenAI, &c(Health::Degraded)).len(), 1);
-        let serialized = serde_json::to_string(&m).unwrap();
-        let mut m: OutageMemory = serde_json::from_str(&serialized).unwrap();
-        assert!(m.changes(Page::OpenAI, &c(Health::Degraded)).is_empty());
-        assert_eq!(m.changes(Page::OpenAI, &c(Health::FullOutage)).len(), 1);
-        assert!(m
-            .changes(Page::OpenAI, &c(Health::PartialOutage))
-            .is_empty());
-        assert_eq!(m.changes(Page::OpenAI, &c(Health::FullOutage)).len(), 1);
-        assert!(m.changes(Page::OpenAI, &c(Health::Maintenance)).is_empty());
-        assert!(m.changes(Page::OpenAI, &c(Health::Unrecognised)).is_empty());
-        assert_eq!(m.changes(Page::OpenAI, &c(Health::Operational)).len(), 1);
-        assert!(m.changes(Page::OpenAI, &c(Health::Operational)).is_empty());
-    }
-    #[test]
-    fn disappearing_disabled_and_unrelated_components_never_claim_recovery() {
-        let mut m = OutageMemory::default();
-        let api = component("yyzkbfz2thpt", "Claude Code", Health::Degraded);
-        let chat = component("chat", "claude.ai", Health::FullOutage);
-        assert_eq!(m.changes(Page::Claude, &[api.clone(), chat]).len(), 1);
-        assert!(m.changes(Page::Claude, &[]).is_empty());
-        let mut healthy = api.clone();
-        healthy.state = Health::Operational;
-        assert!(m.changes(Page::Claude, &[healthy]).is_empty());
-        assert_eq!(m.changes(Page::Claude, &[api.clone()]).len(), 1);
-        m.keep(&HashSet::new());
-        assert_eq!(m.changes(Page::Claude, &[api]).len(), 1);
-    }
-    #[test]
-    fn history_at_exact_boundaries_and_since_are_calendar_intersections() {
-        let mut c = vec![component("x", "X", Health::Operational)];
-        let v = serde_json::json!({"component_impacts":[{"component_id":"x","status":"full_outage","start_at_seconds":10,"end_at_seconds":20},{"component_id":"x","status":"partial_outage","start_at_seconds":30,"end_at_seconds":null},{"component_id":"x","status":"full_outage","start_at_seconds":15,"end_at_seconds":"broken"}],"component_uptimes":[{"component_id":"x","available_since_seconds":10,"uptime":99.95}]});
-        impact_history(
-            &mut c,
-            &v,
-            &[
-                ("a".into(), 0, 10),
-                ("b".into(), 10, 20),
-                ("c".into(), 20, 30),
-                ("d".into(), 30, 40),
-            ],
-            35,
-            true,
-        )
-        .unwrap();
-        assert_eq!(bars(&c[0]), "-302");
-        assert_eq!(c[0].uptime, Some(99.95));
-    }
-}
+mod tests;

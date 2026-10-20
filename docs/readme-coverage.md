@@ -10,7 +10,7 @@
 
 2026-10-03 再次按 Windows 0.1.7 源码与原版提交 `397c8fc4f1bd52180a452d2f3f0c099def97cf69` 核对，并在线读取该提交的中文 README。此前清单漏记的菜单栏用量、重置后自动开启窗口、完整设置入口及登录回退已补入。此处是源码与已有验收证据审计，不代表本次重新执行真实账号或桌面交互测试。
 
-这张 38 行的表是按**界面**组织的：一个面板、一组圆环、一页 Token 消耗各占一行，所以它能说明每块界面还差什么，不能说明原版有多少整块能力在表里根本还没有行。官方服务状态（原版 44 个服务商）、货币换算、回顾与 Token 消耗的时间区间、扩展指标可视化、从截屏中隐藏、statusline 安装、账号面板的一整套分组都属于后者，单独列在下面的[「未覆盖的整块能力」](#未覆盖的整块能力)一节，同样给出原版位置与这里的现状。
+这张 38 行的表是按**界面**组织的：一个面板、一组圆环、一页 Token 消耗各占一行，所以它能说明每块界面还差什么，不能说明原版有多少整块能力在表里根本还没有行。官方服务状态（原版 44 个服务商）、货币换算、回顾与 Token 消耗的时间区间、扩展指标可视化、从截屏中隐藏、statusline 安装、账号面板的一整套分组都属于后者，单独列在下面的[「未覆盖的整块能力」](#未覆盖的整块能力)一节，同样给出原版位置与这里的现状。其中官方服务状态与货币换算已在 0.1.18 接通，该节保留这两行是为了让「原版有、这里也有」和其余五块并排可查。
 
 | 官方能力 | 对应原版源码 / 文档 | Windows 当前状态 / 验收缺口 |
 | --- | --- | --- |
@@ -49,7 +49,7 @@
 | 用户扩展 | Docs/extensions.md | 已接通清单扫描（`pulse-extension.json`，含 schema 版本、id 校验、可执行文件必须在自己的文件夹内）、默认全部关闭、逐扩展开关、1–60 秒运行时限、输出上限与 JSON 校验、失败分类（找不到程序 / 超时 / 非零退出）与中文说明；每个扩展作为一个账号出现在面板与关于页，设置页有「用户扩展」入口、一键打开文件夹、重新读取，扩展自己的账号页显示程序路径、时限与标识。扩展不获得任何凭据 |
 | 首次选择 / 升级提示 | Docs/architecture.md | 可补齐：首次全不选、完成后才采集、禁用不请求已接通；升级新来源一次性建议未覆盖 |
 | 系统代理 / 手动代理 / 自适应刷新 | Docs/networking.md、refresh-and-data.md | 可补齐＋待验收＋原版到此为止：系统代理、手动间隔、按服务的 2/5/15/30 分钟单次调度、真实 Windows 节电/低电量约束、系统恢复通知及时间跳变到期重查已接通；活动/查看/额度变化更新节奏，外部消费最多 5 分钟，隐藏或节电 30 分钟，频繁活动不推迟到期请求；0.1.10 已接通 HTTP / SOCKS5 手动代理及 Kiro / Alibaba 辅助进程环境、取消旧刷新与启用账号重查；缺 direct 与 systemRequired 两种模式，也缺热压力与独立显示器休眠信号；PAC 与代理认证原版同样没有，不算缺口；真实休眠恢复未操控验收 |
-| 完整设置导航与页面 | Settings/SettingsView.swift | 可补齐：0.1.10 新增网络与刷新、关于，九个固定入口及账号页按面板 / 应用 / 账号分组；版本、更新、源码、致谢、许可已接通；0.1.18 新增「用户扩展」入口，以及各服务页内的「自动开启窗口」分组；开发者集成与原版部分设置仍缺，不能以侧栏图标一致表示设置 UI 已全部还原 |
+| 完整设置导航与页面 | Settings/SettingsView.swift | 可补齐：0.1.10 新增网络与刷新、关于，九个固定入口及账号页按面板 / 应用 / 账号分组；版本、更新、源码、致谢、许可已接通；0.1.18 新增「用户扩展」入口、各服务页内的「自动开启窗口」分组，以及通用页里的「货币」分组（显示货币、手填汇率、来源署名）；开发者集成与原版部分设置仍缺，不能以侧栏图标一致表示设置 UI 已全部还原 |
 | 手动凭据本地加密 | Auth；README 隐私章节 | 待验收：Windows 当前用户 DPAPI 加密完整凭据文档，旧 JSON 读取后原子迁移，保留 Cookie/站点等字段；损坏或不可解密文件不覆盖、不降级明文，设置显示错误；同用户往返与损坏文件有测试，跨 Windows 用户场景尚未实测 |
 | 安装、开机启动、更新、托盘行为 | App；Docs/releasing.md | 待验收：NSIS/MSI、单实例、托盘、实际登录启动状态与设置已接通；第二次启动打开设置；打包后修复本次产物的 Medium 完整性标签以避免 NSIS 临时文件报错；签名更新器支持本机发布目录与 GitHub Releases，启动/定期检查、版本提示、下载进度和更新重启入口已接通；签名绑定版本，拒绝降级；登录启动写入与真实覆盖重启还需验收 |
 
@@ -120,14 +120,16 @@
 
 ## 未覆盖的整块能力
 
-上面那张 38 行的表是按**界面**组织的：一个面板、一组圆环、一页 Token 消耗各占一行。原版 README 里另有一些整块能力在表里连一行都没有，所以「13 已接通 / 25 有未完成项 / 0 缺失」不是差距的全貌。这一节单独列出它们，每项都给原版位置和这里的现状，不用「部分」概括。
+上面那张 38 行的表是按**界面**组织的：一个面板、一组圆环、一页 Token 消耗各占一行。原版 README 里另有一些整块能力在表里连一行都没有，所以「13 已接通 / 25 有未完成项 / 0 缺失」不是差距的全貌。这一节单独列出它们，每项都给原版位置和这里的现状，不用「部分」概括。其中 A1、A2 已随 0.1.18 接通，逐项现状见下表对应行。
 
-### A. 原版有、这里整块没有
+### A. 原版有、表里没有行：本轮补掉两块，仍缺五块
+
+A1（官方服务状态）与 A2（货币换算）本轮已接通，保留行位是为了让「原版有、Windows 现在也有」这件事和其余五块并排可查；A3～A7 仍是原版有、这里没有。
 
 | # | 能力 | 原版在这里 | 这里现在在这里 | 具体差什么 |
 | --- | --- | --- | --- | --- |
-| A1 | 官方服务状态：44 个服务商、12 种 feed 形态 | `Providers/Status/` 共 1804 行 —— `StatusPage.swift`（331 行，`of(_:)` 在 `:109`；里面 46 个 `case .x`，其中 `china`／`international` 是 MiniMax 两个店面的分支，减去后是 **44 个服务商**，与原版 README 的 44 providers 一致；`matches` 在 `:58`，`notifiesAbout` 在 `:101`，`page` 在 `:286`）、`ServiceStatus.swift`（300）、`ServiceStatus+Companies.swift`（235）、`ServiceStatus+Monitors.swift`（229）、`ServiceStatus+IncidentIO.swift`（222）、`ServiceStatus+Flashcat.swift`（212）、`ServiceStatus+Statuspage.swift`（161）、`ServiceStatus+BetterStack.swift`（114）。12 种形态在 `StatusPage.swift:9-40` | `src-tauri/src/service_status.rs`（1026 行）里 `pub enum Page` 只有 `OpenAI`／`Claude`／`DeepSeek` 三个（`:18`），`from_provider` 只认三个 id（`:31`）；解析器只有 `openai_summary`（`:150`）、`claude_summary`（`:178`）、`flashcat_data`（`:211`）三个，合起来只覆盖 statuspage 与 flashcat 两种形态；`src/Settings.tsx:164` 只给 `['codex','claude-code','deepseek']` 渲染 `ServiceStatusGroup`，而 `src/ServiceStatusGroup.tsx:9` 的 `hosts` 也只有这三个域名 | 缺 41 个服务商的状态页地址和「哪些组件算这个服务商」的规则（`matches`／`notifiesAbout` 的等价物），以及 12 种形态里剩下的 10 种（incidentIO、betterStack、instatus、uptimeRobot、upptime、gatus、openCode、deepInfra、ibmBob、googleCloud）；宕机通知也只对三个服务商生效 |
-| A2 | 货币换算 7 种 | `Usage/Money.swift`（193 行：`enum DisplayCurrency` 在 `:13`，`usd`／`cny`／`hkd`／`twd`／`jpy`／`krw`／`rub` 七种在 `:14-20`；`Money.converted` 在 `:105`，`format` 在 `:145`，`symbol` 在 `:184`）、`Usage/ExchangeRates.swift`（161 行，源是 ExchangeRate-API 开放端点，每天一次，只在用户选了非美元时才联网，`ExchangeRateKeeper` 在 `:111`，落盘 `exchange-rates.json`）、`Settings/CurrencySettingsGroup.swift`（134 行）、`App/AppSettings.swift:141 displayCurrency`／`:148 manualExchangeRates`／`:155 exchangeRates`、`App/AppSettings+Application.swift:121 moneyIdentity` | 完全没有：`src/token-spend/summary.ts:99-102` 的 `formatCost` 硬编码 `US$`；`US$` 还写死在 `src/token-spend/TokenSpendPane.tsx:125,146,163`、`src/token-spend/RecapPane.tsx:23`（月订阅价标签）、`src/OpenCodeConsoleGroup.tsx:21`；`src/preferences.ts` 没有任何 currency 字段 | 缺设置项、汇率抓取与落盘、手动汇率优先于抓取，以及 5 个前端文件里所有金额格式化点改为按所选货币与 locale 输出 |
+| A1 | 官方服务状态：44 个服务商、12 种 feed 形态 | `Providers/Status/` 共 1804 行 —— `StatusPage.swift`（331 行，`of(_:)` 在 `:109`；46 个 `case .x`，其中 MiniMax 的 `china`／`international` 两个店面在 Windows 侧是两个 provider id，减去后是 **44 个服务商**；`matches` 在 `:58`，`notifiesAbout` 在 `:101`，`page` 在 `:286`）、`ServiceStatus.swift`（300）、`+Companies`（235）、`+Monitors`（229）、`+IncidentIO`（222）、`+Flashcat`（212）、`+Statuspage`（161）、`+BetterStack`（114） | **已接通**（0.1.18 本轮）：`src-tauri/src/service_status.rs` 重写为目录表 —— `static CATALOGUE` 45 条（44 个服务商 + `minimax-cn` 这个第二个店面），`Page{provider,address,company,feed,shows,notifies,day_count}`，`Rule` 五态（`All`／`Ids`／`Groups`／`NameContains`／`Except`）替代原来的 `Page::relevant`；`src-tauri/src/service_status/feeds.rs` 978 行是 12 种形态的解析器（statuspage、incidentIO、flashcat、betterStack、instatus、upptime、gatus、uptimeRobot、openCode、deepInfra、ibmBob、googleCloud）；`ServiceStatusGroup` 由 `status_pages` 命令决定渲染哪家、`data-palette` 走原版 7 组配色，`Settings.tsx` 不再把服务商写死成三个；宕机通知改为**按 feed 读一次**再按 `notifiesAbout` 分发（`OutageMemory` 按 provider id 记账） | 代码与 fixture 层面对齐；缺口只剩真机验收：44 个地址与组件规则要逐家打真实响应确认，`gemini-cli`／`command-code`／`hugging-face` 三家在本机网络环境下请求超时（`curl` 同样超时），未取得真实响应，不算已验证；宕机通知要真实宕机才能验 |
+| A2 | 货币换算 7 种 | `Usage/Money.swift`（193 行：`enum DisplayCurrency` 在 `:13`，`usd`／`cny`／`hkd`／`twd`／`jpy`／`krw`／`rub` 在 `:14-20`；`Money.converted` 在 `:105`，`format` 在 `:145`，`symbol` 在 `:184`）、`Usage/ExchangeRates.swift`（161 行：`https://open.er-api.com/v6/latest/USD`，每天约一次，只在选了非美元时才联网，`ExchangeRateKeeper` 在 `:111`，落盘 `exchange-rates.json`）、`Settings/CurrencySettingsGroup.swift`（134 行）、`App/AppSettings.swift:141 displayCurrency`／`:148 manualExchangeRates`／`:155 exchangeRates` | **已接通**（0.1.18 本轮）：`src-tauri/src/exchange_rates.rs` 是抓取、`parse` 与落盘（`exchange-rates.json`，`MINIMUM_INTERVAL` 1 小时，`Stored{updatedAt,nextUpdateAt,fetchedAt,rates}`）；`src-tauri/src/preferences.rs:58-68` 加 `display_currency` 与 `manual_exchange_rates`，`normalize()` 丢弃非法货币与不可用汇率；`get_exchange_rates` 命令 + `watch()` 只在非美元时联网；`src/money.ts` 是 7 种货币的 `format`／`converted`／`symbol`（窄写法：`$`／`HK$`／`NT$`／`¥`／`₩`／`₽`，`0 < amount < unit` 打印 `< $0.01` 而不是 0，`|amount| >= 1000` 起不带小数），`formatCost` 与 Token 消耗、回顾、控制台、卡片全部改走它；`src/CurrencySettingsGroup.tsx` 是设置里的货币分组（手填汇率优先于抓取，显示来源与署名链接）；`useMoney()` 订阅快照，换汇率即重绘 | 代码与 fixture 层面对齐；缺口只剩真机：真实端点、离线回退与 429 （原版注释写明频繁请求会被 429 二十分钟）未在真实网络下验过；手动汇率输入的取舍与原版一致（负数、字母、零、超大值一律拒绝而不是悄悄改写） |
 | A3 | 回顾的时间粒度 4 档 + `--recap` 命令行 | `Usage/Recap.swift:20-30` 的 `enum Period` 有 `day`／`week`／`month`／`year` 四档；`Usage/RecapReport.swift:23 static let modeArgument = "--recap"`，`:69` 解析参数，支持 `--recap 2026-09`、`2026`、某一天、`week-YYYY-MM-DD` | `src/token-spend/RecapPane.tsx:23` 只有「月度」「年度」两个按钮；`src-tauri/src/main.rs:8` 只识别 `--json` 与 `--statusline`，没有 `--recap` 分支 | 缺 day 与 week 两档的口径和卡片内容，以及一个只读的命令行入口。月/年两档的数据模型与 8 张卡片已移植（`recap.ts`、`recap-renderer.ts`） |
 | A4 | Token 消耗时间区间 9 种 + 自定义 | `Settings/TokenSpendView.swift:999` 的 `enum SpendSpan`（文件 1115 行，定义在 `:999-1011`）：`today`／`week`／`month`／`quarter`／`thisMonth`／`lastMonth`／`thisYear`／`all`／`custom`；`:1004` 的注释写明「账单意义上的上个月不是最近 30 天」，`:1010` 的 `custom` 用 `AppSettings.spendCustomDays` | `src/token-spend/TokenSpendPane.tsx:32` 只有 `[['today','今天'],['week','最近 7 天'],['month','最近 30 天']]`；`src/token-spend/summary.ts:6-11` 的 `spanDays` 只有 `today`／`month`／默认 7 天三支 | 缺自然月、自然季、自然年、全部、自定义五种口径及各自标签。`summarizeBetween`（`summary.ts:76`）已经能接受任意起止日，所以这是口径与 UI 的补齐，不是数据层重写 |
 | A5 | 扩展指标的可视化 | `Settings/ExtensionMetricsGroup.swift`（86 行，`MetricSeriesChart` 在 `:39`）；原版卡片上也有扩展指标的趋势线 | 后端已解析并返回：`src-tauri/src/model.rs:161 metrics: Vec<UsageMetric>`（结构在 `:106` 与 `:121`），`src-tauri/src/extension.rs:538` 确实把 `report.metrics` 填进 `usage.metrics` | **前端从不渲染**：`grep -rn metrics src/` 只命中一个无关的 `set_panel_metrics`。数据已经到位，缺的是画图 |
@@ -155,18 +157,20 @@
 
 ### C. 能直接补代码 vs 必须真机或真账号验证
 
-**能直接补代码**（代码写出来就能用，fixture 能验）：A2 货币换算、A4 时间区间、A5 扩展指标渲染、A6 截屏隐藏、A7 statusline 安装、A3 的 day/week 两档与 `--recap` 入口、B 里除 `AccountConnectionGroup` 之外的多数分组。
+**能直接补代码**（代码写出来就能用，fixture 能验）：~~A2 货币换算~~（已完成）、~~A1 官方服务状态~~（已完成，见上表 A1 行）、A4 时间区间、A5 扩展指标渲染、A6 截屏隐藏、A7 statusline 安装、A3 的 day/week 两档与 `--recap` 入口、B 里除 `AccountConnectionGroup` 之外的多数分组。
 
-**必须真机或真账号验证**（代码写完也不算完成）：A1 的每个服务商状态页都要打真实响应确认地址与组件规则没写错；A2 的汇率抓取要验真实端点、离线回退与 429（`ExchangeRates.swift:1-18` 的注释写明每天约一次，频繁请求会被 429 二十分钟）；A6 要在真实 Windows 截屏/录屏工具下确认窗口确实不出现；A7 要在真实 shell 里确认提示符生效；A1 的宕机通知要真实宕机才能验。
+A1 与 A2 本轮已落地，代码与 fixture 层面的工作已经清零，剩下的都是下面那类「代码写完也不算完成」的验收。
+
+**必须真机或真账号验证**（代码写完也不算完成）：A1 的 44 个服务商状态页都要打真实响应确认地址与组件规则没写错（本轮已用 `cargo run --example status` 逐家探测，`codex`、`claude-code`、`deepseek`、`zed`、`opencode-go`、`hyper`、`cline-pass` 取得真实响应并通过，`gemini-cli`、`command-code`、`hugging-face` 在本机网络下超时、`curl` 同样超时，未取得真实响应，其余未逐家探测）；A2 的汇率抓取要验真实端点、离线回退与 429（`ExchangeRates.swift:1-18` 的注释写明每天约一次，频繁请求会被 429 二十分钟）；A6 要在真实 Windows 截屏/录屏工具下确认窗口确实不出现；A7 要在真实 shell 里确认提示符生效；A1 的宕机通知要真实宕机才能验。
 
 ### D. 建议的补齐顺序与工作量
 
 工作量是按相邻已有模块的规模估的，不是承诺值；同一阶段内的项改的文件基本不重叠，可以并行，唯一的交汇点是 `src/Settings.tsx`。
 
-**阶段一（你指定的两块，可并行）**
+**阶段一（已完成）**
 
-1. **A2 货币换算** —— 约 400～600 行（新增 Rust 约 250～350 行含汇率抓取与落盘，前端约 150～250 行），另加 1 个设置分组、5 个金额格式化点改造、`preferences.ts` 加字段。比 A1 小一个量级，但会把「所有金额」的表示方式统一掉，先做能避免后面每加一处金额都要再改一遍。
-2. **A1 官方服务状态** —— 约 1200～2000 行 Rust，测试同量级。拆开是：`StatusFeed` 形态枚举与 `StatusPage` 声明表 300～500 行（44 个服务商各 5～15 行规则）、10 个缺失形态的解析器各 60～150 行、通知与设置门控 100～200 行。建议一次只加一种形态，配一个 fixture 加一次真实探测，形态验完再补服务商条目，避免 46 家一起改完才发现某个形态解析是错的。
+1. **A2 货币换算** —— 估 400～600 行，实际 `src-tauri/src/exchange_rates.rs` 350 行 + `src/money.ts` 185 行 + `src/CurrencySettingsGroup.tsx` 109 行 + 两个测试文件 160 行，另加 `preferences.ts`／`preferences.rs` 字段与 5 个金额格式化点改造。比 A1 小一个量级，但会把「所有金额」的表示方式统一掉，所以先做。
+2. **A1 官方服务状态** —— 估 1200～2000 行 Rust，实际 `src-tauri/src/service_status.rs` 1239 行 + `src-tauri/src/service_status/feeds.rs` 978 行 + `src-tauri/src/service_status/tests.rs` 556 行（24 项测试），前端 `ServiceStatusGroup.tsx` 112 行 + `service-status.css` 17 行 + 55 行测试。拆开是：`StatusFeed` 形态枚举与 `StatusPage` 声明表 300～500 行（44 个服务商各 5～15 行规则）、10 个缺失形态的解析器各 60～150 行、通知与设置门控 100～200 行。建议一次只加一种形态，配一个 fixture 加一次真实探测，形态验完再补服务商条目，避免 46 家一起改完才发现某个形态解析是错的。
 
 **阶段二（前端小活，可并行）**
 
@@ -183,7 +187,9 @@
 
 ## 当前验证边界
 
-本轮（54 来源 + 自动开启窗口 + 用户扩展）验证：Rust 1150 项通过、35 项失败、2 项默认忽略；35 项失败按测试名与改动前基线逐条完全相同，全部是 macOS 上跑 Windows 路径 / PATH 的既有失败，没有新增失败。前端 210 项通过（21 个文件）、`tsc --noEmit` 与 `vite build` 通过。新代码的专项计数：10 个新 reader 模块 74 项、`window_starter` 18 项、`extension` 28 项、`extension_runner` 8 项，新增前端 4 项（`WindowStarterGroup.test.ts`）。本次另修掉一个测试自身的竞态：`extension_runner::tests::a_program_that_runs_past_its_limit_is_stopped` 在并行满载时 1 秒时限会先到、程序还没写出 pid 文件，导致误报；改为在时限内没启动起来时换更长时限重试，修复后连续 60 次完整套件零差异（修复前约每 95 次出现一次）。以上均为 fixture 与进程级验证，不代替真实账号、真实 CLI 发送、Windows 无窗口启动与真实扩展程序的实机验收。
+本轮（官方服务状态 44 服务商 / 12 种 feed + 货币换算）验证：Rust **1172 项通过、35 项失败、2 项默认忽略**；35 项失败按测试名与改动前基线逐条完全相同（`comm` 双向比对均为空），全部是 macOS 上跑 Windows 路径 / PATH 的既有失败，没有新增失败。前端 **241 项通过（24 个文件）**、`tsc --noEmit` 与 `vite build` 通过。新代码的专项计数：`service_status` 24 项（含 12 种形态各自的解析用例、44 条目录表的地址/公司/日数/不重复校验、`grok-bot` 与 `cursor` 共用 feed 但规则不同的用例、7 组配色、`OutageMemory` 的升级/恢复/序列化）、`exchange_rates` 与货币格式专项、前端 `money.test.ts` 与 `ServiceStatusGroup.test.ts`／`CurrencySettingsGroup.test.ts`。另用 `cargo run --example status` 对 `codex`、`claude-code`、`deepseek`、`zed`、`opencode-go`、`hyper`、`cline-pass` 取到真实响应；`gemini-cli`、`command-code`、`hugging-face` 在本机网络下超时（`curl` 同样超时），未取得真实响应。以上均为 fixture 与进程级验证，不代替 44 家状态页逐家的实机响应验收、真实宕机下的通知验收、真实汇率端点的联网/离线/429 验收，也不代替真实账号与 Windows 无窗口启动的实机验收。
+
+上一轮（54 来源 + 自动开启窗口 + 用户扩展）验证：Rust 1150 项通过、35 项失败、2 项默认忽略；35 项失败按测试名与改动前基线逐条完全相同，全部是 macOS 上跑 Windows 路径 / PATH 的既有失败，没有新增失败。前端 210 项通过（21 个文件）、`tsc --noEmit` 与 `vite build` 通过。新代码的专项计数：10 个新 reader 模块 74 项、`window_starter` 18 项、`extension` 28 项、`extension_runner` 8 项，新增前端 4 项（`WindowStarterGroup.test.ts`）。本次另修掉一个测试自身的竞态：`extension_runner::tests::a_program_that_runs_past_its_limit_is_stopped` 在并行满载时 1 秒时限会先到、程序还没写出 pid 文件，导致误报；改为在时限内没启动起来时换更长时限重试，修复后连续 60 次完整套件零差异（修复前约每 95 次出现一次）。以上均为 fixture 与进程级验证，不代替真实账号、真实 CLI 发送、Windows 无窗口启动与真实扩展程序的实机验收。
 
 0.1.10 本轮补齐网络与刷新、关于：861 项 Rust 回归（另 1 项默认忽略）、181 项前端测试、58 项完整浏览器流程及 13 项最终专项流程通过。原生 CONNECT 代理取消、重查与重启恢复验证见 [networking.md](networking.md)，发布及签名更新证据见 [release-0.1.10.json](release-0.1.10.json)。仍不声称 100% 功能覆盖。0.1.11 补回损坏 Windows 系统代理地址的启动容错，新增两项 Rust 回归；本次最终发布证据见 [release-0.1.11.json](release-0.1.11.json)。
 

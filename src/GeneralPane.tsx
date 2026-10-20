@@ -2,6 +2,8 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { captureShortcut, heldModifiers, shortcutLabel } from './shortcut'
 import { TrayPreferencesPane } from './TrayPreferencesPane'
+import { CurrencySettingsGroup } from './CurrencySettingsGroup'
+import type { Preferences } from './preferences'
 import { UpdatePane } from './UpdatePane'
 type Action='openSettings'|'togglePanel'
 interface ApplicationSettings {
@@ -12,8 +14,11 @@ const rows:{action:Action;title:string;subtitle:string}[]=[
   {action:'openSettings',title:'打开设置',subtitle:'从其他应用直接打开这个设置窗口。'},
   {action:'togglePanel',title:'显示或隐藏面板',subtitle:'显示用量面板，或将它隐藏。'},
 ]
-export interface GeneralPaneProps {onError?:(error:string|null)=>void}
-export function GeneralPane({onError}:GeneralPaneProps={}) {
+/** `preferences` and `onChange` are what the currency group under the
+ *  shortcuts needs; the rest of this pane reads the application settings by
+ *  itself. */
+export interface GeneralPaneProps {onError?:(error:string|null)=>void;preferences:Preferences;disabled?:boolean;onChange:(patch:Partial<Preferences>)=>void}
+export function GeneralPane({onError,preferences,disabled:windowDisabled,onChange}:GeneralPaneProps) {
   const [settings,setSettings]=useState<ApplicationSettings|null>(null),[loading,setLoading]=useState(true)
   const [readError,setReadError]=useState<string|null>(null),[errors,setErrors]=useState<Partial<Record<Action|'autostart',string>>>({})
   const [busy,setBusy]=useState<Action|'autostart'|null>(null),[recording,setRecording]=useState<Action|null>(null),[held,setHeld]=useState(''),[needsModifier,setNeedsModifier]=useState(false)
@@ -69,6 +74,7 @@ export function GeneralPane({onError}:GeneralPaneProps={}) {
         </div>
       </Row>
     })}</Group>
+    <CurrencySettingsGroup preferences={preferences} disabled={!!windowDisabled} onChange={onChange}/>
     <TrayPreferencesPane/>
     <UpdatePane/>
   </>

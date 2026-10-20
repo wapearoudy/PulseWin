@@ -9,6 +9,7 @@ import { quotaWarning } from './quotaPacing'
 import { creditText } from './creditAmount'
 import type { ProviderUsage, Snapshot, UsageWindow } from './types'
 import { amounts, dayKey, formatCost, shortTokens } from './token-spend/summary'
+import { useMoney } from './money'
 import { cardActivity, useCardHistory } from './panel/cardHistory'
 import './tray.css'
 
@@ -28,6 +29,7 @@ function resetText(w:UsageWindow,now:number){
 function updated(at:string,now:number){const age=now-Date.parse(at);return !Number.isFinite(age)?'更新时间未知':age<60000?'刚刚更新':`${Math.floor(age/60000)} 分钟前更新`}
 
 export default function TrayDashboard(){
+  useMoney()
   const {preferences:prefs,loaded,error:prefError}=usePreferences()
   const [snapshot,setSnapshot]=useState<Snapshot|null>(null),[selected,setSelected]=useState<string|null>(null)
   const [pages,setPages]=useState<Record<string,string>>({}),[error,setError]=useState<string|null>(null)

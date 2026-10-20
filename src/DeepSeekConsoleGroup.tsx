@@ -1,5 +1,6 @@
 import {useCallback,useEffect,useState,useRef} from 'react'
 import {invoke} from '@tauri-apps/api/core'
+import * as money from './money'
 interface Connection{connected:boolean}
 interface Day{date:string;input:number;output:number;cacheRead:number;tokens:string;cost:number|null;models:Record<string,number>}
 interface History{days:Day[];currency:string|null;checkedAt:string;notes:string[]}
@@ -16,7 +17,7 @@ export function DeepSeekConsoleGroup({enabled,onChanged}:{enabled:boolean;onChan
  {connection?.connected&&<div className="group-actions"><button disabled={busy} onClick={()=>{void action('remove_deepseek_console_login')}}>断开控制台</button><button disabled={busy||!enabled} onClick={()=>{void read(true)}}>刷新账单</button></div>}
  {error&&<p className="group-copy" role="alert">{error}</p>}{busy&&<p className="group-copy" role="status">正在处理控制台…</p>}
  {!enabled&&connection?.connected&&<p className="group-copy">启用 DeepSeek 后读取账单。</p>}
- {history&&<><p className="group-copy">最近检查：{new Date(history.checkedAt).toLocaleString()} · {history.currency??'未取得扣费币种'}</p><div className="group-copy console-billing-table"><table className="spend-table"><thead><tr><th>日期</th><th>输入</th><th>缓存读取</th><th>输出</th><th>Token</th><th>实际扣费</th></tr></thead><tbody>{days.map(d=><tr key={d.date}><th>{d.date}</th><td>{d.input.toLocaleString()}</td><td>{d.cacheRead.toLocaleString()}</td><td>{d.output.toLocaleString()}</td><td title={d.tokens}>{BigInt(d.tokens).toLocaleString()}</td><td>{d.cost===null?'—':`${history.currency??''} ${d.cost.toFixed(4)}`}</td></tr>)}</tbody></table><button onClick={()=>setAll(!all)}>{all?'收起到 7 天':'查看全部 30 天'}</button></div>{history.notes.length>0&&<p className="group-copy" role="alert">{history.notes.join(' ')}</p>}</>}
+ {history&&<><p className="group-copy">最近检查：{new Date(history.checkedAt).toLocaleString()} · {history.currency??'未取得扣费币种'}</p><div className="group-copy console-billing-table"><table className="spend-table"><thead><tr><th>日期</th><th>输入</th><th>缓存读取</th><th>输出</th><th>Token</th><th>实际扣费</th></tr></thead><tbody>{days.map(d=><tr key={d.date}><th>{d.date}</th><td>{d.input.toLocaleString()}</td><td>{d.cacheRead.toLocaleString()}</td><td>{d.output.toLocaleString()}</td><td title={d.tokens}>{BigInt(d.tokens).toLocaleString()}</td><td>{d.cost===null?'—':money.format(d.cost,history.currency??'USD')}</td></tr>)}</tbody></table><button onClick={()=>setAll(!all)}>{all?'收起到 7 天':'查看全部 30 天'}</button></div>{history.notes.length>0&&<p className="group-copy" role="alert">{history.notes.join(' ')}</p>}</>}
  <p className="group-copy">API Key 只能读取余额。控制台记录按天汇总，不推断每小时用量；不同币种不会相加。</p></div></section>
 }
 

@@ -14,6 +14,7 @@ import './settings.css'
 import { NotificationsPane, LowBalanceAlert } from './NotificationsPane'
 import { ServiceStatusGroup } from './ServiceStatusGroup'
 import { GeneralPane } from './GeneralPane'
+import { useMoney } from './money'
 import { NetworkPane } from './NetworkPane'
 import { AboutPane } from './AboutPane'
 import { PromptCacheGroup } from './PromptCacheGroup'
@@ -42,6 +43,7 @@ const settingsPanes:[string,string,ReactNode,string][]=[
 ]
 
 export default function Settings() {
+  useMoney()
   const { preferences: prefs, loaded, error: loadError } = usePreferences()
   const [providerRows, setProviders] = useState<ProviderSetting[]>([])
   const providers=useMemo(()=>providerRows.map(p=>({...p,name:prefs.accountLabels[p.id]??p.name})),[providerRows,prefs.accountLabels])
@@ -140,7 +142,7 @@ export default function Settings() {
         <Group title="面板"><Row title="位置" subtitle="靠近边缘停靠，也可以自由悬浮。"><select aria-label="面板位置" value={position} onChange={e=>{void setPanelPosition(e.target.value as typeof position).catch(err=>setError(String(err)))}}><option value="left">左侧</option><option value="top">顶部</option><option value="bottom">底部</option><option value="free">竖向自由</option><option value="free-horizontal">横向自由</option><option value="right">右侧</option></select></Row><Toggle title="全屏时隐藏" subtitle="在面板所在屏幕播放全屏内容时暂时隐藏，退出后恢复。" value={prefs.hideInFullscreen} disabled={busy} onChange={v=>change({hideInFullscreen:v})}/><Toggle title="跟随鼠标所在屏幕" subtitle="移到另一块屏幕时，保留面板在屏幕上的相对位置。" value={prefs.followActiveDisplay} disabled={busy} onChange={v=>change({followActiveDisplay:v})}/><Toggle title="自动收起" subtitle="鼠标离开后收起至屏幕边缘。" value={prefs.autoCollapse} disabled={busy} onChange={v => change({ autoCollapse: v })} /></Group>
 
       </> : pane === 'notifications' ? <NotificationsPane alerts={prefs.alerts} disabled={busy} onChange={patch=>change({alerts:{...prefs.alerts,...patch}})}/>
-        : pane === 'general' ? <GeneralPane/>
+        : pane === 'general' ? <GeneralPane preferences={prefs} disabled={busy} onChange={change}/>
         : pane === 'network' ? <NetworkPane preferences={prefs} disabled={busy} onChange={change}/>
         : pane === 'about' ? <AboutPane/>
         : pane === 'extensions' ? <ExtensionsSettingsView enabled={prefs.enabledProviders}/>
@@ -161,7 +163,9 @@ export default function Settings() {
         <Group title="圆环颜色"><Row title="高亮色" subtitle="自动随用量变化；用尽时仍显示深红。"><div className="toolbar"><input type="color" aria-label="圆环高亮色" value={appearance.ringColour??'#00e68c'} disabled={busy} onChange={e=>setAppearance({ringColour:e.target.value})}/><button disabled={busy||!appearance.ringColour} onClick={()=>setAppearance({ringColour:null})}>自动</button></div></Row></Group><AccountDetails key={provider.id} provider={provider} usage={snapshot?.providers.find(p => p.id === pane)} onError={setError} onChanged={reload} /></> : <Group title="当前用量"><p className="group-copy">未显示。启用后配置连接并检查用量。</p></Group>}
         {provider.id==='deepseek'&&<DeepSeekConsoleGroup enabled={enabled} onChanged={reload}/>}
     {provider.id==='opencode-go'&&<OpenCodeConsoleGroup enabled={enabled} onChanged={reload}/>}
-        {['codex','claude-code','deepseek'].includes(provider.providerId??provider.id)&&<ServiceStatusGroup provider={provider.id} base={provider.providerId??provider.id}/>}
+        {/* The pane decides for itself whether this provider publishes a page:
+            which services do is the Rust catalogue's fact, not a list kept here. */}
+        <ServiceStatusGroup provider={provider.id} base={provider.providerId??provider.id}/>
         {['codex','claude-code'].includes(provider.providerId??provider.id)&&<WindowStarterGroup provider={(provider.providerId??provider.id) as 'claude-code'|'codex'}
           primed={prefs.primedProviders.includes(provider.providerId??provider.id)} hours={prefs.primerHours} status={primer[provider.providerId??provider.id]} disabled={busy}
           onToggle={on=>change({primedProviders: on ? [...prefs.primedProviders.filter(id=>id!==(provider.providerId??provider.id)), provider.providerId??provider.id] : prefs.primedProviders.filter(id=>id!==(provider.providerId??provider.id))})}

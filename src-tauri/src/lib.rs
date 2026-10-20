@@ -26,6 +26,7 @@ pub mod tray_usage;
 pub mod tray_dashboard;
 pub mod updates;
 pub mod service_status;
+pub mod exchange_rates;
 pub mod recap_export;
 pub mod recap_notice;
 pub mod deepseek_console;
@@ -692,6 +693,7 @@ async fn apply_preferences(app: AppHandle, state: &AppState, mut value: preferen
     if network_changed || !value.enabled_providers.iter().any(|p|p=="opencode-go") {opencode_console::cancel_read();}
     let _ = app.emit("preferences-changed", &value);
     if value.alerts.on_service_outage!=previous.alerts.on_service_outage || value.enabled_providers!=previous.enabled_providers || value.accounts!=previous.accounts {service_status::preferences_changed(&app);}
+    if value.display_currency!=previous.display_currency || value.manual_exchange_rates!=previous.manual_exchange_rates {exchange_rates::preferences_changed(&app);}
     if previous.token_spend_enabled && !value.token_spend_enabled { token_spend::spend_clear_snapshot(); token_spend::cancel_card_reads(); }
     if !value.token_spend_enabled{token_spend::forget_kept();codex_signals::clear();}
     if value.token_spend_enabled!=previous.token_spend_enabled||network_changed{token_spend::reading_changed();}
@@ -1674,6 +1676,7 @@ pub fn run() {
         .manage(application::ApplicationState::default())
         .manage(updates::UpdateState::default())
         .manage(service_status::StatusState::default())
+        .manage(exchange_rates::RatesState::default())
         .invoke_handler(tauri::generate_handler![
             get_snapshot,
             opencode_console::get_opencode_console_connection,
@@ -1687,6 +1690,8 @@ pub fn run() {
             deepseek_console::remove_deepseek_console_login,
             deepseek_console::get_deepseek_console_history,
             service_status::get_service_status,
+            service_status::status_pages,
+            exchange_rates::get_exchange_rates,
             set_panel_visible,
             tray_dashboard::get_usage_pages,
             tray_dashboard::resize_usage_dashboard,
@@ -1745,6 +1750,7 @@ pub fn run() {
             application::apply(app.handle());
             updates::watch(app.handle().clone());
             service_status::watch(app.handle().clone());
+            exchange_rates::watch(app.handle().clone());
             recap_notice::watch(app.handle().clone());
             token_spend::watch(app.handle().clone());
             // A missing icon set makes tray creation fail; that must not take the

@@ -32,6 +32,7 @@ import { cardSurfaceRegion, cardTrackingRegion, railSurfaceRegion, sliverTrackin
 import { ProviderIcon } from './panel/ProviderIcon'
 import { personaAt } from './panel/botmark/programme'
 import { defaultAccountAppearance, usePreferences } from './preferences'
+import { useMoney } from './money'
 import { clockFraction, headlineWindow, secondWindow } from './usagePresentation'
 import { quotaTimeFraction, quotaWarning } from './quotaPacing'
 import { UsageCard } from './panel/UsageCard'
@@ -63,6 +64,8 @@ const OPENNESS_MS = 180
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
 
 export default function App() {
+  // Money is written by plain functions; this is what redraws them at a new rate.
+  useMoney()
   const [now, setNow] = useState(Date.now)
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer) }, [])
   const { preferences } = usePreferences()

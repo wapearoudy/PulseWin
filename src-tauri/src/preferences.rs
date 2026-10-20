@@ -55,6 +55,17 @@ pub struct Preferences {
     /// next and the pane can show why a window did not start.
     pub primer_run_times: std::collections::HashMap<String, i64>,
     pub primer_run_outcomes: std::collections::HashMap<String, String>,
+    /// The currency estimates are shown in (`DisplayCurrency`): one of the
+    /// seven `exchange_rates::CURRENCIES`. **Only estimates are converted** —
+    /// the money worked out from US-dollar API prices: the value estimate,
+    /// Token spend, the cards' history, the recap. What a service reports
+    /// itself — a balance, credits, what a console charged — is that
+    /// service's figure, shown in the currency it was given in, or it would
+    /// disagree with the service's own page.
+    pub display_currency: String,
+    /// Rates the reader typed, per currency code, which win over the fetched
+    /// ones. Empty by default: an unasked-for rate is somebody else's guess.
+    pub manual_exchange_rates: std::collections::HashMap<String, f64>,
 }
 
 impl Default for Preferences {
@@ -65,7 +76,8 @@ impl Default for Preferences {
             warning_threshold: 0.75, refresh_seconds: 120, refresh_automatic: true, show_reset_clock: false,
             clock_remaining: false, show_second_ring: false, top_show_percentages: false, animate_activity: true, dock_alert_colour: true, show_forecast: false, hide_in_fullscreen: true, follow_active_display: false, account_appearance: Default::default(), pinned_windows: Default::default(),
             primed_providers: Vec::new(), primer_hours: Default::default(),
-            primer_run_times: Default::default(), primer_run_outcomes: Default::default() }
+            primer_run_times: Default::default(), primer_run_outcomes: Default::default(),
+            display_currency: "usd".into(), manual_exchange_rates: Default::default() }
     }
 }
 
@@ -111,6 +123,19 @@ impl Preferences {
         self.rail_spacing = finite_clamp(self.rail_spacing, 0.6, 1.4, 1.0);
         self.warning_threshold = finite_clamp(self.warning_threshold, 0.6, 0.9, 0.75);
         self.refresh_seconds = self.refresh_seconds.clamp(120, 1800);
+        // A currency from a build that knew a longer list is dropped rather than
+        // carried into a conversion, and so is a rate that is zero, negative or
+        // not a number — a figure converted with one would be a figure read as
+        // free or as its own opposite.
+        if !crate::exchange_rates::valid_currency(&self.display_currency) { self.display_currency = "usd".into(); }
+        self.manual_exchange_rates.retain(|code, rate| {
+            code.len() == 3
+                && crate::exchange_rates::CURRENCIES.iter().any(|c| crate::exchange_rates::code(c) == *code)
+                && crate::exchange_rates::usable_rate(*rate).is_some()
+        });
+        // The dollar needs no rate of its own, and keeping one would read as a
+        // conversion that never happens.
+        self.manual_exchange_rates.remove("USD");
         // The starter acts for a closed list of providers. An id from a build
         // that knew a longer list is dropped rather than carried into a send.
         self.primed_providers.retain(|id| crate::window_starter::PROVIDERS.contains(&id.as_str()));
@@ -265,6 +290,44 @@ impl AccountAppearance {
         let mut p=Preferences::default();p.account_appearance.insert("codex".into(),AccountAppearance{animated_mark:true,persona:"curious".into(),body:"gem".into(),..Default::default()});
         let saved:Preferences=serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
         assert_eq!(saved,p);assert!(saved.enabled_providers.is_empty());
+    }
+}
+
+#[cfg(test)] mod currency_tests {
+    use super::*;
+    #[test] fn the_dollar_is_the_shipped_currency_and_no_rate_is_invented() {
+        // **The dollar by default**: a conversion nobody asked for would put a
+        // figure on screen at a rate from some other day.
+        let p: Preferences = serde_json::from_str("{}").unwrap();
+        assert_eq!(p.display_currency, "usd");
+        assert!(p.manual_exchange_rates.is_empty());
+    }
+    #[test] fn a_chosen_currency_and_typed_rate_survive_a_round_trip() {
+        let mut p = Preferences { display_currency: "cny".into(), ..Default::default() };
+        p.manual_exchange_rates.insert("CNY".into(), 7.12);
+        p.normalize(&[]);
+        assert_eq!(p.display_currency, "cny");
+        assert_eq!(p.manual_exchange_rates.get("CNY"), Some(&7.12));
+        let roundtrip: Preferences = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+        assert_eq!(p, roundtrip);
+    }
+    #[test] fn a_currency_or_rate_from_another_build_is_dropped_not_carried() {
+        let mut p = Preferences { display_currency: "eur".into(), ..Default::default() };
+        p.manual_exchange_rates.insert("CNY".into(), 7.12);
+        p.manual_exchange_rates.insert("USD".into(), 1.0);
+        p.manual_exchange_rates.insert("EUR".into(), 1.1);
+        p.manual_exchange_rates.insert("XYZ".into(), 2.0);
+        p.manual_exchange_rates.insert("JPY".into(), 0.0);
+        p.manual_exchange_rates.insert("KRW".into(), f64::NAN);
+        p.manual_exchange_rates.insert("TWD".into(), -3.0);
+        p.normalize(&[]);
+        // Not a currency Pulse offers is back to the dollar, not to a guess.
+        assert_eq!(p.display_currency, "usd");
+        // Only the one usable offered rate is kept; the dollar itself is not a
+        // conversion, and zero, a negative or a NaN would print a figure that
+        // is not money.
+        assert_eq!(p.manual_exchange_rates.len(), 1);
+        assert_eq!(p.manual_exchange_rates.get("CNY"), Some(&7.12));
     }
 }
 

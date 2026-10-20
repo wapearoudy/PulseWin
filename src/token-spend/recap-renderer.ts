@@ -1,6 +1,7 @@
 // Full-size canvas export, independent of the preview's scale.
 import { recapFilename, type Recap, type RecapCard } from './recap'
 import { dayKey, exactTokenText, formatCost, shortTokens } from './summary'
+import * as money from '../money'
 const paper='#F5F5F1',ink='#1B1B1E',lime='#C8F03C',hairline='#E4E4DD',secondary='#6E6E68',heat=['#EDEDE7','#EEF7C9','#DDF290',lime,'#9DC41A',ink]
 export function renderRecap(recap:Recap,card:RecapCard,hidesProjects:boolean):HTMLCanvasElement{
   const canvas=document.createElement('canvas');canvas.width=1080;canvas.height=1920
@@ -20,7 +21,7 @@ export function renderRecap(recap:Recap,card:RecapCard,hidesProjects:boolean):HT
   if(card==='poster'){
     text(recap.isYear?'这一年的工作':'这个月的工作',80,370,82,true);text(shortTokens(s.tokens),80,535,132,true);text('TOKEN',85,586,30,false,secondary)
     stat('活跃日',String(s.activeDays),80,652,440,lime);stat('会话',String(s.sessions.length),560,652)
-    stat('API 估算费用',formatCost(s.cost),80,862);stat(recap.payback!==null?'订阅回报':'最长连续工作',recap.payback!==null?`${recap.payback.toFixed(1)} ×`:`${recap.longestStreak} 天`,560,862,440,ink)
+    stat('API 估算费用',formatCost(s.cost,10),80,862);stat(recap.payback!==null?'订阅回报':'最长连续工作',recap.payback!==null?`${recap.payback.toFixed(1)} ×`:`${recap.longestStreak} 天`,560,862,440,ink)
     text('工作伙伴',80,1130,28,true);ranks(s.agents,1190);text('模型与项目',80,1720,28,true);text(s.models.slice(0,2).map(g=>g.name).join(' / '),80,1770,25,false,secondary)
   }else if(card==='opener'){
     text(recap.isYear?String(recap.start.getFullYear()):String(recap.start.getMonth()+1).padStart(2,'0'),80,690,340,true);text(recap.isYear?'年度回顾':'月度回顾',80,805,96,true);text('一起完成的工作',80,980,40,true);ranks(s.agents,1080)
@@ -31,11 +32,11 @@ export function renderRecap(recap:Recap,card:RecapCard,hidesProjects:boolean):HT
   }else if(card==='timetable'){
     text(recap.persona??'工作的时刻',80,355,88,true);text(`高峰 ${String(recap.peakHour).padStart(2,'0')}:00`,80,470,45,true);const peak=Math.max(...recap.hours,1);recap.hours.forEach((t,h)=>{c.fillStyle=h===recap.peakHour?lime:ink;c.fillRect(80+h*38,1070-t/peak*400,28,Math.max(1,t/peak*400))});text('00:00',80,1120,25,false,secondary);text('12:00',510,1120,25,false,secondary);text('23:00',885,1120,25,false,secondary);if(recap.lateNights!==null)stat('跨午夜工作',String(recap.lateNights),80,1230);if(recap.latestMinute!==null)stat('最晚结束',`${String(Math.floor(recap.latestMinute/60)%24).padStart(2,'0')}:${String(recap.latestMinute%60).padStart(2,'0')}`,560,1230);if(recap.untimedTokens>0)text(`${shortTokens(recap.untimedTokens)} Token 没有精确时刻，未计入节奏`,80,1530,26,false,secondary)
   }else if(card==='payback'){
-    text('这份订阅的回报',80,355,78,true);text(`${recap.payback?.toFixed(1)} ×`,80,735,200,true);box(80,835,920,220,lime);text('同样的工作，按 API 价格估算',106,895,30);text(formatCost(s.cost),106,990,76,true);stat('同期订阅费用',formatCost(recap.paid),80,1140,920);text(recap.isInProgress?'订阅费用按已过日期折算。':'按有记录的日期计算订阅费用。',80,1420,30,false,secondary);if(s.unpricedTokens)text('部分工作没有公开价格，回报是下限。',80,1500,30,false,secondary)
+    text('这份订阅的回报',80,355,78,true);text(`${recap.payback?.toFixed(1)} ×`,80,735,200,true);box(80,835,920,220,lime);text('同样的工作，按 API 价格估算',106,895,30);text(formatCost(s.cost,10),106,990,76,true);stat('同期订阅费用',formatCost(recap.paid,10),80,1140,920);text(recap.isInProgress?'订阅费用按已过日期折算。':'按有记录的日期计算订阅费用。',80,1420,30,false,secondary);if(s.unpricedTokens)text('部分工作没有公开价格，回报是下限。',80,1500,30,false,secondary)
   }else{
-    text('工作留下的数字',80,355,80,true);stat('Token',shortTokens(s.tokens),80,450,920,lime);stat('活跃日',String(s.activeDays),80,670);stat('连续工作',`${recap.longestStreak} 天`,560,670);if(recap.cacheHitRate!==null)stat('缓存命中率',`${(recap.cacheHitRate*100).toFixed(1)}%`,80,890);stat('API 估算费用',formatCost(s.cost),560,890);if(recap.cacheSavings!==null&&recap.cacheSavings>=.5)text(`缓存节省至少 ${formatCost(recap.cacheSavings)}`,80,1140,28,true);text('项目',80,1190,32,true);ranks(s.projects,1260,true);if(recap.cacheUnmeasuredTokens>0)text(`${shortTokens(recap.cacheUnmeasuredTokens)} Token 的来源未测量缓存，未计入命中率`,80,1710,24,false,secondary);if(recap.change!==null)text(`每日 Token 比上一期 ${recap.change>=0?'↑':'↓'} ${Math.abs(recap.change*100).toFixed(0)}%`,80,1750,28,true)
+    text('工作留下的数字',80,355,80,true);stat('Token',shortTokens(s.tokens),80,450,920,lime);stat('活跃日',String(s.activeDays),80,670);stat('连续工作',`${recap.longestStreak} 天`,560,670);if(recap.cacheHitRate!==null)stat('缓存命中率',`${(recap.cacheHitRate*100).toFixed(1)}%`,80,890);stat('API 估算费用',formatCost(s.cost,10),560,890);if(recap.cacheSavings!==null&&recap.cacheSavings>=.5)text(`缓存节省至少 ${formatCost(recap.cacheSavings,10)}`,80,1140,28,true);text('项目',80,1190,32,true);ranks(s.projects,1260,true);if(recap.cacheUnmeasuredTokens>0)text(`${shortTokens(recap.cacheUnmeasuredTokens)} Token 的来源未测量缓存，未计入命中率`,80,1710,24,false,secondary);if(recap.change!==null)text(`每日 Token 比上一期 ${recap.change>=0?'↑':'↓'} ${Math.abs(recap.change*100).toFixed(0)}%`,80,1750,28,true)
   }
-  const notes=[...(recap.isPartial?['计数可能不完整；请在 Token 消耗页查看读取说明。']:[]),'本机已读取的历史记录 · models.dev 公开价格 · USD',...(s.unpricedTokens?['部分费用未定价，金额为已定价部分的下限。']:[]),...(recap.recordsBegin?[`记录从 ${dayKey(recap.recordsBegin)} 开始；此前未知。`]:[])];notes.slice(0,3).forEach((n,i)=>text(n,80,1820+i*27,20,false,secondary))
+  const notes=[...(recap.isPartial?['计数可能不完整；请在 Token 消耗页查看读取说明。']:[]),`本机已读取的历史记录 · models.dev 公开价格 · ${money.shownCode(money.current)}`,...(s.unpricedTokens?['部分费用未定价，金额为已定价部分的下限。']:[]),...(recap.recordsBegin?[`记录从 ${dayKey(recap.recordsBegin)} 开始；此前未知。`]:[])];notes.slice(0,3).forEach((n,i)=>text(n,80,1820+i*27,20,false,secondary))
   // Exact integer figures remain available in the accessible preview, while the image uses compact units.
   canvas.setAttribute('aria-label',`${recap.key} ${card} ${exactTokenText(s.tokens,s.exactTokens)} Token`)
   return canvas

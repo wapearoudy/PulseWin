@@ -95,7 +95,9 @@ describe('Token Spend calendar and measured totals', () => {
     expect(sortDays(rows, 'cost', true).map(r => r.day)).toEqual(['c', 'b', 'a'])
   })
   it('formats small positive dollars without misrepresenting zero', () => {
-    expect(formatCost(null)).toBe('—'); expect(formatCost(0)).toBe('US$0.00'); expect(formatCost(0.00001)).toBe('< US$0.01')
+    // A narrow symbol, not "US$": the card beside it is not quoting a
+    // different currency. The figure itself is unchanged.
+    expect(formatCost(null)).toBe('—'); expect(formatCost(0)).toBe('$0.00'); expect(formatCost(0.00001)).toBe('< $0.01')
     expect(shortTokens(12000)).toBe('1.20万'); expect(shortTokens(123)).toBe('123')
   })
   it('keeps bare measured totals unclassified and priced subsets marked partial', () => {

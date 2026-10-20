@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { beginSpendScan, cancelSpendScan, clearSpendSnapshot, getSpendScan,getKeptSpendSnapshot } from './api'
 import { agentName, exactTokenText, formatCost, shortTokens, sortDays, summarize } from './summary'
+import * as money from '../money'
 import type { SpendAmounts, SpendGroup, SpendSnapshot, SpendSpan } from './types'
 import './token-spend.css'
 import { TokenActivityView } from './TokenActivityView'
@@ -122,7 +123,7 @@ export function TokenSpendPane({ enabled, onEnabledChange, span: savedSpan, onSp
         {agent && !model && <h2>{agentName(agent)}</h2>}
         <div className="spend-headline">
           <Metric label="Token 总量" value={shortTokens(summary.tokens)} help={summary.tokens.toLocaleString('zh-CN')} />
-          <Metric label={summary.unpricedTokens && summary.cost !== null ? '部分 API 金额估算' : 'API 金额估算'} value={formatCost(summary.cost)} help={summary.cost === null ? '无公开价格' : `US$${summary.cost.toPrecision(8)}`} />
+          <Metric label={summary.unpricedTokens && summary.cost !== null ? '部分 API 金额估算' : 'API 金额估算'} value={formatCost(summary.cost)} help={summary.cost === null ? '无公开价格' : money.exactEstimate(summary.cost)} />
           <Metric label="活跃天数" value={`${summary.activeDays}`} />
           <Metric label="最活跃时段" value={summary.peakHour === null ? '—' : `${summary.peakHour}:00`} />
         </div>
@@ -143,7 +144,7 @@ export function TokenSpendPane({ enabled, onEnabledChange, span: savedSpan, onSp
         {(!agent || model) && <section className="spend-card"><h2>{model ? 'Agent 贡献' : 'Agent'}</h2><GroupRows groups={summary.agents} onOpen={group => { setAgent(group.id); if (!model) setModel(null) }} /></section>}
         <section className="spend-card"><h2>每日明细</h2><div className="spend-table-scroll"><table className="spend-table"><thead><tr>
           {([['day','日期'],['tokens','Token'],['cost','API 金额估算']] as const).map(([key,label]) => <th key={key} aria-sort={sortKey === key ? descending ? 'descending' : 'ascending' : 'none'}><button onClick={() => sort(key)}>{label}{sortKey === key ? descending ? ' ↓' : ' ↑' : ''}</button></th>)}
-        <th>未分类 Token</th></tr></thead><tbody>{sortedDays.slice(dayPage * 10, (dayPage + 1) * 10).map(day => <tr key={day.day}><td>{day.day}</td><td title={exactTokenText(day.tokens,day.exactTokens)}>{shortTokens(day.tokens)}</td><td title={day.cost === null ? '金额不可用' : `US$${day.cost.toPrecision(8)}`}>{formatCost(day.cost)}{day.unpricedTokens > 0 && day.cost !== null ? ' *' : ''}</td><td title={exactTokenText(day.unclassifiedTokens,day.exactUnclassifiedTokens)}>{shortTokens(day.unclassifiedTokens)}</td></tr>)}</tbody></table></div><Pagination page={dayPage} total={sortedDays.length} size={10} onChange={setDayPage} /></section>
+        <th>未分类 Token</th></tr></thead><tbody>{sortedDays.slice(dayPage * 10, (dayPage + 1) * 10).map(day => <tr key={day.day}><td>{day.day}</td><td title={exactTokenText(day.tokens,day.exactTokens)}>{shortTokens(day.tokens)}</td><td title={day.cost === null ? '金额不可用' : money.exactEstimate(day.cost)}>{formatCost(day.cost)}{day.unpricedTokens > 0 && day.cost !== null ? ' *' : ''}</td><td title={exactTokenText(day.unclassifiedTokens,day.exactUnclassifiedTokens)}>{shortTokens(day.unclassifiedTokens)}</td></tr>)}</tbody></table></div><Pagination page={dayPage} total={sortedDays.length} size={10} onChange={setDayPage} /></section>
         {!model && <><section className="spend-card"><h2>会话 · {summary.sessions.length}</h2><GroupRows groups={summary.sessions.slice(sessionPage * 8, (sessionPage + 1) * 8)} /><Pagination page={sessionPage} total={summary.sessions.length} size={8} onChange={setSessionPage} /><p className="spend-footnote">会话按本机记录标识区分，不读取对话标题或正文。</p></section>
           <section className="spend-card"><h2>项目</h2><GroupRows groups={summary.projects} /><p className="spend-footnote">仅显示记录中明确写出的项目路径；缺少路径的会话仍计入总量。</p></section></>}
         <section className="spend-card spend-sources"><h2>读取来源</h2>{snapshot.sources.map(source => <div key={source.id}><strong>{source.name}{source.origin === 'export' ? ' · 导出 / 捕获' : ''}</strong><span>{source.status === 'counted' ? `${source.files} 个记录文件 · ${source.cachedFiles} 个缓存命中${source.retainedRecords ? ` · 保留 ${source.retainedRecords} 条历史计数` : ''}` : source.status === 'no-data' ? source.id === 'crush' ? '已识别 · 来源只报告费用，无法确定 Token 计数' : '未读取到用量' : source.origin === 'export' ? '尚无导出 / 捕获文件' : '未检测到记录目录'}</span></div>)}
@@ -160,7 +161,7 @@ function Metric({ label, value, help }: { label: string; value: string; help?: s
 function GroupRows({ groups, onOpen }: { groups: SpendGroup[]; onOpen?: (group: SpendGroup) => void }) {
   return <div className="spend-groups">{groups.map(group => <div key={group.id} className="spend-group-row">{onOpen ? <button className="spend-link" onClick={() => onOpen(group)} title={group.name}>{group.name}<span aria-hidden="true"> ›</span></button> : <span className="spend-group-name" title={group.name}>{group.name}</span>}<strong title={group.tokens.toLocaleString('zh-CN')}>{shortTokens(group.tokens)}</strong><Amount value={group} /></div>)}{!groups.length && <p className="spend-empty">没有读到用量。</p>}</div>
 }
-function Amount({ value }: { value: SpendAmounts }) { return <span title={value.cost === null ? '没有公开价格' : `US$${value.cost.toPrecision(8)}${value.unpricedTokens ? ' · 部分金额估算' : ''}`}>{formatCost(value.cost)}{value.cost !== null && value.unpricedTokens > 0 ? ' *' : ''}</span> }
+function Amount({ value }: { value: SpendAmounts }) { return <span title={value.cost === null ? '没有公开价格' : `${money.exactEstimate(value.cost)}${value.unpricedTokens ? ' · 部分金额估算' : ''}`}>{formatCost(value.cost)}{value.cost !== null && value.unpricedTokens > 0 ? ' *' : ''}</span> }
 function Pagination({ page, total, size, onChange }: { page: number; total: number; size: number; onChange: (page: number) => void }) {
   const pages = Math.ceil(total / size); if (pages <= 1) return null
   return <div className="spend-pagination"><button aria-label="上一页" disabled={page === 0} onClick={() => onChange(page - 1)}>←</button><span>{page + 1} / {pages}</span><button aria-label="下一页" disabled={page + 1 >= pages} onClick={() => onChange(page + 1)}>→</button></div>

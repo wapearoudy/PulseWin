@@ -61,6 +61,13 @@ export interface Preferences {
   pinnedWindows: Record<string, string>
   /** The window starter. Empty means off; it is the one setting that
    *  sends something on the reader's behalf, so nothing is on by default. */
+  /** The currency estimates are shown in — one of the seven
+   *  `exchange_rates::CURRENCIES`. **Only estimates are converted** (Token
+   *  spend, the value estimate, card history, the recap); a balance or a
+   *  charge a service reports stays in the currency it gave. */
+  displayCurrency: 'usd' | 'cny' | 'hkd' | 'twd' | 'jpy' | 'krw' | 'rub'
+  /** Rates the reader typed, per code, which win over the fetched ones. */
+  manualExchangeRates: Record<string, number>
   primedProviders: string[]
   primerHours: { start: number; end: number }
   primerRunTimes: Record<string, number>
@@ -78,6 +85,7 @@ export const defaultPreferences: Preferences = {
   showSecondRing: false, topShowPercentages: false, animateActivity: true, dockAlertColour: true, accountAppearance: {},
   showResetClock: false, clockRemaining: false, showForecast: false, hideInFullscreen:true, followActiveDisplay:false, pinnedWindows: {},
   primedProviders: [], primerHours: { start: 7, end: 23 }, primerRunTimes: {}, primerRunOutcomes: {},
+  displayCurrency: 'usd', manualExchangeRates: {},
 }
 export const savePreferences = (value: Preferences) => invoke<void>('save_preferences', { value })
 

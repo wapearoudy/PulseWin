@@ -1,3 +1,4 @@
+import * as money from '../money'
 import type { SpendAmounts, SpendGroup, SpendRecord, SpendSpan, SpendSummary } from './types'
 
 export function dayKey(date: Date): string {
@@ -96,10 +97,19 @@ export function shortTokens(value: number): string {
   if (value >= 1e4) return `${(value / 1e4).toFixed(value >= 1e5 ? 1 : 2).replace(/\.0+$/, '')}万`
   return value.toLocaleString('zh-CN')
 }
-export function formatCost(value: number | null): string {
+/**
+ * An amount worked out from US-dollar API prices, written in the currency
+ * chosen in Settings — the estimate, Token spend, the cards' history and
+ * the recap are all this one figure. `wholeFrom` is where the written figure
+ * stops carrying cents: 1000 in Settings and the cards, 10 in the recap,
+ * whose figures are small.
+ *
+ * **Converted, unlike a balance a service reports** (`money.reported`):
+ * that one is the service's own figure and stays in the currency it gave.
+ */
+export function formatCost(value: number | null, wholeFrom = 1000): string {
   if (value === null) return '—'
-  if (value > 0 && value < 0.01) return '< US$0.01'
-  return `US$${value.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  return money.estimate(value, wholeFrom)
 }
 /** Unknown amounts stay last in either direction; date resolves numeric ties. */
 function compareTokens(a:{tokens:number;exactTokens?:string},b:{tokens:number;exactTokens?:string}):number{
