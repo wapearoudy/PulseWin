@@ -47,6 +47,13 @@ pub struct Preferences {
     pub show_forecast: bool,
     pub hide_in_fullscreen: bool,
     pub follow_active_display: bool,
+    /// Keep the panel out of screenshots and recordings.
+    ///
+    /// A request, not a guarantee: Windows honours `WDA_EXCLUDEFROMCAPTURE`
+    /// for the capture APIs that ask, and a capture tool that grabs the screen
+    /// buffer directly can still include the panel. Off by default, because it
+    /// hides the panel from the reader's own pictures of it too.
+    pub hide_from_capture: bool,
     pub account_appearance: std::collections::HashMap<String, AccountAppearance>,
     pub pinned_windows: std::collections::HashMap<String, String>,
     /// The window starter: which providers it acts for, when, and what it last
@@ -79,7 +86,7 @@ impl Default for Preferences {
             rail_spacing: 1.0, round_ends: false, shows_remaining: false,
             show_percentages: true, label_above: false, auto_collapse: true,
             warning_threshold: 0.75, refresh_seconds: 120, refresh_automatic: true, show_reset_clock: false,
-            clock_remaining: false, show_second_ring: false, top_show_percentages: false, animate_activity: true, dock_alert_colour: true, show_forecast: false, hide_in_fullscreen: true, follow_active_display: false, account_appearance: Default::default(), pinned_windows: Default::default(),
+            clock_remaining: false, show_second_ring: false, top_show_percentages: false, animate_activity: true, dock_alert_colour: true, show_forecast: false, hide_in_fullscreen: true, follow_active_display: false, hide_from_capture: false, account_appearance: Default::default(), pinned_windows: Default::default(),
             primed_providers: Vec::new(), primer_hours: Default::default(),
             primer_run_times: Default::default(), primer_run_outcomes: Default::default(),
             display_currency: "usd".into(), manual_exchange_rates: Default::default() }
@@ -396,5 +403,28 @@ impl AccountAppearance {
         assert!(kept(vec!["2026-09-01", "2026-09-30", "2026-10-01"]).is_empty());
         assert!(kept(vec!["2026-9-1", "2026-09-30"]).is_empty());
         assert!(kept(vec!["2026-09-01T00:00:00Z", "2026-09-30"]).is_empty());
+    }
+}
+
+#[cfg(test)] mod capture_tests {
+    use super::*;
+    // **Off by default.** The original ships it off for the same reason: it
+    // hides the panel from the reader's own screenshots too, so switching it on
+    // is a choice rather than something done to them.
+    #[test] fn hiding_from_capture_is_off_until_asked_for() {
+        let p: Preferences = serde_json::from_str("{}").unwrap();
+        assert!(!p.hide_from_capture);
+        let roundtrip: Preferences = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+        assert!(!roundtrip.hide_from_capture);
+    }
+    // The field is `hideFromCapture` over the wire; a stored `true` has to come
+    // back `true` or the panel silently reappears in every capture after a
+    // restart.
+    #[test] fn a_chosen_value_survives_a_round_trip() {
+        let p = Preferences { hide_from_capture: true, ..Default::default() };
+        let wire = serde_json::to_string(&p).unwrap();
+        assert!(wire.contains("\"hideFromCapture\":true"), "{wire}");
+        let roundtrip: Preferences = serde_json::from_str(&wire).unwrap();
+        assert!(roundtrip.hide_from_capture);
     }
 }

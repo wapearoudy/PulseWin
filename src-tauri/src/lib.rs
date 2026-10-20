@@ -17,6 +17,7 @@ pub mod activity;
 pub mod adaptive_refresh;
 pub mod power_state;
 pub mod desktop;
+pub mod capture;
 pub mod alerts;
 pub mod usage_cache;
 pub mod usage_report;
@@ -705,6 +706,7 @@ async fn apply_preferences(app: AppHandle, state: &AppState, mut value: preferen
         let _=memory.save();
     }
     if value.open_settings_shortcut!=previous.open_settings_shortcut || value.toggle_panel_shortcut!=previous.toggle_panel_shortcut {application::apply(&app);}
+    if value.hide_from_capture!=previous.hide_from_capture {capture::apply_to_panel(&app,value.hide_from_capture);}
     if value.enabled_providers.is_empty() || !value.panel_visible {
         state.fullscreen_hidden.store(false,std::sync::atomic::Ordering::SeqCst);
         if let Some(window) = app.get_webview_window("main") { let _ = window.hide(); }
@@ -1748,6 +1750,7 @@ pub fn run() {
         ])
         .setup(|app| {
             application::apply(app.handle());
+            capture::apply_to_panel(app.handle(),app.state::<AppState>().preferences.lock().unwrap().hide_from_capture);
             updates::watch(app.handle().clone());
             service_status::watch(app.handle().clone());
             exchange_rates::watch(app.handle().clone());

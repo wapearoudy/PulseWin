@@ -61,6 +61,15 @@ export interface Preferences {
   showForecast: boolean
   hideInFullscreen: boolean
   followActiveDisplay: boolean
+  /**
+   * Keep the panel out of screenshots and recordings.
+   *
+   * A request, not a guarantee: Windows honours it for the capture APIs that
+   * ask, and a tool that reads the screen buffer directly can still include
+   * the panel. Off by default, because it hides the panel from your own
+   * pictures of it too.
+   */
+  hideFromCapture: boolean
   accountAppearance: Record<string, AccountAppearance>
   pinnedWindows: Record<string, string>
   /** The window starter. Empty means off; it is the one setting that
@@ -87,7 +96,7 @@ export const defaultPreferences: Preferences = {
   roundEnds: false, showsRemaining: false, showPercentages: true,
   labelAbove: false, autoCollapse: true, warningThreshold: 0.75, refreshSeconds: 120, refreshAutomatic: true,
   showSecondRing: false, topShowPercentages: false, animateActivity: true, dockAlertColour: true, accountAppearance: {},
-  showResetClock: false, clockRemaining: false, showForecast: false, hideInFullscreen:true, followActiveDisplay:false, pinnedWindows: {},
+  showResetClock: false, clockRemaining: false, showForecast: false, hideInFullscreen:true, followActiveDisplay:false, hideFromCapture:false, pinnedWindows: {},
   primedProviders: [], primerHours: { start: 7, end: 23 }, primerRunTimes: {}, primerRunOutcomes: {},
   displayCurrency: 'usd', manualExchangeRates: {},
 }

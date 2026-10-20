@@ -122,18 +122,18 @@
 
 上面那张 38 行的表是按**界面**组织的：一个面板、一组圆环、一页 Token 消耗各占一行。原版 README 里另有一些整块能力在表里连一行都没有，所以「13 已接通 / 25 有未完成项 / 0 缺失」不是差距的全貌。这一节单独列出它们，每项都给原版位置和这里的现状，不用「部分」概括。其中 A1、A2 已随 0.1.18 接通，逐项现状见下表对应行。
 
-### A. 原版有、表里没有行：本轮补掉两块，仍缺五块
+### A. 原版有、表里没有行：本轮补掉五块，仍缺两块
 
-A1（官方服务状态）与 A2（货币换算）本轮已接通，保留行位是为了让「原版有、Windows 现在也有」这件事和其余五块并排可查；A3～A7 仍是原版有、这里没有。
+A1（官方服务状态）、A2（货币换算）、A4（时间区间）、A5（扩展指标）、A6（截屏隐藏）本轮已接通，保留行位是为了让「原版有、Windows 现在也有」这件事和其余两块并排可查；A3（回顾 day/week 与 `--recap`）与 A7（statusline 安装）仍是原版有、这里没有。
 
 | # | 能力 | 原版在这里 | 这里现在在这里 | 具体差什么 |
 | --- | --- | --- | --- | --- |
 | A1 | 官方服务状态：44 个服务商、12 种 feed 形态 | `Providers/Status/` 共 1804 行 —— `StatusPage.swift`（331 行，`of(_:)` 在 `:109`；46 个 `case .x`，其中 MiniMax 的 `china`／`international` 两个店面在 Windows 侧是两个 provider id，减去后是 **44 个服务商**；`matches` 在 `:58`，`notifiesAbout` 在 `:101`，`page` 在 `:286`）、`ServiceStatus.swift`（300）、`+Companies`（235）、`+Monitors`（229）、`+IncidentIO`（222）、`+Flashcat`（212）、`+Statuspage`（161）、`+BetterStack`（114） | **已接通**（0.1.18 本轮）：`src-tauri/src/service_status.rs` 重写为目录表 —— `static CATALOGUE` 45 条（44 个服务商 + `minimax-cn` 这个第二个店面），`Page{provider,address,company,feed,shows,notifies,day_count}`，`Rule` 五态（`All`／`Ids`／`Groups`／`NameContains`／`Except`）替代原来的 `Page::relevant`；`src-tauri/src/service_status/feeds.rs` 978 行是 12 种形态的解析器（statuspage、incidentIO、flashcat、betterStack、instatus、upptime、gatus、uptimeRobot、openCode、deepInfra、ibmBob、googleCloud）；`ServiceStatusGroup` 由 `status_pages` 命令决定渲染哪家、`data-palette` 走原版 7 组配色，`Settings.tsx` 不再把服务商写死成三个；宕机通知改为**按 feed 读一次**再按 `notifiesAbout` 分发（`OutageMemory` 按 provider id 记账） | 代码与 fixture 层面对齐；缺口只剩真机验收：44 个地址与组件规则要逐家打真实响应确认，`gemini-cli`／`command-code`／`hugging-face` 三家在本机网络环境下请求超时（`curl` 同样超时），未取得真实响应，不算已验证；宕机通知要真实宕机才能验 |
 | A2 | 货币换算 7 种 | `Usage/Money.swift`（193 行：`enum DisplayCurrency` 在 `:13`，`usd`／`cny`／`hkd`／`twd`／`jpy`／`krw`／`rub` 在 `:14-20`；`Money.converted` 在 `:105`，`format` 在 `:145`，`symbol` 在 `:184`）、`Usage/ExchangeRates.swift`（161 行：`https://open.er-api.com/v6/latest/USD`，每天约一次，只在选了非美元时才联网，`ExchangeRateKeeper` 在 `:111`，落盘 `exchange-rates.json`）、`Settings/CurrencySettingsGroup.swift`（134 行）、`App/AppSettings.swift:141 displayCurrency`／`:148 manualExchangeRates`／`:155 exchangeRates` | **已接通**（0.1.18 本轮）：`src-tauri/src/exchange_rates.rs` 是抓取、`parse` 与落盘（`exchange-rates.json`，`MINIMUM_INTERVAL` 1 小时，`Stored{updatedAt,nextUpdateAt,fetchedAt,rates}`）；`src-tauri/src/preferences.rs:58-68` 加 `display_currency` 与 `manual_exchange_rates`，`normalize()` 丢弃非法货币与不可用汇率；`get_exchange_rates` 命令 + `watch()` 只在非美元时联网；`src/money.ts` 是 7 种货币的 `format`／`converted`／`symbol`（窄写法：`$`／`HK$`／`NT$`／`¥`／`₩`／`₽`，`0 < amount < unit` 打印 `< $0.01` 而不是 0，`|amount| >= 1000` 起不带小数），`formatCost` 与 Token 消耗、回顾、控制台、卡片全部改走它；`src/CurrencySettingsGroup.tsx` 是设置里的货币分组（手填汇率优先于抓取，显示来源与署名链接）；`useMoney()` 订阅快照，换汇率即重绘 | 代码与 fixture 层面对齐；缺口只剩真机：真实端点、离线回退与 429 （原版注释写明频繁请求会被 429 二十分钟）未在真实网络下验过；手动汇率输入的取舍与原版一致（负数、字母、零、超大值一律拒绝而不是悄悄改写） |
 | A3 | 回顾的时间粒度 4 档 + `--recap` 命令行 | `Usage/Recap.swift:20-30` 的 `enum Period` 有 `day`／`week`／`month`／`year` 四档；`Usage/RecapReport.swift:23 static let modeArgument = "--recap"`，`:69` 解析参数，支持 `--recap 2026-09`、`2026`、某一天、`week-YYYY-MM-DD` | `src/token-spend/RecapPane.tsx:23` 只有「月度」「年度」两个按钮；`src-tauri/src/main.rs:8` 只识别 `--json` 与 `--statusline`，没有 `--recap` 分支 | 缺 day 与 week 两档的口径和卡片内容，以及一个只读的命令行入口。月/年两档的数据模型与 8 张卡片已移植（`recap.ts`、`recap-renderer.ts`） |
-| A4 | Token 消耗时间区间 9 种 + 自定义 | `Settings/TokenSpendView.swift:999` 的 `enum SpendSpan`（文件 1115 行，定义在 `:999-1011`）：`today`／`week`／`month`／`quarter`／`thisMonth`／`lastMonth`／`thisYear`／`all`／`custom`；`:1004` 的注释写明「账单意义上的上个月不是最近 30 天」，`:1010` 的 `custom` 用 `AppSettings.spendCustomDays` | `src/token-spend/TokenSpendPane.tsx:32` 只有 `[['today','今天'],['week','最近 7 天'],['month','最近 30 天']]`；`src/token-spend/summary.ts:6-11` 的 `spanDays` 只有 `today`／`month`／默认 7 天三支 | 缺自然月、自然季、自然年、全部、自定义五种口径及各自标签。`summarizeBetween`（`summary.ts:76`）已经能接受任意起止日，所以这是口径与 UI 的补齐，不是数据层重写 |
-| A5 | 扩展指标的可视化 | `Settings/ExtensionMetricsGroup.swift`（86 行，`MetricSeriesChart` 在 `:39`）；原版卡片上也有扩展指标的趋势线 | 后端已解析并返回：`src-tauri/src/model.rs:161 metrics: Vec<UsageMetric>`（结构在 `:106` 与 `:121`），`src-tauri/src/extension.rs:538` 确实把 `report.metrics` 填进 `usage.metrics` | **前端从不渲染**：`grep -rn metrics src/` 只命中一个无关的 `set_panel_metrics`。数据已经到位，缺的是画图 |
-| A6 | 从截屏中隐藏 | `App/AppSettings.swift:178-187 hidesFromScreenCapture`（注释写明 `NSWindow.sharingType = .none`）、`Panel/FloatingPanelController.swift:334 panel.sharingType = settings.hidesFromScreenCapture ? .none : .readOnly`、设置项在 `Settings/PlacementPane.swift:72-73` | 零命中：`hidesFromScreenCapture` 与 `WDA_EXCLUDEFROMCAPTURE` 在 `src-tauri/src` 与 `src` 里都不存在 | Windows 侧对应 `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)`，缺一个设置开关加一次调用 |
+| A4 | Token 消耗时间区间 9 种 + 自定义 | `Settings/TokenSpendView.swift:999` 的 `enum SpendSpan`（文件 1115 行，定义在 `:999-1011`）：`today`／`week`／`month`／`quarter`／`thisMonth`／`lastMonth`／`thisYear`／`all`／`custom`；`:1004` 的注释写明「账单意义上的上个月不是最近 30 天」，`:1010` 的 `custom` 用 `AppSettings.spendCustomDays` | **已接通**（0.1.18 本轮）：`src/token-spend/types.ts:3` 的 `SpendSpan` 就是原版九档，`src/token-spend/summary.ts` 的 `spanRange` 逐档给出起止日（自然月／自然季／自然年按本地日历算，`lastMonth` 是上一个完整自然月而不是最近 30 天，`all` 从最早一条记录起，`custom` 读 `preferences.spendCustomDays`），`TokenSpendPane.tsx` 的区间选择器九档加两个日期输入；`preferences.rs` 新增 `token_spend_span` 与 `spend_custom_days`，`normalize()` 只保留「两个都在、都在前、都能解析」的日期对，半读出来的区间会让面板悄悄缩窄到没人选过的范围，所以整对丢弃 | 代码与 fixture 层面对齐；缺口只剩真机：自定义区间跨月、跨年与夏令时边界未在真实数据上验过 |
+| A5 | 扩展指标的可视化 | `Settings/ExtensionMetricsGroup.swift`（86 行，`MetricSeriesChart` 在 `:39`）；原版卡片上也有扩展指标的趋势线 | **已接通**（0.1.18 本轮）：设置页 `src/ExtensionMetricsGroup.tsx`（138 行，指标行 + 手写 SVG 折线 + 悬停读数 + 摘要句）与卡片 `src/panel/UsageCard.tsx` 都渲染 `usage.metrics`；折线与坐标计算抽在 `src/metricTrend.ts`（150 行，按时间而非序号铺 x、按序列自身极值铺 y、单点或时间不前进时不画线），`src/panel/cardLayout.ts` 为此让出卡片高度预算；`src/extension-metrics.css` 是新样式。**没有新增依赖**：`package.json` 仍然只有 react／react-dom，折线是手写 SVG | 代码与 fixture 层面对齐；缺口只剩真机：真实扩展给出的 `metrics` 形态（长序列、单位混用、时间戳不递增）未在真实扩展上验过 |
+| A6 | 从截屏中隐藏 | `App/AppSettings.swift:178-187 hidesFromScreenCapture`（注释写明 `NSWindow.sharingType = .none`）、`Panel/FloatingPanelController.swift:334 panel.sharingType = settings.hidesFromScreenCapture ? .none : .readOnly`、设置项在 `Settings/PlacementPane.swift:72-73` | **已接通**（0.1.18 本轮）：`src-tauri/src/capture.rs`（46 行）调 Tauri 的 `set_content_protected`，它在 Windows 上由 `tao` 落到 `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)`、在 macOS 上落到原版同一个 `NSWindow.sharingType`，所以不需要自己写 FFI；`preferences.rs` 新增 `hide_from_capture`（默认关，和原版一致——它会把这面板从使用者自己的截图里也藏掉），`lib.rs` 在启动时与偏好变化时各应用一次；`Settings.tsx` 的「位置与行为」面板里加开关，文案直接取原版 `zh-Hans.lproj` 的「截图时隐藏」／「支持此设置的截图工具不会截到悬浮面板；录屏和共享屏幕时仍可能显示。」 | 代码与 fixture 层面对齐；缺口只剩真机：要在真实 Windows 截屏与录屏工具下确认面板确实不出现——原版自己也写明这是「一个请求而不是保证」，直接读屏幕缓冲区的工具仍可能包含它 |
 | A7 | `--install-statusline` / `--uninstall-statusline` | `App/PulseApp.swift:22` 与 `:26`，把 statusline 装进 shell 提示符 | `src-tauri/src/main.rs:8` 只认 `--json` 与 `--statusline`，没有安装/卸载子命令 | 缺两个参数与写入提示符配置的逻辑；只读输出本身已经有了 |
 
 ### B. 账号面板缺的一整套分组
@@ -157,11 +157,11 @@ A1（官方服务状态）与 A2（货币换算）本轮已接通，保留行位
 
 ### C. 能直接补代码 vs 必须真机或真账号验证
 
-**能直接补代码**（代码写出来就能用，fixture 能验）：~~A2 货币换算~~（已完成）、~~A1 官方服务状态~~（已完成，见上表 A1 行）、A4 时间区间、A5 扩展指标渲染、A6 截屏隐藏、A7 statusline 安装、A3 的 day/week 两档与 `--recap` 入口、B 里除 `AccountConnectionGroup` 之外的多数分组。
+**能直接补代码**（代码写出来就能用，fixture 能验）：~~A2 货币换算~~（已完成）、~~A1 官方服务状态~~（已完成，见上表 A1 行）、~~A4 时间区间~~（已完成）、~~A5 扩展指标渲染~~（已完成）、~~A6 截屏隐藏~~（已完成）、A7 statusline 安装、A3 的 day/week 两档与 `--recap` 入口、B 里除 `AccountConnectionGroup` 之外的多数分组。
 
-A1 与 A2 本轮已落地，代码与 fixture 层面的工作已经清零，剩下的都是下面那类「代码写完也不算完成」的验收。
+阶段一与阶段二本轮已全部落地：A1、A2、A4、A5、A6 的代码与 fixture 层面都已清零，剩下的只有两类——A7／A3／B 这类还没写的代码，以及下面那类「代码写完也不算完成」的验收。
 
-**必须真机或真账号验证**（代码写完也不算完成）：A1 的 44 个服务商状态页都要打真实响应确认地址与组件规则没写错（本轮已用 `cargo run --example status` 逐家探测，`codex`、`claude-code`、`deepseek`、`zed`、`opencode-go`、`hyper`、`cline-pass` 取得真实响应并通过，`gemini-cli`、`command-code`、`hugging-face` 在本机网络下超时、`curl` 同样超时，未取得真实响应，其余未逐家探测）；A2 的汇率抓取要验真实端点、离线回退与 429（`ExchangeRates.swift:1-18` 的注释写明每天约一次，频繁请求会被 429 二十分钟）；A6 要在真实 Windows 截屏/录屏工具下确认窗口确实不出现；A7 要在真实 shell 里确认提示符生效；A1 的宕机通知要真实宕机才能验。
+**必须真机或真账号验证**（代码写完也不算完成）：A1 的 44 个服务商状态页都要打真实响应确认地址与组件规则没写错（本轮已用 `cargo run --example status` 逐家探测，`codex`、`claude-code`、`deepseek`、`zed`、`opencode-go`、`hyper`、`cline-pass` 取得真实响应并通过，`gemini-cli`、`command-code`、`hugging-face` 在本机网络下超时、`curl` 同样超时，未取得真实响应，其余未逐家探测）；A2 的汇率抓取要验真实端点、离线回退与 429（`ExchangeRates.swift:1-18` 的注释写明每天约一次，频繁请求会被 429 二十分钟）；A4 的自定义区间要拿真实数据验跨月、跨年与夏令时边界；A5 要在真实扩展上验指标序列的形态（长序列、单位混用、时间戳不递增）；A6 要在真实 Windows 截屏/录屏工具下确认窗口确实不出现（原版自己也写明这是「请求而不是保证」）；A7 要在真实 shell 里确认提示符生效；A1 的宕机通知要真实宕机才能验。
 
 ### D. 建议的补齐顺序与工作量
 
@@ -172,13 +172,13 @@ A1 与 A2 本轮已落地，代码与 fixture 层面的工作已经清零，剩�
 1. **A2 货币换算** —— 估 400～600 行，实际 `src-tauri/src/exchange_rates.rs` 350 行 + `src/money.ts` 185 行 + `src/CurrencySettingsGroup.tsx` 109 行 + 两个测试文件 160 行，另加 `preferences.ts`／`preferences.rs` 字段与 5 个金额格式化点改造。比 A1 小一个量级，但会把「所有金额」的表示方式统一掉，所以先做。
 2. **A1 官方服务状态** —— 估 1200～2000 行 Rust，实际 `src-tauri/src/service_status.rs` 1239 行 + `src-tauri/src/service_status/feeds.rs` 978 行 + `src-tauri/src/service_status/tests.rs` 556 行（24 项测试），前端 `ServiceStatusGroup.tsx` 112 行 + `service-status.css` 17 行 + 55 行测试。拆开是：`StatusFeed` 形态枚举与 `StatusPage` 声明表 300～500 行（44 个服务商各 5～15 行规则）、10 个缺失形态的解析器各 60～150 行、通知与设置门控 100～200 行。建议一次只加一种形态，配一个 fixture 加一次真实探测，形态验完再补服务商条目，避免 46 家一起改完才发现某个形态解析是错的。
 
-**阶段二（前端小活，可并行）**
+**阶段二（前端小活，可并行）—— 已完成**
 
-3. **A4 时间区间** —— 约 150～250 行，全是前端口径与 UI。
-4. **A5 扩展指标渲染** —— 约 120～200 行。注意 `package.json` 里只有 react/react-dom，没有图表库，原版 `MetricSeriesChart` 的折线要用手写 SVG 补，不能引依赖。
-5. **A6 截屏隐藏** —— 约 60～100 行，一个设置字段加一次 `SetWindowDisplayAffinity` 调用。
+3. **A4 时间区间** —— 估 150～250 行，实际 `src/token-spend/summary.ts` 涨到 206 行（`spanRange` 九档加自定义）+ `TokenSpendPane.tsx` 219 行（九档选择器加两个日期输入）+ `types.ts` 的 `SpendSpan` + `preferences.rs` 两个字段与 `normalize()` 校验，另加 61 行测试。
+4. **A5 扩展指标渲染** —— 估 120～200 行，实际 `src/metricTrend.ts` 150 行（折线与坐标，纯函数、可单测）+ `ExtensionMetricsGroup.tsx` 138 行 + `UsageCard.tsx` 与 `cardLayout.ts` 的卡片改动 + 155 行测试。**没有新增依赖**：`package.json` 仍然只有 react／react-dom，原版 `MetricSeriesChart` 的折线是手写 SVG。
+5. **A6 截屏隐藏** —— 估 60～100 行，实际只有 46 行 `src-tauri/src/capture.rs` 加 `preferences.rs`／`lib.rs`／`Settings.tsx`／`preferences.ts` 各几行。**比估的少，因为不用自己写 FFI**：Tauri 的 `set_content_protected` 在 Windows 上由 `tao` 落到 `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)`、在 macOS 上落到原版同一个 `NSWindow.sharingType`。
 
-**阶段三（补完整度）**
+**阶段三（补完整度）
 
 6. **A3 回顾 day/week 与 `--recap`** —— 约 200～300 行数据与卡片，加 `--recap` 入口约 80～120 行 Rust（复用 `RecapReport` 已有的模型）。
 7. **A7 statusline 安装/卸载** —— 约 100～200 行。
@@ -187,7 +187,9 @@ A1 与 A2 本轮已落地，代码与 fixture 层面的工作已经清零，剩�
 
 ## 当前验证边界
 
-本轮（官方服务状态 44 服务商 / 12 种 feed + 货币换算）验证：Rust **1172 项通过、35 项失败、2 项默认忽略**；35 项失败按测试名与改动前基线逐条完全相同（`comm` 双向比对均为空），全部是 macOS 上跑 Windows 路径 / PATH 的既有失败，没有新增失败。前端 **241 项通过（24 个文件）**、`tsc --noEmit` 与 `vite build` 通过。新代码的专项计数：`service_status` 24 项（含 12 种形态各自的解析用例、44 条目录表的地址/公司/日数/不重复校验、`grok-bot` 与 `cursor` 共用 feed 但规则不同的用例、7 组配色、`OutageMemory` 的升级/恢复/序列化）、`exchange_rates` 与货币格式专项、前端 `money.test.ts` 与 `ServiceStatusGroup.test.ts`／`CurrencySettingsGroup.test.ts`。另用 `cargo run --example status` 对 `codex`、`claude-code`、`deepseek`、`zed`、`opencode-go`、`hyper`、`cline-pass` 取到真实响应；`gemini-cli`、`command-code`、`hugging-face` 在本机网络下超时（`curl` 同样超时），未取得真实响应。以上均为 fixture 与进程级验证，不代替 44 家状态页逐家的实机响应验收、真实宕机下的通知验收、真实汇率端点的联网/离线/429 验收，也不代替真实账号与 Windows 无窗口启动的实机验收。
+本轮（A4 时间区间 / A5 扩展指标渲染 / A6 截屏隐藏，三块分开提交）验证：Rust **1176 项通过、35 项失败、2 项默认忽略**；35 项失败按测试名与改动前基线逐条完全相同（`comm` 双向比对均为空），全部是 macOS 上跑 Windows 路径 / PATH 的既有失败，没有新增失败。前端 **260 项通过（25 个文件）**、`tsc --noEmit` 与 `vite build` 通过。新代码的专项计数：`preferences::capture_tests` 2 项、`token-spend` 区间口径专项、`src/metricTrend.test.ts` 与 `ExtensionMetricsGroup.test.ts`、`cardLayout` 的卡片高度预算用例。A6 的实现比预估少一半代码，因为不必自己写 FFI：Tauri 的 `set_content_protected` 在 Windows 上由 `tao` 落到 `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)`、在 macOS 上落到原版同一个 `NSWindow.sharingType`，手写一遍只是重复它。以上均为 fixture 与进程级验证，不代替真实 Windows 截屏/录屏工具下的实机验收、真实扩展给出的指标序列、真实数据上的跨月跨年与夏令时区间，也不代替真实账号与真实宕机的实机验收。
+
+上一轮（官方服务状态 44 服务商 / 12 种 feed + 货币换算）验证：Rust **1172 项通过、35 项失败、2 项默认忽略**；35 项失败按测试名与改动前基线逐条完全相同（`comm` 双向比对均为空），全部是 macOS 上跑 Windows 路径 / PATH 的既有失败，没有新增失败。前端 **241 项通过（24 个文件）**、`tsc --noEmit` 与 `vite build` 通过。新代码的专项计数：`service_status` 24 项（含 12 种形态各自的解析用例、44 条目录表的地址/公司/日数/不重复校验、`grok-bot` 与 `cursor` 共用 feed 但规则不同的用例、7 组配色、`OutageMemory` 的升级/恢复/序列化）、`exchange_rates` 与货币格式专项、前端 `money.test.ts` 与 `ServiceStatusGroup.test.ts`／`CurrencySettingsGroup.test.ts`。另用 `cargo run --example status` 对 `codex`、`claude-code`、`deepseek`、`zed`、`opencode-go`、`hyper`、`cline-pass` 取到真实响应；`gemini-cli`、`command-code`、`hugging-face` 在本机网络下超时（`curl` 同样超时），未取得真实响应。以上均为 fixture 与进程级验证，不代替 44 家状态页逐家的实机响应验收、真实宕机下的通知验收、真实汇率端点的联网/离线/429 验收，也不代替真实账号与 Windows 无窗口启动的实机验收。
 
 上一轮（54 来源 + 自动开启窗口 + 用户扩展）验证：Rust 1150 项通过、35 项失败、2 项默认忽略；35 项失败按测试名与改动前基线逐条完全相同，全部是 macOS 上跑 Windows 路径 / PATH 的既有失败，没有新增失败。前端 210 项通过（21 个文件）、`tsc --noEmit` 与 `vite build` 通过。新代码的专项计数：10 个新 reader 模块 74 项、`window_starter` 18 项、`extension` 28 项、`extension_runner` 8 项，新增前端 4 项（`WindowStarterGroup.test.ts`）。本次另修掉一个测试自身的竞态：`extension_runner::tests::a_program_that_runs_past_its_limit_is_stopped` 在并行满载时 1 秒时限会先到、程序还没写出 pid 文件，导致误报；改为在时限内没启动起来时换更长时限重试，修复后连续 60 次完整套件零差异（修复前约每 95 次出现一次）。以上均为 fixture 与进程级验证，不代替真实账号、真实 CLI 发送、Windows 无窗口启动与真实扩展程序的实机验收。
 
