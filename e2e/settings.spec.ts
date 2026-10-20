@@ -29,6 +29,7 @@ test.beforeEach(async ({ page }) => {
         if(cmd === 'remove_opencode_console_login') {w.testOpenCodeConnected=false;return {connected:false}}
         if(cmd === 'get_opencode_console_history') {if(w.testOpenCodeError)throw new Error(w.testOpenCodeError);if(w.testOpenCodeHold)return await new Promise(resolve=>w.resolveOpenCode=resolve);return structuredClone(w.testOpenCodeHistory)}
         if(cmd === 'get_service_status') { if(w.testStatusError) throw new Error(w.testStatusError); return structuredClone(w.testStatus ?? null) }
+        if(cmd === 'status_pages') return structuredClone(w.testStatusPages ?? ['codex','claude-code','deepseek'])
         if(cmd === 'get_codex_signals') { if(w.testSignalsError) throw new Error(w.testSignalsError); return structuredClone(w.testSignals ?? {models:[],changes:[],sessions:0,judgedSessions:0,notes:[]}) }
         if(cmd === 'get_prompt_cache') { if(w.testCacheError) throw new Error(w.testCacheError); return structuredClone(w.testCache ?? {live:[],lastLapsed:null,notes:[]}) }
         if(cmd === 'get_preferences') return structuredClone(prefs)
@@ -58,7 +59,7 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('official status shows source colours, missing history and publisher uptime',async({page})=>{
-  await page.evaluate(()=>{(window as any).testStatus={page:'claude',checkedAt:'2026-10-11T01:00:00Z',historyError:null,components:[{id:'code',name:'Claude Code API',state:'partialOutage',uptime:99.95,days:[{date:'2026-10-09',state:null,colour:null},{date:'2026-10-10',state:'partialOutage',colour:'#e75f36'},{date:'2026-10-11',state:'operational',colour:'#76ad2a'}]}]}})
+  await page.evaluate(()=>{(window as any).testStatus={page:'claude-code',address:'https://status.claude.com',company:'Anthropic',palette:'claude',checkedAt:'2026-10-11T01:00:00Z',historyError:null,components:[{id:'code',name:'Claude Code API',state:'partialOutage',uptime:99.95,group:null,days:[{date:'2026-10-09',state:null,colour:null,hours:null},{date:'2026-10-10',state:'partialOutage',colour:'#e75f36',hours:null},{date:'2026-10-11',state:'operational',colour:'#76ad2a',hours:null}]}]}})
   await page.getByRole('button',{name:'暂不设置'}).click();await page.getByRole('button',{name:'Claude Code',exact:true}).click()
   const group=page.getByRole('region',{name:'官方服务状态'});await expect(group.getByText('部分故障',{exact:true})).toBeVisible();await expect(group.getByText('99.95% 正常运行 · 官方报告')).toBeVisible()
   await expect(group.getByRole('listitem')).toHaveCount(3);await expect(group.getByRole('listitem').first()).toHaveAttribute('title','2026-10-09 · 无数据');await expect(group.getByRole('listitem').nth(1)).toHaveCSS('background-color','rgb(231, 95, 54)')
@@ -68,7 +69,7 @@ test('official status shows source colours, missing history and publisher uptime
 })
 
 test('status rereads at five minutes and failed reads remove healthy rows; leaving stops polling',async({page})=>{
-  await page.clock.install();await page.evaluate(()=>{(window as any).testStatus={page:'openAI',checkedAt:'2026-10-11T01:00:00Z',historyError:null,components:[{id:'cli',name:'CLI',state:'operational',uptime:null,days:[]}]}})
+  await page.clock.install();await page.evaluate(()=>{(window as any).testStatus={page:'codex',address:'https://status.openai.com',company:'OpenAI',palette:'openAi',checkedAt:'2026-10-11T01:00:00Z',historyError:null,components:[{id:'cli',name:'CLI',state:'operational',uptime:null,group:null,days:[]}]}})
   await page.getByRole('button',{name:'暂不设置'}).click();await page.getByRole('button',{name:'Codex',exact:true}).click()
   const group=page.getByRole('region',{name:'官方服务状态'});await expect(group.getByText('运行正常',{exact:true})).toBeVisible()
   await page.evaluate(()=>{(window as any).testStatusError='官方状态页请求失败'});await page.clock.fastForward(300_000)
