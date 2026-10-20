@@ -4,14 +4,14 @@
  "authorization": "提交、推送、发版（2026-10-20，用户指令「提交代码，发布一版」）",
  "releaseHold": false,
  "buildBlocker": [
-  "This workspace is aarch64-apple-darwin. `src-tauri/tauri.conf.json` bundles `nsis` and `msi` only, and `scripts/tauri.mjs` only enters its release path when `process.platform === 'win32'`, so the installers this project ships cannot be produced here.",
-  "The updater signing key `~/.pulsewin-signing/updater.key` does not exist on this machine and `TAURI_SIGNING_PRIVATE_KEY` is unset. `updater.requireSignedVersion` is true, so a package built without it could not be accepted by any installed client, and the key must not be regenerated (docs/updates.md: losing it ends update signing for installed users).",
-  "`scripts/publish-github.mjs` uploads `updates/github/{exe,sig,msi,msi.sig,latest.json}`, which only `npm run tauri -- build` on Windows creates. Publishing a Release without `latest.json` would 404 the endpoint every installed client reads (`releases/latest/download/latest.json`) and break update checks, so no Release was created."
+  "The installers are produced by .github/workflows/release-windows.yml, which needs the repository secret TAURI_SIGNING_PRIVATE_KEY. The repository currently has no secrets (actions/secrets total_count is 0), so that workflow cannot build signed artifacts yet.",
+  "The key cannot be generated fresh: the public half is pinned in src-tauri/tauri.conf.json and updater.requireSignedVersion is true, so a new key would sign packages no installed client accepts. It has to be the key that signed 0.1.17 (minisign key id 218D1940E2C4F3DC, verified against the published v0.1.17 signature).",
+  "Publishing a Release without latest.json would 404 the endpoint every installed client reads (releases/latest/download/latest.json) and break update checks, so no Release and no tag were created."
  ],
  "toFinishOnWindows": [
-  "git pull, then `npm run tauri -- build` — builds and signs 0.1.18 at the version already committed here, and publishes the local `updates/latest.json` feed because releaseHold is now false",
-  "`npm run prepare:github -- wapearoudy/PulseWin`",
-  "`npm run publish:github` — pushes main, creates the draft Release, uploads the five assets, then publishes",
+  "Add the repository secret TAURI_SIGNING_PRIVATE_KEY (plus TAURI_SIGNING_PRIVATE_KEY_PASSWORD if the key has one). It must be the key that signed 0.1.17; do not generate a new one.",
+  "Dispatch .github/workflows/release-windows.yml. It runs the frontend and Rust suites, builds and signs 0.1.18 at the version already committed here, runs `npm run prepare:github`, and creates the Release with all five assets.",
+  "If publishing fails, the signed assets stay on the run as the artifact PulseWin-0.1.18-windows, so nothing has to be rebuilt.",
   "Do not run `npm run release`: it bumps the patch version again and would skip 0.1.18."
  ],
  "tests": {
@@ -29,6 +29,17 @@
    "passed": 81,
    "runs": 3,
    "note": "Three consecutive full-suite runs of 81 passed. Two test-side defects were fixed on the way: the status mock did not answer the new `status_pages` command, and `prompt cache countdown` raced its own fake clock (`install({time: T})` then `pauseAt(T)` throws \"Cannot fast-forward to the past\" once a millisecond has passed; it failed on pristine specs too, about one full-suite run in three)."
+  },
+  "windows": {
+   "passed": 1212,
+   "failed": 0,
+   "ignored": 2,
+   "note": "First Windows run of the suite, on the GitHub Actions windows-latest runner (.github/workflows/windows-check.yml, run 39440841593 at 8e7f6f5). The 35 tests that fail on macOS because they exercise Windows paths and PATH pass here, so this is a stricter bar than the macOS baseline. It found two real defects macOS could not compile or observe (a missing PathBuf import in the Windows-only system_path, and a path-as-identity comparison that gave one transcript two names by separator) plus three tests that assumed a POSIX host; all are fixed in their own commits. It does not build installers: the build step is --no-bundle."
+  },
+  "frontendWindows": {
+   "passed": 260,
+   "files": 25,
+   "note": "vitest and tsc --noEmit both ran on the Windows runner, not only on macOS."
   }
  },
  "implementedVerified": [

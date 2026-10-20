@@ -38,17 +38,18 @@
   "browser": "81 passed, three consecutive full-suite runs. Two test-side defects were fixed: the status mock did not answer the new status_pages command, and the prompt-cache countdown test raced its own fake clock (install({time: T}) then pauseAt(T) throws \"Cannot fast-forward to the past\"; it failed on pristine specs too, about one full-suite run in three).",
   "native": "NOT RUN for 0.1.18. The last verified native artifact remains the 0.1.17 Windows/WebView2 binary.",
   "localUpdateFeed": "No 0.1.18 artifact exists; the last promoted feed is 0.1.17.",
-  "buildBlocker": "aarch64-apple-darwin host with nsis/msi bundle targets and no updater signing key; see docs/release-0.1.18.json buildBlocker.",
+  "buildBlocker": "The installers need .github/workflows/release-windows.yml, which is missing only the repository secret TAURI_SIGNING_PRIVATE_KEY (the repository has no secrets). The key must be the one that signed 0.1.17 (minisign key id 218D1940E2C4F3DC) and must not be regenerated; see docs/release-0.1.18.json buildBlocker.",
   "publicRelease": "0.1.18 is NOT published. The last published release remains 0.1.17, whose post-publication anonymous asset verification the user waived on 2026-10-18.",
   "externalLimitations": [
    "44 status pages verified against fixtures only; gemini-cli, command-code and hugging-face timed out from this network (curl times out too) and stay unverified",
    "Exchange-rate endpoint, offline and 429 behaviour not exercised against the real service",
    "Anonymous GitHub backup API rate limited; live fallback not accepted",
    "Real Harness read-only integrity check failed because source logs changed during its 57.8-second scan; no stable live-source acceptance"
-  ]
+  ],
+  "windows": "PASS on GitHub Actions windows-latest: 1212 passed, 0 failed, 2 ignored, plus 260 frontend tests, tsc --noEmit and a --no-bundle build that produced pulsewin.exe (run 39440841593 at 8e7f6f5, .github/workflows/windows-check.yml). The 35 tests that fail on macOS pass here. Two real Windows-only defects and three POSIX-assuming tests were found and fixed; this is compile-and-test evidence, NOT an installer build."
  },
  "pending": [
-  "Build, sign and publish 0.1.18 on a Windows host: npm run tauri -- build, then npm run prepare:github -- wapearoudy/PulseWin, then npm run publish:github (do not run npm run release, which would bump the version again)",
+  "Publish 0.1.18: add the repository secret TAURI_SIGNING_PRIVATE_KEY (the key that signed 0.1.17, not a new one) and dispatch .github/workflows/release-windows.yml, which builds, signs and creates the Release. Do not run npm run release: it would bump the version again.",
   "Acceptance of the 44 official status pages against real responses; outage notification needs a real outage",
   "Acceptance of hide-from-capture under real Windows capture and recording tools",
   "Exchange-rate endpoint, offline fallback and 429 behaviour on the real network",
