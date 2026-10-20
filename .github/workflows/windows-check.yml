@@ -1,0 +1,69 @@
+name: Windows check
+
+# The release workflow cannot run until the updater signing key secret
+# exists, and until then nothing here has ever been compiled by a Windows
+# toolchain. This workflow is the cheap answer to that: it needs no secret
+# at all, because it builds without bundling, and bundling is where
+# `createUpdaterArtifacts` signs.
+#
+# What it proves, and what it does not: the Rust code compiles for Windows,
+# the test suites run on Windows, and the frontend builds. It produces no
+# installer, so it says nothing about nsis or msi packaging, the WebView2
+# runtime, or anything a person would see on screen.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src-tauri/**'
+      - 'src/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/windows-check.yml'
+
+concurrency:
+  group: windows-check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Frontend unit tests and type check
+        run: |
+          npx vitest run
+          npx tsc --noEmit
+
+      - name: Rust tests
+        # The macOS run has 35 known failures, all of them Windows path and
+        # PATH assertions that pass here instead. This is the run that says
+        # whether the reverse is true as well.
+        working-directory: src-tauri
+        run: cargo test --all-targets
+
+      - name: Build without bundling
+        # Called directly rather than through scripts/tauri.mjs: that script
+        # treats any `build` on Windows as a release build and demands the
+        # signing key, which is the one thing this workflow does not have.
+        run: npx tauri build --no-bundle
