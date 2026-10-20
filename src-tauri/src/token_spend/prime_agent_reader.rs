@@ -101,7 +101,7 @@ pub(super) fn candidate(path: &Path, id: &str) -> bool {
 pub(super) fn read(path: &Path, id: &str, cancel: &AtomicBool) -> Result<(Vec<SpendRecord>, Vec<String>), String> {
     check(cancel)?;
     let mut notes = Vec::new();
-    let wanted = path.to_string_lossy().into_owned();
+    let wanted = key(&path.to_string_lossy());
     let mut transcripts = Vec::new();
     for file in store_files(path) {
         check(cancel)?;
@@ -152,7 +152,7 @@ fn parse(path: &Path, cancel: &AtomicBool) -> Result<Transcript, String> {
     let file = File::open(path).map_err(|error| format!("Prime Agent：会话记录无法读取（{error}）。"))?;
     let mut reader = BufReader::with_capacity(64 * 1024, file);
     let mut transcript = Transcript {
-        path: path.to_string_lossy().into_owned(), id: None, cwd: None, parent: None, depth: 0,
+        path: key(&path.to_string_lossy()), id: None, cwd: None, parent: None, depth: 0,
         valid: false, messages: Vec::new(), attributions: Vec::new(),
     };
     let mut notes = Vec::new();
@@ -260,7 +260,7 @@ fn reconcile(transcripts: &[Transcript], notes: &mut Vec<String>) -> HashMap<Str
         if let Some(parent) = transcript.parent.as_deref() {
             // `parentSession` names a file path; a relative one is resolved as
             // written, which is what the original's URL standardisation does.
-            parent_of.insert(transcript.path.clone(), parent.to_owned());
+            parent_of.insert(transcript.path.clone(), key(parent));
         }
     }
     /// The top of a fork lineage, collapsing a cycle to its smallest path.
@@ -335,6 +335,18 @@ fn identity(message: &Message) -> String {
         message.provider.as_deref().unwrap_or_default(),
         message.model.as_deref().unwrap_or_default(),
         tally.input, tally.output, tally.cache_read, tally.cache_write)
+}
+
+/// How one file is recognised as itself.
+///
+/// Paths here are compared as text, and the two producers of that text disagree
+/// about separators: a directory listing hands back `\` on Windows while a
+/// `parentSession` written by the agent, or a path a caller assembled, may use
+/// `/`. Both name the same file, so the separator is folded before any
+/// comparison, otherwise a child transcript is enumerated but never matched to
+/// the file that asked for it, and the read reports no usage at all.
+fn key(path: &str) -> String {
+    path.replace('\\', "/")
 }
 
 /// The transcripts a file's answer is computed from: the store's sessions tree
@@ -607,6 +619,38 @@ mod tests {
             assert_eq!(records.len(), 1);
             assert_eq!(records[0].tally.total(), 260);
         }
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn one_file_has_one_name_whichever_separator_wrote_it() {
+        assert_eq!(key("/a/b/c.jsonl"), "/a/b/c.jsonl");
+        assert_eq!(key(r"C:\a\b\c.jsonl"), "C:/a/b/c.jsonl");
+        assert_eq!(key("C:/a/b/c.jsonl"), key(r"C:\a\b\c.jsonl"));
+    }
+
+    /// Windows enumerates a directory with a backslash while a `parentSession` can
+    /// carry `/`; the same file must still be recognised as the one the parent
+    /// named.
+    /// Written with a backslash path on every platform so the disagreement is
+    /// exercised here rather than only on the Windows runner.
+    #[test]
+    fn a_child_named_with_the_other_separator_is_still_found() {
+        let home = temp_dir("prime-separator");
+        let sessions = home.join(".prime/agent/sessions");
+        let artifacts = home.join(".prime/agent/session-artifacts");
+        fs::create_dir_all(&sessions).unwrap();
+        fs::create_dir_all(artifacts.join("run/sub-1")).unwrap();
+        let parent = sessions.join("parent.jsonl");
+        fs::write(&parent, PARENT).unwrap();
+        let as_written = parent.to_string_lossy().replace('/', "\\");
+        assert!(as_written.contains('\\'), "{as_written}");
+        fs::write(artifacts.join("run/sub-1/child.jsonl"), child(&as_written)).unwrap();
+
+        let (records, notes) = read(&parent, "prime-agent", &AtomicBool::new(false)).unwrap();
+        assert_eq!(records.len(), 1, "{records:?}");
+        assert_eq!(records[0].tally.total(), 260);
+        assert!(notes.iter().any(|note| note.contains("已扣除")), "{notes:?}");
         let _ = fs::remove_dir_all(&home);
     }
 
