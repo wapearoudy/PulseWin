@@ -17,7 +17,8 @@
     "release": "node scripts/release.mjs",
     "prepare:github": "node scripts/github-update.mjs",
     "test:update": "node scripts/update-smoke.mjs",
-    "publish:github": "node scripts/publish-github.mjs"
+    "publish:github": "node scripts/publish-github.mjs",
+    "check:signing-key": "node scripts/check-signing-key.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.1.1",

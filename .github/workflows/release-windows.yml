@@ -72,6 +72,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Check the key is the one installed clients trust
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: node scripts/check-signing-key.mjs
+
       - name: Frontend unit tests and type check
         run: |
           npx vitest run
