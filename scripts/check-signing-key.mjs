@@ -92,8 +92,8 @@ try {
   writeFileSync(probe, 'PulseWin signing key check\n')
   try {
     execFileSync(
-      process.platform === 'win32' ? 'npx.cmd' : 'npx',
-      ['tauri', 'signer', 'sign', probe],
+      process.execPath,
+      [join(root, 'node_modules/@tauri-apps/cli/tauri.js'), 'signer', 'sign', probe],
       {
         cwd: root,
         env: {
@@ -107,6 +107,12 @@ try {
     )
   } catch (error) {
     const detail = String(error.stderr ?? error.message).trim()
+    // A failure to launch the CLI is not a verdict on the key, so say which.
+    if (error.code === 'ENOENT' || error.code === 'EINVAL') {
+      console.error(`Could not run the Tauri CLI: ${detail || error.code}`)
+      console.error('Run npm ci first; this reads node_modules/@tauri-apps/cli/tauri.js.')
+      process.exit(2)
+    }
     console.error(`${described} could not sign with this key.`)
     if (detail) console.error(detail.split('\n').slice(-3).join('\n'))
     console.error('If the key has a password, set TAURI_SIGNING_PRIVATE_KEY_PASSWORD first.')
