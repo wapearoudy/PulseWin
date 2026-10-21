@@ -1,10 +1,10 @@
 {
  "version": "0.1.18",
- "status": "prepared-not-built",
- "releaseHold": false,
- "reason": "User requested commit, push and release on 2026-10-20 (\"提交代码，发布一版\"). The code is committed and pushed and the version is bumped to 0.1.18, but this aarch64-apple-darwin workspace cannot build the nsis/msi installers the project ships, and the updater signing key `~/.pulsewin-signing/updater.key` is not on this machine. The hold is lifted so the Windows build machine can finish with `npm run tauri -- build` then `npm run prepare:github -- wapearoudy/PulseWin` then `npm run publish:github`; nothing is published yet. This release does not establish full Pulse parity.",
+ "status": "published",
+ "releaseHold": true,
+ "reason": "0.1.18 is published from GitHub Actions (run 39527437524 at 2f88f41): the nsis setup and msi bundles were built and signed on windows-latest with the original updater key, and all five assets are on the v0.1.18 release. The hold is restored because the next release is a new decision, not a continuation of this one. This release does not establish full Pulse parity.",
  "upstream": "1.9.0",
- "publishedVersion": "0.1.17",
+ "publishedVersion": "0.1.18",
  "implementedVerified": [
   "Light assistant surfaces, rings and detail cards",
   "Horizontal floating, bottom docking and orientation-aware detail cards",
@@ -36,10 +36,10 @@
   "rust": "1176 passed, 35 failed, 2 explicitly ignored. The 35 failures are the pre-existing macOS run of Windows-only path/PATH tests and their names are identical to the pre-change baseline (comm -23 and comm -13 against /tmp/baseline_failures.txt are both empty).",
   "frontendUnit": "260 passed in 25 files; tsc --noEmit and vite build clean.",
   "browser": "81 passed, three consecutive full-suite runs. Two test-side defects were fixed: the status mock did not answer the new status_pages command, and the prompt-cache countdown test raced its own fake clock (install({time: T}) then pauseAt(T) throws \"Cannot fast-forward to the past\"; it failed on pristine specs too, about one full-suite run in three).",
-  "native": "NOT RUN for 0.1.18. The last verified native artifact remains the 0.1.17 Windows/WebView2 binary.",
-  "localUpdateFeed": "No 0.1.18 artifact exists; the last promoted feed is 0.1.17.",
-  "buildBlocker": "The installers need .github/workflows/release-windows.yml, which is missing only the repository secret TAURI_SIGNING_PRIVATE_KEY (the repository has no secrets). The key must be the one that signed 0.1.17 (minisign key id 218D1940E2C4F3DC) and must not be regenerated; see docs/release-0.1.18.json buildBlocker.",
-  "publicRelease": "0.1.18 is NOT published. The last published release remains 0.1.17, whose post-publication anonymous asset verification the user waived on 2026-10-18.",
+  "native": "0.1.18 was built on GitHub Actions windows-latest and the artifacts are published. No installer was executed and no installed client was upgraded, so the install and in-app update paths remain unverified on a real machine.",
+  "localUpdateFeed": "0.1.18 is promoted on GitHub; no local updates/ feed was produced on this machine.",
+  "buildBlocker": "None for 0.1.18. The updater signing key is now a repository secret (TAURI_SIGNING_PRIVATE_KEY, key id 218D1940E2C4F3DC) and .github/workflows/release-windows.yml builds, signs and publishes.",
+  "publicRelease": "0.1.18 is published as the latest release with all five assets; anonymous download, minisign key id, Ed25519 verification over the BLAKE2b-512 prehash and the releases/latest/download/latest.json endpoint were all verified (see docs/release-0.1.18.json publicVerification).",
   "externalLimitations": [
    "44 status pages verified against fixtures only; gemini-cli, command-code and hugging-face timed out from this network (curl times out too) and stay unverified",
    "Exchange-rate endpoint, offline and 429 behaviour not exercised against the real service",
@@ -49,7 +49,7 @@
   "windows": "PASS on GitHub Actions windows-latest: 1212 passed, 0 failed, 2 ignored, plus 260 frontend tests, tsc --noEmit and a --no-bundle build that produced pulsewin.exe (run 39440841593 at 8e7f6f5, .github/workflows/windows-check.yml). The 35 tests that fail on macOS pass here. Two real Windows-only defects and three POSIX-assuming tests were found and fixed; this is compile-and-test evidence, NOT an installer build."
  },
  "pending": [
-  "Publish 0.1.18: add the repository secret TAURI_SIGNING_PRIVATE_KEY (the key that signed 0.1.17, not a new one) and dispatch .github/workflows/release-windows.yml, which builds, signs and creates the Release. Do not run npm run release: it would bump the version again.",
+  "Execute an installer and upgrade one installed client to 0.1.18 to accept the install and in-app update paths; neither was exercised for this release.",
   "Acceptance of the 44 official status pages against real responses; outage notification needs a real outage",
   "Acceptance of hide-from-capture under real Windows capture and recording tools",
   "Exchange-rate endpoint, offline fallback and 429 behaviour on the real network",
@@ -65,7 +65,7 @@
   "User extensions acceptance with a real installed extension program",
   "Stable real Harness source integrity acceptance"
  ],
- "checkpointDate": "2026-10-20",
+ "checkpointDate": "2026-10-21",
  "reference": "Pulse v1.9.0 tag objects, alongside the unchanged old checkout",
  "implementedPartial": [
   "DeepSeek independent encrypted console login, 30-day actual billing and 60-second cache; interactive live read passed, renewal/import and detailed-card acceptance pending",

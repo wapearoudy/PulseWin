@@ -1,19 +1,10 @@
 {
  "version": "0.1.18",
- "status": "prepared-not-built",
+ "status": "published",
  "authorization": "提交、推送、发版（2026-10-20，用户指令「提交代码，发布一版」）",
  "releaseHold": false,
- "buildBlocker": [
-  "The installers are produced by .github/workflows/release-windows.yml, which needs the repository secret TAURI_SIGNING_PRIVATE_KEY. The repository currently has no secrets (actions/secrets total_count is 0), so that workflow cannot build signed artifacts yet.",
-  "The key cannot be generated fresh: the public half is pinned in src-tauri/tauri.conf.json and updater.requireSignedVersion is true, so a new key would sign packages no installed client accepts. It has to be the key that signed 0.1.17 (minisign key id 218D1940E2C4F3DC, verified against the published v0.1.17 signature).",
-  "Publishing a Release without latest.json would 404 the endpoint every installed client reads (releases/latest/download/latest.json) and break update checks, so no Release and no tag were created."
- ],
- "toFinishOnWindows": [
-  "Add the repository secret TAURI_SIGNING_PRIVATE_KEY (plus TAURI_SIGNING_PRIVATE_KEY_PASSWORD if the key has one). It must be the key that signed 0.1.17; do not generate a new one.",
-  "Dispatch .github/workflows/release-windows.yml. It runs the frontend and Rust suites, builds and signs 0.1.18 at the version already committed here, runs `npm run prepare:github`, and creates the Release with all five assets.",
-  "If publishing fails, the signed assets stay on the run as the artifact PulseWin-0.1.18-windows, so nothing has to be rebuilt.",
-  "Do not run `npm run release`: it bumps the patch version again and would skip 0.1.18."
- ],
+ "buildBlocker": [],
+ "toFinishOnWindows": [],
  "tests": {
   "rust": {
    "passed": 1176,
@@ -34,7 +25,8 @@
    "passed": 1212,
    "failed": 0,
    "ignored": 2,
-   "note": "First Windows run of the suite, on the GitHub Actions windows-latest runner (.github/workflows/windows-check.yml, run 39440841593 at 8e7f6f5). The 35 tests that fail on macOS because they exercise Windows paths and PATH pass here, so this is a stricter bar than the macOS baseline. It found two real defects macOS could not compile or observe (a missing PathBuf import in the Windows-only system_path, and a path-as-identity comparison that gave one transcript two names by separator) plus three tests that assumed a POSIX host; all are fixed in their own commits. It does not build installers: the build step is --no-bundle."
+   "note": "First Windows run of the suite, on the GitHub Actions windows-latest runner (.github/workflows/windows-check.yml, run 39440841593 at 8e7f6f5). The 35 tests that fail on macOS because they exercise Windows paths and PATH pass here, so this is a stricter bar than the macOS baseline. It found two real defects macOS could not compile or observe (a missing PathBuf import in the Windows-only system_path, and a path-as-identity comparison that gave one transcript two names by separator) plus three tests that assumed a POSIX host; all are fixed in their own commits. It does not build installers: the build step is --no-bundle.",
+   "releaseBuild": "The same run that published also ran the full suites before bundling: 1212 Rust passed, 0 failed, 2 ignored; 260 frontend passed; tsc --noEmit clean."
   },
   "frontendWindows": {
    "passed": 260,
@@ -53,12 +45,30 @@
  ],
  "installationExecuted": false,
  "fullParity": false,
- "publicVerification": null,
+ "publicVerification": {
+  "verifiedAt": "2026-10-21",
+  "anonymousDownload": "All five assets downloaded without credentials: HTTP 200 for latest.json (5117 bytes), the nsis setup (3528461 bytes), its .sig (440 bytes), the msi (4812800 bytes) and its .sig (440 bytes).",
+  "signatureKey": "Both .sig files and all three platforms in latest.json carry minisign key id 218D1940E2C4F3DC, the id pinned in src-tauri/tauri.conf.json.",
+  "signatureCryptography": "Ed25519 verification of each installer against the pinned public key over the BLAKE2b-512 prehash (minisign's ED scheme) passed for both the nsis setup and the msi.",
+  "updaterEndpoint": "https://github.com/wapearoudy/PulseWin/releases/latest/download/latest.json returns 200 with version 0.1.18 and three platforms, so the endpoint every installed client reads resolves.",
+  "latestRelease": "The GitHub API reports v0.1.18 as the latest release, not a draft and not a prerelease.",
+  "sha256": {
+   "PulseWin_0.1.18_x64-setup.exe": "e09a2460263f236d3914afc64b80f996fffde796f491799c80b3410e7b294adb",
+   "PulseWin_0.1.18_x64-setup.exe.sig": "15e46488f3a7e447b4d1574fef406d1a6bd02205d1ffcb699d8f3d5075d96e6f",
+   "PulseWin_0.1.18_x64_en-US.msi": "58c3d3240438a1c0ebe570c85bdfd4b773aa2d98d2b17609a5e65fbef82b782a",
+   "PulseWin_0.1.18_x64_en-US.msi.sig": "9ea355b4ccc06dfb787f2bbfe3fda27676651ee5d8976b63c46005f3fe057d53",
+   "latest.json": "120b63eba30c925e6993e327bae86b83ce569548d9c1519db6296baf81aef958"
+  }
+ },
  "limitations": [
   "No 0.1.18 installer, signature or update manifest exists yet: the Windows build has not run",
   "Every status page is verified against fixtures, not against 44 live responses; gemini-cli, command-code and hugging-face timed out from this network (curl times out too) and are therefore unverified",
   "Outage notification, hide-from-capture, the exchange-rate endpoint (including offline and 429), real extension metric series, real accounts and multi-monitor acceptance remain unproven",
   "Developer integrations and deep links, `--recap`, statusline installation, the account-panel groups and the remaining parity rows are still unimplemented"
  ],
- "testedAt": "2026-10-20"
+ "testedAt": "2026-10-20",
+ "releaseCommit": "2f88f41",
+ "publishedAt": "2026-10-21T01:42:17Z",
+ "builtOn": "GitHub Actions windows-latest (.github/workflows/release-windows.yml, run 39527437524 at 2f88f41); the release build compiled in 8m05s and produced the nsis and msi bundles there.",
+ "postPublicationVerification": "Assets, signatures and the updater endpoint verified as recorded in publicVerification. No installer was executed and no installed client was upgraded, so the install path and the in-app update path remain unverified on a real machine."
 }
