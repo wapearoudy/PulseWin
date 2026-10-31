@@ -54,7 +54,7 @@
  ],
  "verification": {
   "rust": "1245 passed, 0 failed, 2 explicitly ignored real-account checks (1247 total) on this Windows machine, including the new price-alias, Kimi Code, Qoder, Cursor, progress-bar, browser-session and warmer-timer tests. The 35 failures recorded on macOS are Windows-only path/PATH tests that pass here; the Windows workflow reports the same green result.",
-  "frontendUnit": "268 passed in 26 files; tsc --noEmit and vite build clean.",
+  "frontendUnit": "269 passed in 26 files; tsc --noEmit and vite build clean.",
   "browser": "81 passed in the full browser suite on the 0.1.19 working tree (45.8s); browser IPC responses are synthetic.",
   "native": "0.1.18 was built on GitHub Actions windows-latest and the artifacts are published. No installer was executed and no installed client was upgraded, so the install and in-app update paths remain unverified on a real machine.",
   "localUpdateFeed": "0.1.18 is promoted on GitHub; no local updates/ feed was produced on this machine.",

@@ -23,7 +23,7 @@ continuous/segmented progress-bar styles, Qoder credit-part accounting with a
 Codex weaker-model signal refinements, the system-settings title bar, experimental
 liquid docking, the 250 ms notch hover delay, connection diagnostics and developer integrations
 (read-only --json/--statusline commands plus pulsewin:// account and recap links). 1245 Rust checks pass with
-2 real-account checks explicitly ignored; 268 frontend unit checks and 81 synthetic
+2 real-account checks explicitly ignored; 269 frontend unit checks and 81 synthetic
 browser checks pass. Status history, activity, recap logic, local Codex evidence,
 cache timing, accurate pricing/counters and the full 54-source Token catalog have
 running implementations. DeepSeek console renewal/import scans Chrome, Edge, Brave
@@ -96,7 +96,7 @@ latency and estimated cache savings, and the cache-read split has a hover/focus 
 read-only CLI commands (--json, --statusline and --recap), saves a status-line script and shows pulsewin://
 account and recap links registered by the installer; the monthly recap reminder uses a WinRT toast
 activation callback so clicking it opens the Token Spend recap. Validation: 1245 Rust tests plus two
-ignored, 268 frontend tests, tsc --noEmit and vite build clean.
+ignored, 269 frontend tests, tsc --noEmit and vite build clean.
 
 0.1.18 (published) registered the remaining 13 Token sources so all 54 have a
 reader, ported the 44-provider status catalogue and currency conversion, widened
