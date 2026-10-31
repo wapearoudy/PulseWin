@@ -30,4 +30,24 @@ describe('calendar recap rules',()=>{
   it('work before 5am belongs to previous night and prolonged unattended work is excluded',()=>{
     const epoch=(hour:number)=>new Date(2026,9,2,hour).getTime()/1000;expect(workdays([epoch(1),epoch(2)])[0]).toEqual({endMinute:26*60,crossesMidnight:true});expect(workdays(Array.from({length:23},(_,h)=>epoch(h)))).toEqual([])
   })
+  it('offers every day and week from the earliest record, newest first',()=>{
+    const records=[record('2026-10-27'),record('2026-10-28')]
+    const days=recapPeriods(records,'day',new Date(2026,9,30,10))
+    expect(days.keys[0]).toBe('2026-10-30');expect(days.keys).toContain('2026-10-27');expect(days.defaultKey).toBe('2026-10-30')
+    expect(recapPeriods(records,'day',new Date(2026,9,30,4)).defaultKey).toBe('2026-10-29')
+    const weeks=recapPeriods(records,'week',new Date(2026,9,30,10))
+    expect(weeks.keys[0]).toBe('week-2026-10-26');expect(weeks.defaultKey).toBe('week-2026-10-26')
+    expect(recapPeriods(records,'week',new Date(2026,9,26,10)).defaultKey).toBe('week-2026-10-26')
+  })
+  it('day recap uses one day, skips the calendar card and compares with the day before',()=>{
+    const r=buildRecap([record('2026-10-01',100),record('2026-10-02',200)],'2026-10-02',31,new Date(2026,9,3))
+    expect(r.kind).toBe('day');expect(r.summary.tokens).toBe(200);expect(r.cards).not.toContain('calendar');expect(r.cards).toContain('poster');expect(r.cards).toContain('scorecard');expect(r.change).toBe(1);expect(r.paid).toBeCloseTo(1)
+  })
+  it('week recap covers its seven days, prorates payback by day and keeps the running-week chip',()=>{
+    const records=[record('2026-09-21',100),record('2026-09-28',100),record('2026-09-29',100),record('2026-09-30',100),record('2026-10-01',100),record('2026-10-02',100)]
+    const running=buildRecap(records,'week-2026-09-28',31,new Date(2026,9,2,12))
+    expect(running.kind).toBe('week');expect(running.summary.tokens).toBe(500);expect(running.cards).not.toContain('calendar');expect(running.change).not.toBeNull()
+    expect(running.paid).toBeCloseTo(31*(3/30+2/31))
+    expect(buildRecap(records,'week-2026-09-21',31,new Date(2026,9,2,12)).cards).toContain('poster')
+  })
 })

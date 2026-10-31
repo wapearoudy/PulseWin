@@ -120,11 +120,12 @@ Token Spend is also off by default. Current readers cover Claude Code, Codex, Qw
 CLI local logs, plus Cursor exports, Antigravity synchronized cache, Hindsight mirrored usage and
 MCode captured stream-json. These four import formats require files prepared beforehand; PulseWin
 does not connect or sync them. Readers use bounded streaming, replay deduplication, file caching and cooperative cancellation.
-The page has today/7-day/30-day ranges, model and agent details, daily/hourly charts, project and
+The page has the original's nine ranges plus a custom date range, model and agent details, daily/hourly charts, project and
 session sorting/pagination, and public models.dev price estimates. Unknown prices stay unknown.
 Native read-only readers also cover OpenCode, Kilo CLI, MiMo Code, Pi, Oh My Pi, Kimchi, Amp,
-Droid, OpenClaw, Goose, Hermes, Zed, Kiro and Kimi CLI, including active WAL files; Crush is
-recognized as a cost-only source. The 0.1.17 tree ports seventeen more Pulse 1.9 sources:
+Droid, OpenClaw, Goose, Hermes, Zed, Kiro and Kimi CLI (both the legacy wire logs and the Kimi Code
+store), including active WAL files; Crush is recognized as a cost-only source. Every remaining
+Pulse 1.9 source was then ported:
 Roo Code, Kilo Code and Cline task logs or CLI sessions; Cherry Studio, Command Code,
 OpenCodeReview, ZCode, JCode, Augment, Gajae Code, Junie and Fx session stores; Mux and Codebuff
 chats; Unsloth Studio and LM Studio local databases or logs; and Reasonix daily statistics.
@@ -136,9 +137,10 @@ DeepSeek Harness reads normal and versioned JSONL sessions, including concatenat
 under `~/.dsh/sessions` or `$DSH_HOME/sessions`. CLI and the current desktop share this directory.
 It includes provider-reported failed attempts and compaction calls, excludes fork-inherited counters,
 and deduplicates migrated copies. Reasoning stays inside output; input and cache buckets are disjoint.
-The original's other 13 sources — Grok Build, Devin, OmO Native, Prime Agent, CodeBuddy,
-WorkBuddy, Antigravity CLI, Antigravity IDE, Devin Desktop, Freebuff, Trae, Warp and Copilot —
-are explicitly unsupported until their readers are implemented. Aggregate Cursor exports do not
+All 54 catalogued Token sources now have a reader; per-reader notes live in
+[docs/token-source-backlog.md](docs/token-source-backlog.md). Settings also builds shareable
+1080×1920 recap cards for 日报/周报/月报/年报 — poster, opener, calendar/timetable, payback and
+scorecard — with a monthly subscription price prorated by day for a day or a week.
 generate a fabricated hour chart.
 
 General settings offers two optional global shortcuts and reads the actual Windows login-startup
@@ -222,7 +224,9 @@ which lands in the registry and never reaches the environment.
 `src-tauri/src/proxy.rs` reads `ProxyEnable` / `ProxyServer` / `ProxyOverride` from
 `HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings` and configures the HTTP client
 accordingly. Without it, **every** provider call times out with `client error (Connect) <-
-operation timed out`. Environment variables still take precedence when set.
+operation timed out`. Environment variables still take precedence when set. The 不使用代理 mode
+bypasses both the environment and the registry, so provider, login, price and updater calls go
+direct even on a machine with a system proxy.
 
 ---
 

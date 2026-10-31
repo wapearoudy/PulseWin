@@ -362,7 +362,9 @@ fn price_for<'a>(model: &str, prices: &'a Prices) -> Option<&'a Price> {
     None
 }
 fn price_for_agent<'a>(model: &str, agent: &str, prices: &'a Prices) -> Option<&'a Price> {
-    if agent=="kimi" {return None;}
+    // Legacy `~/.kimi` wire logs name no model at all; Kimi Code names one, so
+    // only the unnamed placeholder stays unpriced.
+    if agent=="kimi" && model=="kimi (unnamed)" {return None;}
     price_for(model, prices).or_else(|| {
         let vendor=match agent { "opencode"=>"opencode-go", "kilo"=>"kilo", _=>return None };
         price_for(&format!("{vendor}|{model}"), prices)
@@ -460,7 +462,7 @@ fn roots(home: &Path, agent: &str, environment: impl Fn(&str) -> Option<String>)
         "codex" => { let root = environment("CODEX_HOME").filter(|v| !v.trim().is_empty()).map(PathBuf::from).unwrap_or_else(|| home.join(".codex")); vec![root.join("sessions"), root.join("archived_sessions")] }
         "qwen" => vec![home.join(".qwen/projects")],
         "kiro" => vec![home.join(".kiro/sessions/cli")],
-        "kimi" => vec![home.join(".kimi/sessions")],
+        "kimi" => vec![home.join(".kimi/sessions"), home.join(".kimi-code/sessions")],
         "gemini" => vec![environment("GEMINI_CLI_HOME").filter(|v| !v.trim().is_empty()).map(|v| {
             let v = v.trim(); if v == "~" { home.to_path_buf() } else if let Some(rest) = v.strip_prefix("~/").or_else(|| v.strip_prefix("~\\")) { home.join(rest) } else { PathBuf::from(v) }
         }).unwrap_or_else(|| home.join(".gemini")).join("tmp")],
@@ -1009,8 +1011,38 @@ mod tests {
         let first=scan();assert!(first.notes.is_empty());assert_eq!(first.records.len(),1);let r=&first.records[0];assert_eq!(r.tally.total(),155);assert_eq!(r.tally.input,100);assert_eq!(r.source_timestamp,Some(1791705600));assert!(r.cost.is_none());assert!(r.project.is_none());assert_eq!(r.model,"kimi (unnamed)");
         assert_eq!(scan().sources.iter().find(|s|s.id=="kimi").unwrap().cached_files,1);fs::remove_file(&file).unwrap();assert_eq!(scan().records[0].tally.total(),155);
         for entry in fs::read_dir(f.dir.join("cache")).unwrap(){assert!(!fs::read_to_string(entry.unwrap().path()).unwrap().contains("KIMI_PRIVATE_SENTINEL"));}
-        assert_eq!(roots(&f.dir,"kimi",|_|None),vec![f.dir.join(".kimi/sessions")]);assert!(!candidate(&file.with_file_name("state.json"),"kimi"));
+        assert_eq!(roots(&f.dir,"kimi",|_|None),vec![f.dir.join(".kimi/sessions"),f.dir.join(".kimi-code/sessions")]);assert!(!candidate(&file.with_file_name("state.json"),"kimi"));
         assert_eq!(parse_file(&file,"kimi",&AtomicBool::new(true)).unwrap_err(),"cancelled");
+    }
+    #[test] fn kimi_code_store_names_models_and_prices_them(){
+        let f=Fixture::new();
+        let code=f.dir.join(".kimi-code/sessions/wd_proj_hash/session_abc/agents/main/wire.jsonl");
+        fs::create_dir_all(code.parent().unwrap()).unwrap();
+        let named=json!({"type":"usage.record","time":1791705600000i64,"model":"moonshotai/k3-256k","usage":{"inputOther":100,"output":20,"inputCacheRead":30,"inputCacheCreation":5}});
+        let other=json!({"type":"usage.record","time":1791705660000i64,"model":"moonshotai/k2p6","usage":{"inputOther":7,"output":3,"inputCacheRead":0,"inputCacheCreation":0}});
+        fs::write(&code,format!("{}\n{}\n{}\n",json!({"type":"turn.start","agentId":"main"}),named,other)).unwrap();
+        let mut prices=Prices::new();prices.insert("kimi-k3".into(),Price{input:1.,output:2.,cache_read:Some(0.1),cache_write:Some(0.2),name:None,tiers:vec![]});
+        let scan=||scan_roots(&f.dir.join("cache"),&prices,&AtomicBool::new(false),|_,_|{},|id|if id=="kimi"{vec![f.dir.join(".kimi-code/sessions")]}else{vec![]}).unwrap();
+        let first=scan();assert!(first.notes.is_empty());assert_eq!(first.records.len(),2);
+        let priced=first.records.iter().find(|r|r.model=="k3-256k").expect("Kimi Code names the model");
+        assert_eq!(priced.tally.total(),155);assert_eq!(priced.session,"session_abc");
+        assert!(priced.cost.is_some(),"the named model is priced through the Kimi alias");
+        assert!(first.records.iter().any(|r|r.model=="k2p6"));
+        assert_eq!(scan().records.len(),2);
+    }
+    #[test] fn kimi_migrated_request_folds_across_both_stores(){
+        let f=Fixture::new();
+        let code=f.dir.join(".kimi-code/sessions/wd_proj_hash/session_abc/agents/main/wire.jsonl");
+        fs::create_dir_all(code.parent().unwrap()).unwrap();
+        fs::write(&code,format!("{}\n",json!({"type":"usage.record","time":1791705600000i64,"model":"moonshotai/k3-256k","usage":{"inputOther":100,"output":20,"inputCacheRead":30,"inputCacheCreation":5}}))).unwrap();
+        let legacy=f.dir.join(".kimi/sessions/hash/abc/wire.jsonl");
+        fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        fs::write(&legacy,format!("{}\n",json!({"timestamp":1791705600000i64,"message":{"payload":{"token_usage":{"input_other":100,"output":20,"input_cache_read":30,"input_cache_creation":5}}}}))).unwrap();
+        let scan=||scan_roots(&f.dir.join("cache"),&Prices::new(),&AtomicBool::new(false),|_,_|{},|id|if id=="kimi"{vec![f.dir.join(".kimi-code/sessions"),f.dir.join(".kimi/sessions")]}else{vec![]}).unwrap();
+        let first=scan();assert!(first.notes.is_empty());
+        assert_eq!(first.records.len(),1,"the migrated copy must not count twice");
+        assert_eq!(first.records[0].tally.total(),155);
+        assert_eq!(scan().records.len(),1);
     }
     #[test] fn kiro_explicit_turns_sidecar_changes_and_deleted_history(){
         let f=Fixture::new();let file=f.dir.join("logs/session.json");let sidecar=file.with_extension("jsonl");

@@ -78,6 +78,22 @@ fn helpers_override_only_proxy_keys_and_preserve_cli_path() {
 }
 
 #[test]
+fn direct_mode_ignores_every_proxy_source() {
+    // The original's 不使用代理: even a configured system or environment proxy
+    // must not be used, and no proxy key is handed to child processes.
+    let mut direct = NetworkProxySettings { mode: "none".into(), ..Default::default() };
+    direct.validate().unwrap();
+    assert!(direct.endpoint().is_none());
+    let base: Vec<(OsString, OsString)> = [("PATH", "cli-first;system"), ("http_proxy", "old-http"), ("HTTPS_PROXY", "old-https"), ("all_proxy", "old-socks"), ("No_Proxy", "*")].into_iter().map(|(k, v)| (k.into(), v.into())).collect();
+    assert_eq!(direct.process_environment(base), vec![(OsString::from("PATH"), OsString::from("cli-first;system"))]);
+    let policy = Policy::capture(&direct).unwrap();
+    assert!(policy.system.is_none() && policy.bypass.is_none() && policy.environment.is_empty());
+    let status = status(direct);
+    assert_eq!(status.source, "不使用代理");
+    assert!(status.endpoint.is_none() && !status.manual_ready);
+}
+
+#[test]
 fn loopback_aliases_are_local_and_proxy_credentials_never_reach_status() {
     for host in ["localhost", "LOCALHOST.", "editor.localhost", "127.4.3.2", "::1", "[::1]", "::ffff:127.0.0.1"] { assert!(is_loopback(host), "{host}"); }
     for host in ["localhost.evil.com", "example.com", "10.0.0.1", "192.168.0.1", "::2"] { assert!(!is_loopback(host)); }

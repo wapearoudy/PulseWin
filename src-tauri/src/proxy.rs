@@ -7,7 +7,9 @@
 //! app connects directly and times out on every provider.
 //!
 //! System mode preserves reqwest environment precedence; a valid manual
-//! endpoint overrides both environment and registry settings.
+//! endpoint overrides both environment and registry settings; `none` (the
+//! original's 不使用代理) forces direct connections even when the environment or
+//! Windows is configured for a proxy.
 
 use serde::{Deserialize, Serialize};
 
@@ -24,7 +26,7 @@ impl Default for NetworkProxySettings {
 }
 impl NetworkProxySettings {
     pub fn validate(&mut self)->Result<(),String>{
-        if !["system","manual"].contains(&self.mode.as_str()){return Err("请选择跟随系统或手动代理。".into())}
+        if !["system","none","manual"].contains(&self.mode.as_str()){return Err("请选择跟随系统、不使用代理或手动代理。".into())}
         if !["http","socks5"].contains(&self.kind.as_str()){return Err("代理类型只支持 HTTP 或 SOCKS5。".into())}
         self.host=self.host.trim().to_owned();
         // Selecting Manual before entering its first endpoint is permitted;
@@ -51,6 +53,7 @@ impl NetworkProxySettings {
     }
     /// Preserve the caller's allowlisted environment and leading CLI PATH.
     pub fn process_environment(&self,mut base:Vec<(std::ffi::OsString,std::ffi::OsString)>)->Vec<(std::ffi::OsString,std::ffi::OsString)>{
+        if self.mode=="none"{base.retain(|(key,_)|!is_proxy_key(&key.to_string_lossy()));return base}
         let Some(url)=self.endpoint() else{return base};
         base.retain(|(key,_)|!is_proxy_key(&key.to_string_lossy()));
         let add=|base:&mut Vec<_>,key:&str,value:&str|base.push((std::ffi::OsString::from(key),std::ffi::OsString::from(value)));
@@ -82,6 +85,7 @@ pub(crate) struct Policy {
 }
 impl Policy {
     pub(crate) fn configure_updater(&self,mut builder:updater_http::ClientBuilder)->Result<updater_http::ClientBuilder,String>{
+        if self.settings.mode=="none"{return Ok(builder.no_proxy())}
         if let Some(endpoint)=self.settings.endpoint(){
             let url=updater_http::Url::parse(&endpoint).map_err(|_|"代理地址无效。")?;
             builder=builder.no_proxy().proxy(updater_http::Proxy::custom(move|target|if target.host_str().is_some_and(is_loopback){None}else{Some(url.clone())}));
@@ -92,15 +96,17 @@ impl Policy {
     }
     pub(crate) fn capture(settings:&NetworkProxySettings)->Result<Self,String>{
         let mut checked=settings.clone();checked.validate()?;
+        let direct=checked.mode=="none";
         let manual=checked.endpoint().is_some();
         Ok(Self{
             settings:checked,
-            system:if manual{None}else{system_proxy()},
-            bypass:if manual{None}else{system_no_proxy()},
-            environment:if manual{vec![]}else{["HTTP_PROXY","http_proxy","HTTPS_PROXY","https_proxy","ALL_PROXY","all_proxy","NO_PROXY","no_proxy"].iter().map(|key|(key.to_string(),std::env::var_os(key))).collect()},
+            system:if manual||direct{None}else{system_proxy()},
+            bypass:if manual||direct{None}else{system_no_proxy()},
+            environment:if manual||direct{vec![]}else{["HTTP_PROXY","http_proxy","HTTPS_PROXY","https_proxy","ALL_PROXY","all_proxy","NO_PROXY","no_proxy"].iter().map(|key|(key.to_string(),std::env::var_os(key))).collect()},
         })
     }
     pub(crate) fn configure(&self,mut builder:reqwest::ClientBuilder)->Result<reqwest::ClientBuilder,String>{
+    if self.settings.mode=="none"{return Ok(builder.no_proxy())}
     if let Some(endpoint)=self.settings.endpoint(){
         let url=reqwest::Url::parse(&endpoint).map_err(|_|"代理地址无效。")?;
         builder=builder.no_proxy().proxy(reqwest::Proxy::custom(move|target|{
@@ -125,7 +131,7 @@ fn configure_system_proxy(builder:reqwest::ClientBuilder,endpoint:&str,bypass:Op
 pub struct NetworkStatus {pub settings:NetworkProxySettings,pub source:String,pub endpoint:Option<String>,pub manual_ready:bool}
 pub fn status(settings:NetworkProxySettings)->NetworkStatus{
     let endpoint=settings.endpoint();let manual_ready=endpoint.is_some();
-    let (source,endpoint)=if manual_ready{("手动代理".into(),endpoint)}else{
+    let (source,endpoint)=if settings.mode=="none"{("不使用代理".into(),None)}else if manual_ready{("手动代理".into(),endpoint)}else{
         let env=["HTTPS_PROXY","https_proxy","HTTP_PROXY","http_proxy","ALL_PROXY","all_proxy"].iter()
             .find_map(|name|std::env::var(name).ok().filter(|v|!v.trim().is_empty()));
         match env {Some(url)=>("环境变量".into(),redacted_endpoint(&url)),None=>match system_proxy(){Some(url)=>("Windows 系统代理".into(),redacted_endpoint(&url)),None=>("系统未设置代理".into(),None)}}

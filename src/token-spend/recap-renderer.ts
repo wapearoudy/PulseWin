@@ -1,5 +1,5 @@
 // Full-size canvas export, independent of the preview's scale.
-import { recapFilename, type Recap, type RecapCard } from './recap'
+import { addDay, recapFilename, type Recap, type RecapCard } from './recap'
 import { dayKey, exactTokenText, formatCost, shortTokens } from './summary'
 import * as money from '../money'
 const paper='#F5F5F1',ink='#1B1B1E',lime='#C8F03C',hairline='#E4E4DD',secondary='#6E6E68',heat=['#EDEDE7','#EEF7C9','#DDF290',lime,'#9DC41A',ink]
@@ -16,15 +16,15 @@ export function renderRecap(recap:Recap,card:RecapCard,hidesProjects:boolean):HT
   }
   c.fillStyle=paper;c.fillRect(0,0,1080,1920);text('PULSE RECAP',80,104,20,true)
   const stories=recap.cards.filter(k=>k!=='poster'),number=card==='poster'?0:stories.indexOf(card)+1;if(card!=='poster')text(`${String(number).padStart(2,'0')} / ${String(stories.length).padStart(2,'0')}`,880,104,20,false,secondary)
-  text(recap.key.replace('-', ' · '),80,204,36,true);text(recap.isInProgress?'截至今天':'完整回顾',80,251,25,false,secondary)
+  text(recap.isWeek?`${recap.key.slice(5)} – ${dayKey(addDay(recap.start,6))}`:recap.isDay?recap.key:recap.key.replace('-', ' · '),80,204,36,true);text(recap.isInProgress?'截至今天':'完整回顾',80,251,25,false,secondary)
   const s=recap.summary
   if(card==='poster'){
-    text(recap.isYear?'这一年的工作':'这个月的工作',80,370,82,true);text(shortTokens(s.tokens),80,535,132,true);text('TOKEN',85,586,30,false,secondary)
+    text(recap.isYear?'这一年的工作':recap.isWeek?'这一周的工作':recap.isDay?'这一天的工作':'这个月的工作',80,370,82,true);text(shortTokens(s.tokens),80,535,132,true);text('TOKEN',85,586,30,false,secondary)
     stat('活跃日',String(s.activeDays),80,652,440,lime);stat('会话',String(s.sessions.length),560,652)
     stat('API 估算费用',formatCost(s.cost,10),80,862);stat(recap.payback!==null?'订阅回报':'最长连续工作',recap.payback!==null?`${recap.payback.toFixed(1)} ×`:`${recap.longestStreak} 天`,560,862,440,ink)
     text('工作伙伴',80,1130,28,true);ranks(s.agents,1190);text('模型与项目',80,1720,28,true);text(s.models.slice(0,2).map(g=>g.name).join(' / '),80,1770,25,false,secondary)
   }else if(card==='opener'){
-    text(recap.isYear?String(recap.start.getFullYear()):String(recap.start.getMonth()+1).padStart(2,'0'),80,690,340,true);text(recap.isYear?'年度回顾':'月度回顾',80,805,96,true);text('一起完成的工作',80,980,40,true);ranks(s.agents,1080)
+    text(recap.isYear?String(recap.start.getFullYear()):recap.isWeek?`${recap.start.getDate()}–${addDay(recap.start,6).getDate()}`:recap.isDay?String(recap.start.getDate()).padStart(2,'0'):String(recap.start.getMonth()+1).padStart(2,'0'),80,690,340,true);text(recap.isYear?'年度回顾':recap.isWeek?'周报':recap.isDay?'日报':'月度回顾',80,805,96,true);text('一起完成的工作',80,980,40,true);ranks(s.agents,1080)
   }else if(card==='calendar'||card==='yearCalendar'){
     text('每一个工作日',80,355,74,true);if(card==='calendar'){calendar(recap.start.getMonth()+1,80,510,920);text(`${s.activeDays} 个活跃日 · ${recap.observedDays} 个有记录的日期`,80,1520,32,true);if(recap.busiest)text(`最忙的一天：${recap.busiest.day} · ${shortTokens(recap.busiest.tokens)} Token`,80,1590,28,false,secondary)}else{for(let m=1;m<=12;m++)calendar(m,80+(m-1)%3*315,480+Math.floor((m-1)/3)*315,290)}
   }else if(card==='months'){

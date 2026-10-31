@@ -13,7 +13,7 @@ export interface AccountAppearance {
 }
 export const defaultAccountAppearance: AccountAppearance = { detailedCard: false, animatedMark: false, persona: 'automatic', body: 'blob', markColour: null, ringColour: null }
 export interface NetworkProxySettings {
-  mode: 'system' | 'manual'
+  mode: 'system' | 'none' | 'manual'
   kind: 'http' | 'socks5'
   host: string
   port: number | null
