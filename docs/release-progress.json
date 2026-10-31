@@ -1,10 +1,10 @@
 {
  "version": "0.1.19",
- "status": "release-preparation",
- "releaseHold": false,
- "reason": "User requested commit and release on 2026-10-31 after the 0.1.19 implementation. This release does not establish full Pulse parity; remaining acceptance items continue afterwards.",
+ "status": "interim-published",
+ "releaseHold": true,
+ "reason": "0.1.19 was published on GitHub on 2026-10-31 by .github/workflows/release-windows.yml at b8afed3. The hold is restored because the remaining items are real-machine and live-service acceptance, and this release does not establish full Pulse parity.",
  "upstream": "1.12.4",
- "publishedVersion": "0.1.18",
+ "publishedVersion": "0.1.19",
  "implementedVerified": [
   "Light assistant surfaces, rings and detail cards",
   "Horizontal floating, bottom docking and orientation-aware detail cards",
@@ -56,10 +56,10 @@
   "rust": "1245 passed, 0 failed, 2 explicitly ignored real-account checks (1247 total) on this Windows machine, including the new price-alias, Kimi Code, Qoder, Cursor, progress-bar, browser-session and warmer-timer tests. The 35 failures recorded on macOS are Windows-only path/PATH tests that pass here; the Windows workflow reports the same green result.",
   "frontendUnit": "269 passed in 26 files; tsc --noEmit and vite build clean.",
   "browser": "81 passed in the full browser suite on the 0.1.19 working tree (45.8s); browser IPC responses are synthetic.",
-  "native": "GitHub Actions windows-latest release build for 0.1.19 has not run yet; .github/workflows/release-windows.yml will build, sign and publish it.",
-  "localUpdateFeed": "No 0.1.19 feed yet; GitHub publication pending.",
+  "native": "PASS on GitHub Actions windows-latest release build: .github/workflows/release-windows.yml run 41181764309 at b8afed3 completed 2026-10-31T08:00:02Z; cargo test --all-targets 1245 passed, 0 failed, 2 ignored; frontend 269 passed (26 files); tsc --noEmit clean; build finished in 9m01s and produced nsis/msi plus two updater signatures. No installer executed.",
+  "localUpdateFeed": "0.1.19 is promoted on GitHub (latest.json version 0.1.19); no local updates/ feed was produced on this machine.",
   "buildBlocker": "None for 0.1.19. The updater signing key is a repository secret (TAURI_SIGNING_PRIVATE_KEY, key id 218D1940E2C4F3DC) and .github/workflows/release-windows.yml builds, signs and publishes.",
-  "publicRelease": "PENDING for 0.1.19: no artifacts exist yet.",
+  "publicRelease": "0.1.19 is published as the latest release with five assets; GitHub API reports sizes and SHA-256 digests for all five, and the workflow signature-key check passed. See docs/release-0.1.19.json.",
   "externalLimitations": [
    "44 status pages verified against fixtures only; gemini-cli, command-code and hugging-face timed out from this network (curl times out too) and stay unverified",
    "Exchange-rate endpoint, offline and 429 behaviour not exercised against the real service",
@@ -70,7 +70,7 @@
   "windows": "PASS on GitHub Actions windows-latest: 1212 passed, 0 failed, 2 ignored, plus 260 frontend tests, tsc --noEmit and a --no-bundle build that produced pulsewin.exe (run 39440841593 at 8e7f6f5, .github/workflows/windows-check.yml). The 35 tests that fail on macOS pass here. Two real Windows-only defects and three POSIX-assuming tests were found and fixed; this is compile-and-test evidence, NOT an installer build."
  },
  "pending": [
-  "Execute an installer and upgrade one installed client to 0.1.18 to accept the install and in-app update paths; neither was exercised for this release.",
+  "Execute an installer and upgrade one installed client to 0.1.19 to accept the install and in-app update paths; neither was exercised for this release.",
   "Acceptance of the 44 official status pages against real responses; outage notification needs a real outage",
   "Acceptance of hide-from-capture under real Windows capture and recording tools",
   "Exchange-rate endpoint returned 166 rates live on 2026-10-31; offline fallback and 429 behaviour remain unexercised",

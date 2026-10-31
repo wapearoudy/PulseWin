@@ -1,6 +1,6 @@
 {
  "version": "0.1.19",
- "status": "prepared",
+ "status": "published",
  "authorization": "提交、推送、发版（2026-10-31，用户指令「提交代码，发布版本」）",
  "releaseHold": false,
  "buildBlocker": [],
@@ -10,18 +10,26 @@
    "passed": 1245,
    "failed": 0,
    "ignored": 2,
-   "note": "Local Windows run before the release build: 1245 passed, 0 failed, 2 explicitly ignored real-account checks. The GitHub Actions Windows release run must repeat the suite before bundling."
+   "note": "GitHub Actions windows-latest release run 41181764309 at b8afed3: cargo test --all-targets 1245 passed, 0 failed, 2 explicitly ignored."
   },
   "frontend": {
    "passed": 269,
    "files": 26
   },
   "browser": {
-   "passed": 81
+   "passed": 81,
+   "note": "Local full browser suite on the 0.1.19 working tree (45.8s); the release workflow does not run Playwright."
   },
   "windows": {
-   "pending": true,
-   "note": "The release workflow will run cargo test --all-targets and npm run tauri -- build on windows-latest."
+   "passed": 1245,
+   "failed": 0,
+   "ignored": 2,
+   "note": "First Windows release build for 0.1.19; build finished in 9m01s and produced 2 bundles plus 2 updater signatures."
+  },
+  "frontendWindows": {
+   "passed": 269,
+   "files": 26,
+   "note": "vitest and tsc --noEmit ran on the Windows runner."
   }
  },
  "implementedVerified": [
@@ -74,7 +82,7 @@
  "installationExecuted": false,
  "fullParity": false,
  "limitations": [
-  "Execute an installer and upgrade one installed client to 0.1.18 to accept the install and in-app update paths; neither was exercised for this release.",
+  "Execute an installer and upgrade one installed client to 0.1.19 to accept the install and in-app update paths; neither was exercised for this release.",
   "Acceptance of the 44 official status pages against real responses; outage notification needs a real outage",
   "Acceptance of hide-from-capture under real Windows capture and recording tools",
   "Exchange-rate endpoint returned 166 rates live on 2026-10-31; offline fallback and 429 behaviour remain unexercised",
@@ -89,7 +97,42 @@
   "User extensions acceptance with a real installed extension program",
   "Stable real Harness source integrity acceptance"
  ],
- "releaseCommit": null,
- "publicVerification": null,
- "testedAt": "2026-10-31"
+ "releaseCommit": "b8afed3",
+ "publicVerification": {
+  "verifiedAt": "2026-10-31",
+  "latestRelease": "GitHub API reports v0.1.19 as the latest release, not a draft and not a prerelease.",
+  "signatureKey": "The workflow check-signing-key step passed against the public key pinned in src-tauri/tauri.conf.json (key id 218D1940E2C4F3DC).",
+  "assets": [
+   {
+    "name": "latest.json",
+    "bytes": 4159,
+    "sha256": "e21c91ad5dff9d81299251b72aa8e04dc60a503a50fa2a698ecd2f25a521f254"
+   },
+   {
+    "name": "PulseWin_0.1.19_x64-setup.exe",
+    "bytes": 3587526,
+    "sha256": "cbb36e650ce5b4ca9efb2d27ce697119e9f8a1a6fbeb519d507e26da577f2e90"
+   },
+   {
+    "name": "PulseWin_0.1.19_x64-setup.exe.sig",
+    "bytes": 440,
+    "sha256": "42e663e19786fd7f468746e2227c3113f41a094c865e7dfea323f6c9d54e0b58"
+   },
+   {
+    "name": "PulseWin_0.1.19_x64_en-US.msi",
+    "bytes": 4898816,
+    "sha256": "ff1d502a365db350d1f2539c0fc14b7a9d3c270197939fa5287536b0123f5512"
+   },
+   {
+    "name": "PulseWin_0.1.19_x64_en-US.msi.sig",
+    "bytes": 440,
+    "sha256": "4bdfa82d1d210c7b4d1134a188b27e8e30845ec1d9a0a5bbb6eb68bc5a68235a"
+   }
+  ],
+  "updaterEndpoint": "latest.json inside the release reports version 0.1.19 and windows-x86_64, windows-x86_64-nsis and windows-x86_64-msi platforms pointing at the release assets."
+ },
+ "testedAt": "2026-10-31",
+ "publishedAt": "2026-10-31T07:59:11Z",
+ "builtOn": "GitHub Actions windows-latest (.github/workflows/release-windows.yml, run 41181764309 at b8afed3)",
+ "postPublicationVerification": "GitHub API asset metadata and the workflow logs were checked. No installer was executed and no installed client was upgraded, so the install and in-app update paths remain unverified on a real machine."
 }
