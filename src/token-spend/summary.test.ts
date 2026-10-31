@@ -130,6 +130,13 @@ describe('Token Spend spans', () => {
     const custom = spanDays('custom', now, ['2026-09-28', '2026-10-01'])
     expect(custom).toEqual(['2026-09-28', '2026-09-29', '2026-09-30', '2026-10-01'])
   })
+  it('crosses year and leap-day boundaries without dropping a date', () => {
+    const january = new Date(2026, 0, 15, 12)
+    expect(spanDays('lastMonth', january)).toEqual(Array.from({ length: 31 }, (_, i) => `2025-12-${String(i + 1).padStart(2, '0')}`))
+    expect(spanDays('thisYear', january)).toHaveLength(15)
+    expect(spanDays('custom', january, ['2025-12-31', '2026-01-01'])).toEqual(['2025-12-31', '2026-01-01'])
+    expect(spanDays('custom', new Date(2028, 1, 10), ['2028-02-28', '2028-03-01'])).toEqual(['2028-02-28', '2028-02-29', '2028-03-01'])
+  })
   it('keeps every day of the open span, from the first record to today', () => {
     const span = spanDays('all', now, null, [record({ day: '2026-09-30' })])
     expect(span).toEqual(['2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03'])

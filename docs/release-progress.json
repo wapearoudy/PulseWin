@@ -74,7 +74,7 @@
   "Acceptance of hide-from-capture under real Windows capture and recording tools",
   "Exchange-rate endpoint returned 166 rates live on 2026-10-31; offline fallback and 429 behaviour remain unexercised",
   "Real extension metric series (long, mixed units, non-monotonic timestamps)",
-  "Custom spend ranges across month, year and DST boundaries on real data",
+  "Custom spend ranges across month, year and leap-day boundaries are covered by unit tests; live-data acceptance remains",
   "DeepSeek console detailed-card live acceptance on a real account; browser renewal/import, automatic retry and the console ledger card are implemented",
   "OpenCode Go detailed-card live acceptance on a real account; console cookie-jar renewal, retry and the console ledger card are implemented",
   "Original recap visual parity and native recap flow remain partial; the recap reminder's toast opens the Token Spend recap through notify-rust WinRT activation, but real toast-click acceptance remains pending",
