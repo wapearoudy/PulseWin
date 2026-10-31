@@ -22,7 +22,7 @@ continuous/segmented progress-bar styles, Qoder credit-part accounting with a
 31-day credit history, Cursor weekly limits with enterprise allowance, the
 Codex weaker-model signal refinements, the system-settings title bar, experimental
 liquid docking, the 250 ms notch hover delay, connection diagnostics and developer integrations
-(read-only --json/--statusline commands plus pulsewin:// account links). 1241 Rust checks pass with
+(read-only --json/--statusline commands plus pulsewin:// account and recap links). 1241 Rust checks pass with
 2 real-account checks explicitly ignored; 268 frontend unit checks and 81 synthetic
 browser checks pass. Status history, activity, recap logic, local Codex evidence,
 cache timing, accurate pricing/counters and the full 54-source Token catalog have
@@ -89,7 +89,8 @@ notch capsule waits 250 ms before expanding; each account pane ends with connect
 diagnostics and a credential-free copyable summary; selecting a model lists its daily
 input/cache-write/cache-read/output/total rows with measured output speed, first-token
 latency and estimated cache savings, and the cache-read split has a hover/focus card with the cached share and savings; the developer integrations pane copies the
-read-only CLI commands (--json, --statusline and --recap), saves a status-line script and shows pulsewin:// account links registered by the installer. Validation: 1242 Rust tests plus two
+read-only CLI commands (--json, --statusline and --recap), saves a status-line script and shows pulsewin://
+account and recap links registered by the installer. Validation: 1242 Rust tests plus two
 ignored, 268 frontend tests, tsc --noEmit and vite build clean.
 
 0.1.18 (published) registered the remaining 13 Token sources so all 54 have a

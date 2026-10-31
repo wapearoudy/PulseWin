@@ -1,6 +1,6 @@
 import { OpenCodeConsoleGroup } from './OpenCodeConsoleGroup'
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { getSnapshot, onUsageUpdated, onSettingsAccount, panelPlacement, onPlacementChanged, setPanelPosition, providerSettings, addAccount, removeAccount, importAccountLogin, refreshProvider, saveProviderCredential, type ProviderSetting } from './api'
+import { getSnapshot, onUsageUpdated, onSettingsAccount, onSettingsRecap, panelPlacement, onPlacementChanged, setPanelPosition, providerSettings, addAccount, removeAccount, importAccountLogin, refreshProvider, saveProviderCredential, type ProviderSetting } from './api'
 import { usePreferences, savePreferences, defaultAccountAppearance, type Preferences } from './preferences'
 import { formatReset, type ProviderUsage, type Snapshot } from './types'
 import { percentFigure } from './usagePresentation'
@@ -55,11 +55,13 @@ export default function Settings() {
   const [pane, setPane] = useState(()=>new URLSearchParams(window.location.search).get('account') ?? 'appearance'), [query, setQuery] = useState('')
   const [trail, setTrail] = useState<string[]>(()=>[new URLSearchParams(window.location.search).get('account') ?? 'appearance'])
   const [trailIndex, setTrailIndex] = useState(0)
+  const [recapSignal, setRecapSignal] = useState(()=>new URLSearchParams(window.location.search).get('recap') ? 1 : 0)
   function navigate(id: string) { const next=[...trail.slice(0, trailIndex+1), id]; setTrail(next); setTrailIndex(next.length-1); setPane(id) }
   function goBack() { if (trailIndex <= 0) return; const index=trailIndex-1; setTrailIndex(index); setPane(trail[index]) }
   function goForward() { if (trailIndex >= trail.length-1) return; const index=trailIndex+1; setTrailIndex(index); setPane(trail[index]) }
   useEffect(()=>{const onKey=(event:KeyboardEvent)=>{if(event.altKey&&event.key==='ArrowLeft'){event.preventDefault();goBack()}else if(event.altKey&&event.key==='ArrowRight'){event.preventDefault();goForward()}};window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey)})
   useEffect(()=>{let live=true,off:(()=>void)|undefined;void onSettingsAccount(id=>{if(live){navigate(id);setChoose(false);setDismissed(true)}}).then(fn=>{if(live)off=fn;else fn()}).catch(()=>undefined);return()=>{live=false;off?.()}},[])
+  useEffect(()=>{let live=true,off:(()=>void)|undefined;void onSettingsRecap(()=>{if(live){navigate('token-spend');setRecapSignal(value=>value+1)}}).then(fn=>{if(live)off=fn;else fn()}).catch(()=>undefined);return()=>{live=false;off?.()}},[])
   const [error, setError] = useState<string | null>(null), [busy, setBusy] = useState(false)
   // The window starter's last attempts. Read through its own command rather
   // than out of the preferences, so the pane and the starter report the same
@@ -166,7 +168,7 @@ export default function Settings() {
         : pane === 'about' ? <AboutPane/>
         : pane === 'extensions' ? <ExtensionsSettingsView enabled={prefs.enabledProviders}/>
         : pane === 'integrations' ? <DeveloperIntegrationsGroup accounts={providers.filter(p=>prefs.enabledProviders.includes(p.id)).map(p=>({id:p.id,name:p.name}))}/>
-        : pane === 'token-spend' ? <TokenSpendPane enabled={prefs.tokenSpendEnabled} onEnabledChange={v=>change({tokenSpendEnabled:v})} span={prefs.tokenSpendSpan} onSpanChange={v=>change({tokenSpendSpan:v})} customDays={prefs.spendCustomDays} onCustomDaysChange={v=>change({spendCustomDays:v})} activityView={prefs.spendActivityView} onActivityViewChange={v=>change({spendActivityView:v})} recapMonthlyPrice={prefs.recapMonthlyPrice} recapHidesProjects={prefs.recapHidesProjects} onRecapChange={change}/>
+        : pane === 'token-spend' ? <TokenSpendPane enabled={prefs.tokenSpendEnabled} onEnabledChange={v=>change({tokenSpendEnabled:v})} span={prefs.tokenSpendSpan} onSpanChange={v=>change({tokenSpendSpan:v})} customDays={prefs.spendCustomDays} onCustomDaysChange={v=>change({spendCustomDays:v})} activityView={prefs.spendActivityView} onActivityViewChange={v=>change({spendActivityView:v})} recapMonthlyPrice={prefs.recapMonthlyPrice} recapHidesProjects={prefs.recapHidesProjects} recapSignal={recapSignal} onRecapChange={change}/>
         : pane === 'accounts' ? <>
         <h1>管理账号</h1><p className="page-description">控制面板显示的服务和排列顺序。</p><button onClick={() => { setSelection(prefs.enabledProviders); setChoose(true) }}>选择服务</button>
         <AddAccountForm onCreated={id=>{void reload();navigate(id)}} onError={setError}/><Group title="排列顺序">{shown.filter(p=>prefs.enabledProviders.includes(p.id)).map(p => <div key={p.id} draggable onDragStart={e=>e.dataTransfer.setData('application/x-pulse-account',p.id)} onDragOver={e=>{if(e.dataTransfer.types.includes('application/x-pulse-account'))e.preventDefault()}} onDrop={e=>{e.preventDefault();moveTo(e.dataTransfer.getData('application/x-pulse-account'),p.id)}}><Row title={p.name} subtitle={prefs.enabledProviders.includes(p.id) ? '显示在面板' : '未显示'}><div className="toolbar"><button disabled={busy || orderedEnabled.indexOf(p.id) === 0} aria-label={`上移 ${p.name}`} onClick={() => move(p.id,-1)}>↑</button><button disabled={busy || orderedEnabled.indexOf(p.id) === orderedEnabled.length-1} aria-label={`下移 ${p.name}`} onClick={() => move(p.id,1)}>↓</button></div></Row></div>)}</Group>

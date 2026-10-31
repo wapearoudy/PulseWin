@@ -32,6 +32,7 @@ export interface TokenSpendPaneProps {
   onActivityViewChange?:(view:ActivityView)=>void
   recapMonthlyPrice?:number|null
   recapHidesProjects?:boolean
+  recapSignal?:number
   onRecapChange?:(patch:{recapMonthlyPrice?:number|null;recapHidesProjects?:boolean})=>void
 }
 // Rolling, then calendar, then the open-ended and the reader's own: three
@@ -53,8 +54,9 @@ const exportHelp: Record<string, string> = {
   mcode: '需要事先捕获 mcode exec --output-format stream-json 输出为 JSONL；不会运行客户端。',
 }
 
-export function TokenSpendPane({ enabled, onEnabledChange, span: savedSpan, onSpanChange,customDays: savedDays,onCustomDaysChange,activityView:savedView,onActivityViewChange,recapMonthlyPrice=null,recapHidesProjects=false,onRecapChange }: TokenSpendPaneProps) {
+export function TokenSpendPane({ enabled, onEnabledChange, span: savedSpan, onSpanChange,customDays: savedDays,onCustomDaysChange,activityView:savedView,onActivityViewChange,recapMonthlyPrice=null,recapHidesProjects=false,recapSignal=0,onRecapChange }: TokenSpendPaneProps) {
   const [showRecap,setShowRecap]=useState(false)
+  useEffect(()=>{if(recapSignal)setShowRecap(true)},[recapSignal])
   const [localSpan, setLocalSpan] = useState<SpendSpan>('week')
   const [localActivity,setLocalActivity]=useState<ActivityView>('daily'),activityView=savedView??localActivity
   const span = savedSpan && spans.some(([id]) => id === savedSpan) ? savedSpan : localSpan

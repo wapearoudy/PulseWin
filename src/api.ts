@@ -115,6 +115,7 @@ export function openSettings(provider?: string): Promise<void> {
   return invoke('show_settings', { provider: provider ?? null })
 }
 export const onSettingsAccount = (handler:(provider:string)=>void) => listen<string>('settings-account',e=>handler(e.payload))
+export const onSettingsRecap = (handler:()=>void) => listen('settings-recap',()=>handler())
 
 /**
  * Store a pasted credential and re-read the tools that can now answer.

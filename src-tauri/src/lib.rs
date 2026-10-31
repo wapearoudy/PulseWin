@@ -981,6 +981,10 @@ fn open_deep_link(app: &AppHandle, value: &str) {
         open_settings(app);
         return;
     }
+    if value == "recap" {
+        open_recap(app);
+        return;
+    }
     let Some(id) = value.strip_prefix("account/") else { return; };
     if id.is_empty() || id.contains('/') { return; }
     let valid = providers::registry().iter().any(|provider| provider.id() == id)
@@ -996,6 +1000,29 @@ fn open_deep_link(app: &AppHandle, value: &str) {
 /// fight that rule.
 fn open_settings(app: &AppHandle) {
     let app=app.clone();tauri::async_runtime::spawn_blocking(move||open_account_settings(&app,None));
+}
+
+/// Open the settings window directly on the Token Spend recap, for
+/// `pulsewin://recap` and notification-driven recaps.
+fn open_recap(app: &AppHandle) {
+    let state=app.state::<AppState>();
+    let _creation=state.settings_creation.lock().unwrap();
+    if let Some(window) = app.get_webview_window("settings") {
+        let _=window.emit("settings-recap",());
+        let _ = window.show();
+        let _ = window.set_focus();
+        return;
+    }
+    let _ = tauri::WebviewWindowBuilder::new(
+        app,
+        "settings",
+        tauri::WebviewUrl::App("index.html?view=settings&recap=1".into()),
+    )
+    .title("PulseWin — Settings")
+    .inner_size(960.0, 720.0)
+    .min_inner_size(720.0, 480.0)
+    .resizable(true)
+    .build();
 }
 
 fn open_account_settings(app: &AppHandle, provider: Option<&str>) {
@@ -1607,6 +1634,7 @@ mod pointer_hit_tests {
     #[test]
     fn deep_links_are_navigation_paths_only() {
         assert_eq!(parse_deep_link("pulsewin://settings").as_deref(), Some("settings"));
+        assert_eq!(parse_deep_link("pulsewin://recap").as_deref(), Some("recap"));
         assert_eq!(parse_deep_link("PulseWin://account/qoder/").as_deref(), Some("account/qoder"));
         assert_eq!(parse_deep_link("pulsewin://"), None);
         assert_eq!(parse_deep_link("pulsewin://settings?x=1"), None);
