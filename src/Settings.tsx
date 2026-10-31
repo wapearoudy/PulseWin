@@ -21,6 +21,7 @@ import { PromptCacheGroup } from './PromptCacheGroup'
 import { CodexSignalsGroup } from './CodexSignalsGroup'
 import {DeepSeekConsoleGroup} from './DeepSeekConsoleGroup'
 import { QoderCreditsGroup } from './QoderCreditsGroup'
+import { DeveloperIntegrationsGroup } from './DeveloperIntegrationsGroup'
 import { TokenSpendPane, releaseSpendSession } from './token-spend/TokenSpendPane'
 import { WindowStarterGroup } from './WindowStarterGroup'
 import { ExtensionsSettingsView, ExtensionProgramGroup } from './ExtensionsSettingsView'
@@ -42,6 +43,7 @@ const settingsPanes:[string,string,ReactNode,string][]=[
   ['about','关于',<SidebarSymbol><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><circle cx="12" cy="7" r=".7" fill="currentColor"/></SidebarSymbol>,'版本 开源 致谢 许可 软件 更新'],
   ['general','通用',<SidebarSymbol><path d="M3 6h4m4 0h10M3 12h10m4 0h4M3 18h3m4 0h11"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/></SidebarSymbol>,'启动 快捷键 软件 更新'],
   ['extensions','用户扩展',<SidebarSymbol><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><path d="M16.5 13v7M13 16.5h7"/></SidebarSymbol>,'扩展 程序 extension 清单 脚本'],
+  ['integrations','开发者集成',<SidebarSymbol><path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/><path d="M13 4l-2 16"/></SidebarSymbol>,'开发者 命令行 json 状态栏 statusline 链接 集成'],
 ]
 
 export default function Settings() {
@@ -163,6 +165,7 @@ export default function Settings() {
         : pane === 'network' ? <NetworkPane preferences={prefs} disabled={busy} onChange={change}/>
         : pane === 'about' ? <AboutPane/>
         : pane === 'extensions' ? <ExtensionsSettingsView enabled={prefs.enabledProviders}/>
+        : pane === 'integrations' ? <DeveloperIntegrationsGroup accounts={providers.filter(p=>prefs.enabledProviders.includes(p.id)).map(p=>({id:p.id,name:p.name}))}/>
         : pane === 'token-spend' ? <TokenSpendPane enabled={prefs.tokenSpendEnabled} onEnabledChange={v=>change({tokenSpendEnabled:v})} span={prefs.tokenSpendSpan} onSpanChange={v=>change({tokenSpendSpan:v})} customDays={prefs.spendCustomDays} onCustomDaysChange={v=>change({spendCustomDays:v})} activityView={prefs.spendActivityView} onActivityViewChange={v=>change({spendActivityView:v})} recapMonthlyPrice={prefs.recapMonthlyPrice} recapHidesProjects={prefs.recapHidesProjects} onRecapChange={change}/>
         : pane === 'accounts' ? <>
         <h1>管理账号</h1><p className="page-description">控制面板显示的服务和排列顺序。</p><button onClick={() => { setSelection(prefs.enabledProviders); setChoose(true) }}>选择服务</button>

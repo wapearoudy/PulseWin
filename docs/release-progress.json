@@ -2,7 +2,7 @@
  "version": "0.1.19",
  "status": "implementation-in-progress",
  "releaseHold": true,
- "reason": "0.1.19 is a working tree, not a release. After the published 0.1.18, upstream 1.10.0-1.12.4 release notes were synced and thirteen gaps closed: the original's model-price spellings, a Settings test-notification button, the direct 不使用代理 mode, the Kimi Code session store, 日报/周报 recap periods, the original's continuous/segmented progress-bar styles, Qoder credit-part accounting with a 31-day credit history, Cursor weekly limits with enterprise allowance, the Codex weaker-model signal refinements, the system-settings-style title bar, experimental liquid docking, the notch hover delay and connection diagnostics. The hold remains because a new release is a new decision, and this tree does not establish full Pulse parity.",
+ "reason": "0.1.19 is a working tree, not a release. After the published 0.1.18, upstream 1.10.0-1.12.4 release notes were synced and fourteen gaps closed: the original's model-price spellings, a Settings test-notification button, the direct 不使用代理 mode, the Kimi Code session store, 日报/周报 recap periods, the original's continuous/segmented progress-bar styles, Qoder credit-part accounting with a 31-day credit history, Cursor weekly limits with enterprise allowance, the Codex weaker-model signal refinements, the system-settings-style title bar, experimental liquid docking, the notch hover delay and connection diagnostics. The hold remains because a new release is a new decision, and this tree does not establish full Pulse parity.",
  "upstream": "1.12.4",
  "publishedVersion": "0.1.18",
  "implementedVerified": [
@@ -42,10 +42,11 @@
   "Codex weaker-model signals follow 1.12.4: max and ultra effort ranks participate in comparisons while the Codex context-window setting is no longer treated as a server-side downgrade",
   "The Settings window follows the system-settings layout: a sticky title bar names the page, back/forward history buttons cover pane moves and Alt+Left/Right shortcuts work from anywhere in the window",
   "Experimental liquid docking is off by default: pulling a docked rail away eases it behind the pointer, thins and scales the panel, and releases it past an 80 pt break distance; the notch capsule waits 250 ms of stillness before expanding",
-  "Connection diagnostics in each account pane show the latest check result, its time, the displayed source and a credential-free copyable summary of the reported windows"
+  "Connection diagnostics in each account pane show the latest check result, its time, the displayed source and a credential-free copyable summary of the reported windows",
+  "Developer integrations: a settings pane documents the read-only --json/--statusline output, copies commands, saves a PowerShell status-line script and shows pulsewin://account links; the NSIS installer registers the pulsewin:// URL protocol, and the app accepts only the settings/account navigation paths (a URL cannot change settings, run commands or start a login)"
  ],
  "verification": {
-  "rust": "1240 passed, 0 failed, 2 explicitly ignored real-account checks (1242 total) on this Windows machine, including the new price-alias, Kimi Code, Qoder, Cursor and progress-bar tests. The 35 failures recorded on macOS are Windows-only path/PATH tests that pass here; the Windows workflow reports the same green result.",
+  "rust": "1241 passed, 0 failed, 2 explicitly ignored real-account checks (1243 total) on this Windows machine, including the new price-alias, Kimi Code, Qoder, Cursor and progress-bar tests. The 35 failures recorded on macOS are Windows-only path/PATH tests that pass here; the Windows workflow reports the same green result.",
   "frontendUnit": "268 passed in 26 files; tsc --noEmit and vite build clean.",
   "browser": "81 passed in the full browser suite on the 0.1.19 working tree (45.8s); browser IPC responses are synthetic.",
   "native": "0.1.18 was built on GitHub Actions windows-latest and the artifacts are published. No installer was executed and no installed client was upgraded, so the install and in-app update paths remain unverified on a real machine.",
@@ -71,7 +72,7 @@
   "OpenCode Go session renewal and detailed-card integration",
   "Original recap visual parity, native recap flow, notification click navigation",
   "Prompt-cache hover-card integration and complete per-model output/TTFT rows",
-  "Developer integrations, deep links, --recap, statusline installation and the account-panel groups remain unimplemented",
+  "--recap export and third-party status-line installers (Raycast/Sketchybar) remain unimplemented; the in-app developer integrations pane, --json/--statusline copy actions and pulsewin:// navigation links are done",
   "Windows multi-DPI/multi-monitor, full-screen and live-account regression acceptance",
   "Window starter real CLI send and Windows no-window launch acceptance",
   "User extensions acceptance with a real installed extension program",

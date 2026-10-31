@@ -961,6 +961,32 @@ async fn show_settings(app: AppHandle, provider: Option<String>) {
     open_account_settings(&app,provider.as_deref());
 }
 
+/// A navigation-only deep link: `pulsewin://settings` or
+/// `pulsewin://account/<id>`. A URL can never change settings, run commands or
+/// start a login; it only chooses a settings pane.
+fn parse_deep_link(value: &str) -> Option<String> {
+    let rest = value.strip_prefix("pulsewin://").or_else(|| value.strip_prefix("PulseWin://"))?;
+    let rest = rest.trim_end_matches('/');
+    if rest.is_empty() || rest.contains('?') || rest.contains('#') || rest.chars().any(char::is_whitespace) { return None; }
+    Some(rest.to_string())
+}
+
+fn deep_link_argument() -> Option<String> {
+    std::env::args().find_map(|arg| parse_deep_link(&arg))
+}
+
+fn open_deep_link(app: &AppHandle, value: &str) {
+    if value == "settings" {
+        open_settings(app);
+        return;
+    }
+    let Some(id) = value.strip_prefix("account/") else { return; };
+    if id.is_empty() || id.contains('/') { return; }
+    let valid = providers::registry().iter().any(|provider| provider.id() == id)
+        || app.state::<AppState>().preferences.lock().unwrap().accounts.iter().any(|account| account.id == id);
+    if valid { open_account_settings(app, Some(id)); }
+}
+
 /// Show the settings window, or bring it forward if it is already open.
 ///
 /// A second window rather than a view inside the panel: the panel's frame is
@@ -1578,6 +1604,15 @@ mod pointer_hit_tests {
         HitRegion {id:id.into(),x,y,w,h,outline:None,clip_to:None,hover_only:false}
     }
     #[test]
+    fn deep_links_are_navigation_paths_only() {
+        assert_eq!(parse_deep_link("pulsewin://settings").as_deref(), Some("settings"));
+        assert_eq!(parse_deep_link("PulseWin://account/qoder/").as_deref(), Some("account/qoder"));
+        assert_eq!(parse_deep_link("pulsewin://"), None);
+        assert_eq!(parse_deep_link("pulsewin://settings?x=1"), None);
+        assert_eq!(parse_deep_link("pulsewin://account/a b"), None);
+        assert_eq!(parse_deep_link("--settings"), None);
+    }
+    #[test]
     fn transparent_corners_retain_hover_without_claiming_a_click() {
         let mut tracking=rectangle("rail",10.0,20.0,20.0,40.0);tracking.hover_only=true;
         let mut painted=tracking.clone();painted.hover_only=false;
@@ -1823,8 +1858,11 @@ pub fn run() {
 
             // `--settings` opens the settings window straight away, which is
             // how it is reachable without hunting for the tray icon — and how
-            // it can be opened by anything that is not a mouse.
-            if std::env::args().any(|arg| arg == "--settings") {
+            // it can be opened by anything that is not a mouse. A pulsewin://
+            // URL is accepted only as navigation.
+            if let Some(link) = deep_link_argument() {
+                open_deep_link(app.handle(), &link);
+            } else if std::env::args().any(|arg| arg == "--settings") {
                 open_settings(app.handle());
             }
 
