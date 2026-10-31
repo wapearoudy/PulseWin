@@ -90,8 +90,8 @@
  "implementedPartial": [
   "DeepSeek independent encrypted console login, 30-day actual billing and 60-second cache; interactive live read passed, browser renewal/import and the console ledger card are implemented, live detailed-card acceptance pending",
   "Background opt-in spend warmer and native kept-snapshot reuse; the 20-second launch delay and 10-minute refresh interval are covered by a unit test, wall-clock acceptance pending",
-  "Recap posters, export/copy and monthly notice; full original visuals, notification click and interactive exports not accepted",
-  "Prompt-cache and console billing currently settings-only; full detailed-card integration pending",
+  "Recap posters, export/copy and monthly notice; the reminder toast opens the Token Spend recap through a WinRT activation callback, while full original visuals and real toast-click acceptance remain pending",
+  "Prompt-cache hover card is implemented on the Token split and DeepSeek/OpenCode console ledgers feed detailed cards; live per-model TTFT and real console-detail acceptance remain pending",
   "OpenCode encrypted independent login, workspace resolution and adaptive pager; 20,364 unique live Go IDs, zero pending ranges, restart recovery and account disable cancellation passed. Renewal and the console ledger card are implemented, live detailed-card acceptance pending."
  ],
  "interimReleaseAuthorization": "提交代码，发布一版（2026-10-20）"
