@@ -64,7 +64,8 @@
    "44 status pages verified against fixtures only; gemini-cli, command-code and hugging-face timed out from this network (curl times out too) and stay unverified",
    "Exchange-rate endpoint, offline and 429 behaviour not exercised against the real service",
    "Anonymous GitHub backup API rate limited; live fallback not accepted",
-   "Real Harness read-only integrity check failed because source logs changed during its 57.8-second scan; no stable live-source acceptance"
+   "Real Harness read-only integrity check failed because source logs changed during its 57.8-second scan; no stable live-source acceptance",
+   "Raycast and Sketchybar status-line helpers are macOS-only and have no Windows equivalent; the developer kit exports PowerShell and POSIX status-line helpers with the same read-only commands."
   ],
   "windows": "PASS on GitHub Actions windows-latest: 1212 passed, 0 failed, 2 ignored, plus 260 frontend tests, tsc --noEmit and a --no-bundle build that produced pulsewin.exe (run 39440841593 at 8e7f6f5, .github/workflows/windows-check.yml). The 35 tests that fail on macOS pass here. Two real Windows-only defects and three POSIX-assuming tests were found and fixed; this is compile-and-test evidence, NOT an installer build."
  },
@@ -79,7 +80,6 @@
   "OpenCode Go detailed-card live acceptance on a real account; console cookie-jar renewal, retry and the console ledger card are implemented",
   "Original recap visual parity and native recap flow remain partial; the recap reminder's toast opens the Token Spend recap through notify-rust WinRT activation, but real toast-click acceptance remains pending",
   "Prompt-cache hover-card integration is implemented; live per-model output/TTFT acceptance on real accounts remains partial",
-  "Raycast/Sketchybar are macOS-only integrations with no Windows equivalent; the developer kit exports PowerShell and POSIX status-line helpers with the same read-only commands",
   "Windows multi-DPI/multi-monitor, full-screen and live-account regression acceptance",
   "Window starter real CLI send and Windows no-window launch acceptance",
   "User extensions acceptance with a real installed extension program",
