@@ -51,6 +51,12 @@ export default function Settings() {
   const { preferences: prefs, loaded, error: loadError } = usePreferences()
   const [providerRows, setProviders] = useState<ProviderSetting[]>([])
   const providers=useMemo(()=>providerRows.map(p=>({...p,name:prefs.accountLabels[p.id]??p.name})),[providerRows,prefs.accountLabels])
+  const developerAccounts=useMemo(()=>{
+    const seen=new Set<string>(), rows:{id:string;name:string}[]=[]
+    for(const p of providers) if(prefs.enabledProviders.includes(p.id)){seen.add(p.id);rows.push({id:p.id,name:p.name})}
+    for(const account of prefs.accounts) if(!seen.has(account.id)){seen.add(account.id);const base=providers.find(p=>p.id===account.provider)?.name??account.provider;rows.push({id:account.id,name:prefs.accountLabels[account.id]??`${base} · ${account.id}`})}
+    return rows
+  },[providers,prefs.enabledProviders,prefs.accounts,prefs.accountLabels])
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
   const [pane, setPane] = useState(()=>new URLSearchParams(window.location.search).get('account') ?? 'appearance'), [query, setQuery] = useState('')
   const [trail, setTrail] = useState<string[]>(()=>[new URLSearchParams(window.location.search).get('account') ?? 'appearance'])
@@ -167,7 +173,7 @@ export default function Settings() {
         : pane === 'network' ? <NetworkPane preferences={prefs} disabled={busy} onChange={change}/>
         : pane === 'about' ? <AboutPane/>
         : pane === 'extensions' ? <ExtensionsSettingsView enabled={prefs.enabledProviders}/>
-        : pane === 'integrations' ? <DeveloperIntegrationsGroup accounts={providers.filter(p=>prefs.enabledProviders.includes(p.id)).map(p=>({id:p.id,name:p.name}))}/>
+        : pane === 'integrations' ? <DeveloperIntegrationsGroup accounts={developerAccounts}/>
         : pane === 'token-spend' ? <TokenSpendPane enabled={prefs.tokenSpendEnabled} onEnabledChange={v=>change({tokenSpendEnabled:v})} span={prefs.tokenSpendSpan} onSpanChange={v=>change({tokenSpendSpan:v})} customDays={prefs.spendCustomDays} onCustomDaysChange={v=>change({spendCustomDays:v})} activityView={prefs.spendActivityView} onActivityViewChange={v=>change({spendActivityView:v})} recapMonthlyPrice={prefs.recapMonthlyPrice} recapHidesProjects={prefs.recapHidesProjects} recapSignal={recapSignal} onRecapChange={change}/>
         : pane === 'accounts' ? <>
         <h1>管理账号</h1><p className="page-description">控制面板显示的服务和排列顺序。</p><button onClick={() => { setSelection(prefs.enabledProviders); setChoose(true) }}>选择服务</button>
