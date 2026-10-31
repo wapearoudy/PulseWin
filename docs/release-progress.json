@@ -52,7 +52,7 @@
   "DeepSeek and OpenCode Go console ledgers feed their detailed cards: one record per console day with the day's tokens, its top model and the console-reported cost, so the card's 31-day figures, chart, speed and cache summaries use the service's own accounting instead of local transcripts."
  ],
  "verification": {
-  "rust": "1244 passed, 0 failed, 2 explicitly ignored real-account checks (1246 total) on this Windows machine, including the new price-alias, Kimi Code, Qoder, Cursor, progress-bar and browser-session tests. The 35 failures recorded on macOS are Windows-only path/PATH tests that pass here; the Windows workflow reports the same green result.",
+  "rust": "1245 passed, 0 failed, 2 explicitly ignored real-account checks (1247 total) on this Windows machine, including the new price-alias, Kimi Code, Qoder, Cursor, progress-bar, browser-session and warmer-timer tests. The 35 failures recorded on macOS are Windows-only path/PATH tests that pass here; the Windows workflow reports the same green result.",
   "frontendUnit": "268 passed in 26 files; tsc --noEmit and vite build clean.",
   "browser": "81 passed in the full browser suite on the 0.1.19 working tree (45.8s); browser IPC responses are synthetic.",
   "native": "0.1.18 was built on GitHub Actions windows-latest and the artifacts are published. No installer was executed and no installed client was upgraded, so the install and in-app update paths remain unverified on a real machine.",
@@ -88,7 +88,7 @@
  "reference": "Pulse v1.12.4 tag objects, alongside the unchanged old checkout",
  "implementedPartial": [
   "DeepSeek independent encrypted console login, 30-day actual billing and 60-second cache; interactive live read passed, browser renewal/import and the console ledger card are implemented, live detailed-card acceptance pending",
-  "Background opt-in spend warmer and native kept-snapshot reuse; timer acceptance pending",
+  "Background opt-in spend warmer and native kept-snapshot reuse; the 20-second launch delay and 10-minute refresh interval are covered by a unit test, wall-clock acceptance pending",
   "Recap posters, export/copy and monthly notice; full original visuals, notification click and interactive exports not accepted",
   "Prompt-cache and console billing currently settings-only; full detailed-card integration pending",
   "OpenCode encrypted independent login, workspace resolution and adaptive pager; 20,364 unique live Go IDs, zero pending ranges, restart recovery and account disable cancellation passed. Renewal and the console ledger card are implemented, live detailed-card acceptance pending."

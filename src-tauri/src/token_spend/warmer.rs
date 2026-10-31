@@ -5,6 +5,8 @@ use tauri::Emitter;
 static KEPT: OnceLock<Mutex<Option<SpendSnapshot>>> = OnceLock::new();
 static ACTIVE: OnceLock<Mutex<Option<Arc<AtomicBool>>>> = OnceLock::new();
 static WAKE: tokio::sync::Notify = tokio::sync::Notify::const_new();
+const LAUNCH_DELAY: Duration = Duration::from_secs(20);
+const REFRESH_INTERVAL: Duration = Duration::from_secs(600);
 pub(super) fn keep(snapshot: &SpendSnapshot) {
     let mut kept = KEPT.get_or_init(Default::default).lock().unwrap();
     if !crate::preferences::load().token_spend_enabled {
@@ -38,10 +40,10 @@ pub(super) fn watch(app: tauri::AppHandle) {
         return;
     }
     tauri::async_runtime::spawn(async move {
-        let mut delay = Duration::from_secs(20);
+        let mut delay = LAUNCH_DELAY;
         loop {
             tokio::select! {_=tokio::time::sleep(delay)=>{},_=WAKE.notified()=>{}}
-            delay = Duration::from_secs(600);
+            delay = REFRESH_INTERVAL;
             if !crate::preferences::load().token_spend_enabled {
                 forget();
                 continue;
@@ -87,4 +89,15 @@ pub(super) fn watch(app: tauri::AppHandle) {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LAUNCH_DELAY, REFRESH_INTERVAL};
+
+    #[test]
+    fn timer_keeps_the_original_launch_delay_and_refresh_interval() {
+        assert_eq!(LAUNCH_DELAY.as_secs(), 20);
+        assert_eq!(REFRESH_INTERVAL.as_secs(), 10 * 60);
+    }
 }
