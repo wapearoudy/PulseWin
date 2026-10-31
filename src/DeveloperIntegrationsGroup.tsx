@@ -12,6 +12,27 @@ $pulse = Join-Path $env:LOCALAPPDATA 'Programs\\PulseWin\\PulseWin.exe'
 if (-not (Test-Path $pulse)) { $pulse = 'pulsewin.exe' }
 & $pulse --statusline
 `
+const SHELL_SCRIPT = `#!/bin/sh
+# PulseWin status line for Git Bash, WSL or any shell on the Windows PATH.
+# Keeps the tray app running; reads the saved cache without fetching anything.
+exec pulsewin.exe --statusline
+`
+const README = `PulseWin developer kit
+======================
+
+pulsewin-status.ps1  PowerShell status-line helper (runs pulsewin.exe --statusline).
+pulsewin-status.sh   POSIX shell helper for Git Bash/WSL.
+pulsewin.exe --json  Full saved readings as JSON.
+pulsewin.exe --recap [YYYY-MM-DD | week-YYYY-MM-DD | YYYY-MM | YYYY]
+                     One day, week, month or year of saved Token figures.
+
+All commands are read-only: they never fetch providers or open credentials.
+Keep PulseWin running so the saved cache stays current. Every reading carries
+its age; an old reading is not a live check.
+
+Raycast and Sketchybar are macOS-only integrations from the original app and
+have no Windows equivalent here; use the same commands from any Windows launcher.
+`
 
 export function DeveloperIntegrationsGroup({ accounts }: { accounts: IntegrationAccount[] }) {
   const [selected, setSelected] = useState(accounts[0]?.id ?? '')
@@ -31,6 +52,20 @@ export function DeveloperIntegrationsGroup({ accounts }: { accounts: Integration
     link.click()
     URL.revokeObjectURL(url)
     setMessage('状态栏脚本已保存')
+  }
+  const saveFile = (name: string, text: string) => {
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = name
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+  const exportKit = () => {
+    saveFile('pulsewin-status.ps1', STATUSLINE_SCRIPT)
+    saveFile('pulsewin-status.sh', SHELL_SCRIPT)
+    saveFile('README.txt', README)
+    setMessage('开发者套件已导出（3 个文件）')
   }
   return (
     <>
@@ -66,6 +101,15 @@ export function DeveloperIntegrationsGroup({ accounts }: { accounts: Integration
             </div>
             <div className="setting-control">
               <button onClick={saveScript}>保存脚本</button>
+            </div>
+          </div>
+          <div className="setting-row">
+            <div>
+              <strong>开发者套件</strong>
+              <small>导出 PowerShell、POSIX shell 与说明文件；Raycast/Sketchybar 为原版 macOS 集成，Windows 无对应程序。</small>
+            </div>
+            <div className="setting-control">
+              <button onClick={exportKit}>导出文件</button>
             </div>
           </div>
         </div>

@@ -161,8 +161,9 @@ scorecard — with a monthly subscription price prorated by day for a day or a w
 General settings offers two optional global shortcuts and reads the actual Windows login-startup
 state. `pulsewin.exe --json`, `--statusline` and `--recap [YYYY-MM-DD | week-YYYY-MM-DD | YYYY-MM | YYYY]` read the saved
 quota cache or Token Spend records without opening the GUI, accessing credentials or fetching providers; observations
-carry their age. The developer integrations pane copies these commands, saves a status-line script and
-shows `pulsewin://account/<id>` links plus `pulsewin://recap`, which opens the Token Spend recap.
+carry their age. The developer integrations pane copies these commands, saves a status-line script,
+exports a PowerShell/POSIX developer kit and shows `pulsewin://account/<id>` links plus
+`pulsewin://recap`, which opens the Token Spend recap.
 Third-party status-line installers and the original's complete JSON/deep-link surface remain incomplete.
 
 ---
