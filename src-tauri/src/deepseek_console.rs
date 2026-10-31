@@ -122,6 +122,13 @@ pub fn remove_deepseek_console_login(window: WebviewWindow) -> Result<Connection
     Ok(Connection { connected: false })
 }
 #[tauri::command]
+pub async fn deepseek_card_history(state: State<'_, crate::AppState>) -> Result<crate::token_spend::CardHistory, String> {
+    if token().is_none() { return Ok(crate::token_spend::card_history("unavailable", None)); }
+    let history = read_deepseek_history(state, None).await?;
+    Ok(crate::token_spend::card_history("ready", Some(crate::token_spend::console_snapshot(
+        "deepseek", "DeepSeek console", history.card_days(), history.card_notes(), history.checked_at().to_string()))))
+}
+#[tauri::command]
 pub async fn import_deepseek_console_browser(
     state: State<'_, crate::AppState>,
 ) -> Result<Connection, String> {
@@ -268,6 +275,13 @@ pub struct History {
     currency: Option<String>,
     checked_at: String,
     notes: Vec<String>,
+}
+impl History {
+    pub(crate) fn card_days(&self) -> Vec<crate::token_spend::CardDay> {
+        self.days.iter().map(|day| crate::token_spend::CardDay{date:day.date.clone(),input:day.input,output:day.output,cache_write:0,cache_read:day.cache_read,cost:day.cost,models:day.models.clone()}).collect()
+    }
+    pub(crate) fn card_notes(&self) -> Vec<String> { self.notes.clone() }
+    pub(crate) fn checked_at(&self) -> &str { &self.checked_at }
 }
 fn ledger(
     amount: &Value,
@@ -446,7 +460,7 @@ pub async fn get_deepseek_console_history(
     let cancel = READ.request();
     tokio::select! {r=read_deepseek_history(state,force)=>r,_=cancel.cancelled()=>Err("控制台读取已取消。".into())}
 }
-async fn read_deepseek_history(
+pub(crate) async fn read_deepseek_history(
     state: State<'_, crate::AppState>,
     force: Option<bool>,
 ) -> Result<History, String> {

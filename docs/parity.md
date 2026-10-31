@@ -28,7 +28,9 @@ browser checks pass. Status history, activity, recap logic, local Codex evidence
 cache timing, accurate pricing/counters and the full 54-source Token catalog have
 running implementations. DeepSeek console renewal/import scans Chrome, Edge, Brave
 and Chromium LevelDB stores after a signed-out read and Settings can import the
-session explicitly; the console detailed card and recap visual/native flow remain partial. The 0.1.18 Windows build was
+session explicitly; OpenCode console sessions renew from the app cookie jar. Both consoles'
+daily ledgers now feed their detailed cards, though live detailed-card acceptance and the recap
+visual/native flow remain partial. The 0.1.18 Windows build was
 produced and signed on GitHub Actions windows-latest with 1212 passing Rust checks
 and 260 frontend checks; no installer was executed. Interactive clipboard/dialogs
 remain unrun. DeepSeek interactive login and 30-day real billing read passed;

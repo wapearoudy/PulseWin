@@ -3,7 +3,7 @@ use crate::console_pager::{self, Item, Page, Range, Reply};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{collections::BTreeMap, sync::Mutex, time::Duration};
-use tauri::{Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 const ORIGIN: &str = "https://opencode.ai";
 const SLOT: &str = "opencode-console";
 const LABEL: &str = "opencode-console-login";
@@ -344,6 +344,14 @@ fn ranges(saved: &Saved, now: i64) -> Vec<Range> {
     );
     result
 }
+#[tauri::command]
+pub async fn opencode_card_history(app: AppHandle, state: State<'_, crate::AppState>) -> Result<crate::token_spend::CardHistory, String> {
+    if saved_cookie().is_none() { return Ok(crate::token_spend::card_history("unavailable", None)); }
+    let history = read_opencode_history(app, state, None).await?;
+    Ok(crate::token_spend::card_history("ready", Some(crate::token_spend::console_snapshot(
+        "opencode-go", "OpenCode Go console", history.card_days(), history.card_notes(), history.checked_at().unwrap_or_default()))))
+}
+pub(crate) fn saved_cookie() -> Option<String> { cookie() }
 #[derive(Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Day {
@@ -366,6 +374,14 @@ pub struct History {
     checked_at: Option<String>,
     partial: bool,
     notes: Vec<String>,
+}
+impl History {
+    pub(crate) fn card_days(&self) -> Vec<crate::token_spend::CardDay> {
+        let number = |text: &str| text.parse::<u64>().unwrap_or(0);
+        self.days.iter().map(|day| crate::token_spend::CardDay{date:day.date.clone(),input:number(&day.input),output:number(&day.output),cache_write:number(&day.cache_write),cache_read:number(&day.cache_read),cost:day.cost,models:day.models.iter().map(|(name,tokens)|(name.clone(),number(tokens))).collect()}).collect()
+    }
+    pub(crate) fn card_notes(&self) -> Vec<String> { self.notes.clone() }
+    pub(crate) fn checked_at(&self) -> Option<String> { self.checked_at.clone() }
 }
 fn history(
     saved: &Saved,
@@ -476,7 +492,7 @@ pub async fn get_opencode_console_history(
     let cancel = READ.request();
     tokio::select! {r=read_opencode_history(app,state,force)=>r,_=cancel.cancelled()=>Err("控制台读取已取消。".into())}
 }
-async fn read_opencode_history(
+pub(crate) async fn read_opencode_history(
     app: tauri::AppHandle,
     state: State<'_, crate::AppState>,
     force: Option<bool>,

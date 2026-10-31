@@ -89,7 +89,7 @@ export default function TrayDashboard(){
     </nav>
     <main id="tray-content" role="tabpanel" aria-labelledby={account?`tab-${account.id}`:'tab-overview'} tabIndex={0}><div className="tray-content-inner" ref={content}>
       {(error||prefError)&&<p className="tray-error" role="alert">{error??prefError}</p>}
-      {!loaded||!snapshot?<p className="tray-muted" role="status">正在读取用量…</p>:account?<AccountDetail key={account.id} account={account} remaining={prefs.showsRemaining} warningAt={prefs.warningThreshold} now={now} readsSpend={prefs.tokenSpendEnabled} usageBarStyle={prefs.usageBarStyle}/>:accounts.length?<div className="tray-overview">{accounts.map(p=>{
+      {!loaded||!snapshot?<p className="tray-muted" role="status">正在读取用量…</p>:account?<AccountDetail key={account.id} account={account} remaining={prefs.showsRemaining} warningAt={prefs.warningThreshold} now={now} readsSpend={prefs.tokenSpendEnabled||account.id==='deepseek'||account.id==='opencode-go'} usageBarStyle={prefs.usageBarStyle}/>:accounts.length?<div className="tray-overview">{accounts.map(p=>{
         const w=headlineWindow(p,prefs.pinnedWindows[p.id]);return <button key={p.id} onClick={()=>setSelected(p.id)} aria-label={`查看${p.name}用量`}>
           <span className="tray-provider-icon"><ProviderIcon provider={p.id}/></span><span className="tray-row-name"><strong>{p.name}</strong><small>{p.stale?'旧读数 · ':''}{w?`${w.label} · ${resetText(w,now)}`:p.error||'暂无用量数字'}</small></span>
           <span className={quotaWarning(w,prefs.warningThreshold,Date.now())?'tray-warning':''}>{w?.percentUsed!=null?quotaFigure(w,prefs.showsRemaining):creditText(p.creditRemaining)??'—'}</span>
@@ -105,7 +105,7 @@ export default function TrayDashboard(){
   </div>
 }
 function AccountDetail({account:p,remaining,warningAt,now,readsSpend,usageBarStyle}:{account:ProviderUsage;remaining:boolean;warningAt:number;now:number;readsSpend:boolean;usageBarStyle:'continuous'|'segmented'}){
-  const local=!p.id.includes('--account-')&&['claude-code','codex','kimi-code','grok','opencode-go','cursor','antigravity','command-code','copilot'].includes(p.id)
+  const local=!p.id.includes('--account-')&&['claude-code','codex','kimi-code','grok','opencode-go','cursor','antigravity','command-code','copilot','deepseek'].includes(p.id)
   const history=useCardHistory(p.id,local,readsSpend),credit=creditText(p.creditRemaining)
   return <article className="tray-detail">
     <div className="tray-detail-title"><h1>{p.name}</h1><span>{p.plan}</span></div>

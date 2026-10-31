@@ -1822,6 +1822,8 @@ pub fn run() {
             get_network_status,
             save_network_settings,
             send_test_notification,
+        deepseek_console::deepseek_card_history,
+        opencode_console::opencode_card_history,
             qoder_credit_history,
             save_preferences,
             refresh_provider,

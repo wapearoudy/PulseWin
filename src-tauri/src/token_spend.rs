@@ -262,6 +262,20 @@ fn card_agent(provider: &str) -> Option<&'static str> {
 }
 #[derive(Serialize)] #[serde(rename_all="camelCase")]
 pub struct CardHistory {status:&'static str,snapshot:Option<SpendSnapshot>}
+/// One day of a console's own account ledger, in the shape the card uses.
+pub(crate) struct CardDay { pub date:String, pub input:u64, pub output:u64, pub cache_write:u64, pub cache_read:u64, pub cost:Option<f64>, pub models:BTreeMap<String,u64> }
+pub(crate) fn console_snapshot(agent:&str,name:&str,days:Vec<CardDay>,notes:Vec<String>,checked_at:String)->SpendSnapshot {
+    let records=days.into_iter().filter(|d|d.input+d.output+d.cache_write+d.cache_read>0).map(|d|{
+        let model=d.models.into_iter().max_by_key(|(_,tokens)|*tokens).map(|(name,_)|name).unwrap_or_else(||"console".into());
+        SpendRecord{agent:agent.into(),model:model.clone(),model_name:Some(model),day:d.date.clone(),hour:0,session:"console".into(),project:None,
+            tally:Tally{input:d.input,output:d.output,cache_write:d.cache_write,cache_read:d.cache_read,..Default::default()},
+            unclassified_tokens:0,deduplication_id:Some(format!("console:{agent}:{}",d.date)),aggregate_timing:true,source_timestamp:None,
+            source_scope:None,cost:d.cost,cost_breakdown:None,cache_savings:None,reply_timing:None}
+    }).collect::<Vec<_>>();
+    let count=records.len();
+    SpendSnapshot{scanned_at:checked_at.clone(),records,sources:vec![SpendSource{id:agent.into(),name:name.into(),status:"counted".into(),files:1,cached_files:0,records:count,retained_records:0,origin:"native".into(),roots:Vec::new()}],notes,prices_at:None,pricing_status:"console".into()}
+}
+pub(crate) fn card_history(status:&'static str,snapshot:Option<SpendSnapshot>)->CardHistory { CardHistory{status,snapshot} }
 /// Same measured readers and public prices as Token Spend, scoped to one card.
 /// It never changes/cancels the Settings pane's scan. Opt-out is checked before
 /// path discovery/cache/network, and cancels an already-running card read.

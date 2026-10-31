@@ -146,6 +146,9 @@ Qoder cards show plan, resource-pack and dedicated credit parts with their own e
 account enables parts, plus a 31-day used/charged credit history with daily bars; Cursor
 weekly-limit plans show the 7d ring and reset instead of the monthly pools, while enterprise
 accounts show one monthly USD allowance.
+DeepSeek and OpenCode Go console accounts feed their detailed cards from the service's own daily
+ledger, including browser-session import/renewal for DeepSeek and cookie-jar renewal for OpenCode;
+live detailed-card acceptance on a real account remains pending.
 DeepSeek Harness reads normal and versioned JSONL sessions, including concatenated Zstandard checkpoints,
 under `~/.dsh/sessions` or `$DSH_HOME/sessions`. CLI and the current desktop share this directory.
 It includes provider-reported failed attempts and compaction calls, excludes fork-inherited counters,

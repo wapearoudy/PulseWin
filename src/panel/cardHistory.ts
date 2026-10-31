@@ -14,7 +14,8 @@ function read(provider:string):Promise<CardHistory> {
   if(cached && performance.now()-cached.at<5*60*1000)return Promise.resolve(cached.value)
   const active=pending.get(provider);if(active)return active
   const revision=generation
-  const request=invoke<CardHistory>('spend_card_history',{provider}).then(value=>{
+  const command=provider==='deepseek'?'deepseek_card_history':provider==='opencode-go'?'opencode_card_history':'spend_card_history'
+  const request=invoke<CardHistory>(command,command==='spend_card_history'?{provider}:{}).then(value=>{
     if(!value || !['disabled','unavailable','ready'].includes(value.status))throw new Error('Invalid history reply')
     if(revision===generation)retained.set(provider,{at:performance.now(),value})
     return value
@@ -22,18 +23,19 @@ function read(provider:string):Promise<CardHistory> {
   pending.set(provider,request);return request
 }
 export function useCardHistory(provider:string,detailed:boolean,tokenEnabled:boolean):CardHistory {
+  const consoleLedger=provider==='deepseek'||provider==='opencode-go'
   const [owned,setOwned]=useState<{provider:string;value:CardHistory}>({provider,value:{status:'disabled',snapshot:null}})
   useEffect(()=>{
     let live=true
     const setValue=(value:CardHistory)=>setOwned({provider,value})
-    if(!tokenEnabled){clearCardHistory();setValue({status:'disabled',snapshot:null});return}
+    if(!tokenEnabled&&!consoleLedger){clearCardHistory();setValue({status:'disabled',snapshot:null});return}
     if(!detailed){setValue({status:'disabled',snapshot:null});return}
     setValue({status:'reading',snapshot:null})
     void read(provider).then(value=>{if(live)setValue(value)})
     return()=>{live=false}
-  },[provider,detailed,tokenEnabled])
+  },[provider,detailed,tokenEnabled,consoleLedger])
   // Never show the preceding account's totals during an effect handoff.
-  if(!detailed || !tokenEnabled)return {status:'disabled',snapshot:null}
+  if(!detailed || (!tokenEnabled&&!consoleLedger))return {status:'disabled',snapshot:null}
   return owned.provider===provider?owned.value:{status:'reading',snapshot:null}
 }
 export function cardActivity(snapshot:SpendSnapshot,now=new Date()) {
