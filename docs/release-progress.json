@@ -43,7 +43,8 @@
   "The Settings window follows the system-settings layout: a sticky title bar names the page, back/forward history buttons cover pane moves and Alt+Left/Right shortcuts work from anywhere in the window",
   "Experimental liquid docking is off by default: pulling a docked rail away eases it behind the pointer, thins and scales the panel, and releases it past an 80 pt break distance; the notch capsule waits 250 ms of stillness before expanding",
   "Connection diagnostics in each account pane show the latest check result, its time, the displayed source and a credential-free copyable summary of the reported windows",
-  "Developer integrations: a settings pane documents the read-only --json/--statusline output, copies commands, saves a PowerShell status-line script and shows pulsewin://account links; the NSIS installer registers the pulsewin:// URL protocol, and the app accepts only the settings/account navigation paths (a URL cannot change settings, run commands or start a login)"
+  "Developer integrations: a settings pane documents the read-only --json/--statusline output, copies commands, saves a PowerShell status-line script and shows pulsewin://account links; the NSIS installer registers the pulsewin:// URL protocol, and the app accepts only the settings/account navigation paths (a URL cannot change settings, run commands or start a login)",
+  "Model spend detail shows the selected model's daily input, cache write, cache read, output and total columns, measured output speed and first-token latency from reply timing, and estimated cache-read savings on the Token split"
  ],
  "verification": {
   "rust": "1241 passed, 0 failed, 2 explicitly ignored real-account checks (1243 total) on this Windows machine, including the new price-alias, Kimi Code, Qoder, Cursor and progress-bar tests. The 35 failures recorded on macOS are Windows-only path/PATH tests that pass here; the Windows workflow reports the same green result.",
@@ -71,7 +72,7 @@
   "DeepSeek console renewal/import and detailed-card integration",
   "OpenCode Go session renewal and detailed-card integration",
   "Original recap visual parity, native recap flow, notification click navigation",
-  "Prompt-cache hover-card integration and complete per-model output/TTFT rows",
+  "Prompt-cache hover-card integration remains partial; per-model output/TTFT rows are implemented",
   "--recap export and third-party status-line installers (Raycast/Sketchybar) remain unimplemented; the in-app developer integrations pane, --json/--statusline copy actions and pulsewin:// navigation links are done",
   "Windows multi-DPI/multi-monitor, full-screen and live-account regression acceptance",
   "Window starter real CLI send and Windows no-window launch acceptance",

@@ -3,7 +3,7 @@ import { beginSpendScan, cancelSpendScan, clearSpendSnapshot, getSpendScan,getKe
 import { agentName, customDaysOf, dayKey, exactTokenText, formatCost, shortTokens, sortDays, spanIsOneDay, summarize } from './summary'
 import type { CustomDays } from './summary'
 import * as money from '../money'
-import type { SpendAmounts, SpendGroup, SpendSnapshot, SpendSpan } from './types'
+import type { SpendAmounts, SpendDay, SpendGroup, SpendRecord, SpendSnapshot, SpendSpan } from './types'
 import './token-spend.css'
 import { TokenActivityView } from './TokenActivityView'
 import type { ActivityView } from './activity'
@@ -81,6 +81,7 @@ export function TokenSpendPane({ enabled, onEnabledChange, span: savedSpan, onSp
   // The rows are days with work on them. The chart above is what has to keep
   // its gaps to stay a calendar; a table of empty rows is a table to read past.
   const shownDays = useMemo(() => sortedDays.filter(day => day.tokens > 0 || day.cost !== null), [sortedDays])
+  const cacheSavings = useMemo(() => summary.records.reduce((sum, record) => sum + (record.cacheSavings ?? 0), 0), [summary.records])
   const start = useCallback(async (force: boolean,keep=false) => {
     if (!enabled) return
     const turn = ++generation.current
@@ -176,16 +177,18 @@ export function TokenSpendPane({ enabled, onEnabledChange, span: savedSpan, onSp
             : <Chart title="小时分布" labels={summary.hours.map((_, hour) => `${String(hour).padStart(2,'0')}:00`)} values={summary.hours} />)
           : <Chart title="每日 Token" labels={summary.days.map(d => d.day)} values={summary.days.map(d => d.tokens)} />}
         <section className="spend-card"><h2>Token 分类</h2><div className="spend-splits">
-          {([['新输入',summary.tally.input,0],['输出',summary.tally.output,1],['缓存写入',summary.tally.cacheWrite,2],['缓存读取',summary.tally.cacheRead,3]] as const).map(([name,value,index]) => <div key={name}><span>{summary.unclassifiedTokens > 0 ? '已分类 · ' : ''}{name}</span><strong title={summary.unclassifiedTokens === summary.tokens && summary.tokens > 0 ? '来源仅报告总量，分类不可用' : (index===2||index===3)&&summary.repliesWithoutCacheFields&&summary.tally.cacheWrite===0&&summary.tally.cacheRead===0 ? '来源未报告缓存分类' : value.toLocaleString('zh-CN')}>{summary.unclassifiedTokens === summary.tokens && summary.tokens > 0 || ((index===2||index===3)&&summary.repliesWithoutCacheFields&&summary.tally.cacheWrite===0&&summary.tally.cacheRead===0) ? '—' : shortTokens(value)}</strong><small>{(index===2||index===3)&&summary.repliesWithoutCacheFields&&summary.tally.cacheWrite===0&&summary.tally.cacheRead===0?'—':formatCost(summary.costBreakdown?.[index] ?? null)}</small></div>)}
-        </div>{summary.unclassifiedTokens > 0 && <p className="spend-footnote">未分类：{shortTokens(summary.unclassifiedTokens)} Token。来源报告了总量但不能证明各分类；计入总量，不计价。</p>}{summary.unpricedTokens > 0 && summary.cost !== null && <p className="spend-footnote">分类金额覆盖可计价部分。</p>}</section>
+          {([['新输入',summary.tally.input,0],['输出',summary.tally.output,1],['缓存写入',summary.tally.cacheWrite,2],['缓存读取',summary.tally.cacheRead,3]] as const).map(([name,value,index]) => <div key={name}><span>{summary.unclassifiedTokens > 0 ? '已分类 · ' : ''}{name}</span><strong title={summary.unclassifiedTokens === summary.tokens && summary.tokens > 0 ? '来源仅报告总量，分类不可用' : (index===2||index===3)&&summary.repliesWithoutCacheFields&&summary.tally.cacheWrite===0&&summary.tally.cacheRead===0 ? '来源未报告缓存分类' : `${value.toLocaleString('zh-CN')}${(index===3&&cacheSavings>0)?` · 约节省 ${formatCost(cacheSavings)}`:''}`}>{summary.unclassifiedTokens === summary.tokens && summary.tokens > 0 || ((index===2||index===3)&&summary.repliesWithoutCacheFields&&summary.tally.cacheWrite===0&&summary.tally.cacheRead===0) ? '—' : shortTokens(value)}</strong><small>{(index===2||index===3)&&summary.repliesWithoutCacheFields&&summary.tally.cacheWrite===0&&summary.tally.cacheRead===0?'—':formatCost(summary.costBreakdown?.[index] ?? null)}</small></div>)}
+        </div>{cacheSavings>0&&<p className="spend-footnote">缓存读取按公开价格估算约节省 {formatCost(cacheSavings)}；仅为估算，不是账单。</p>}{summary.unclassifiedTokens > 0 && <p className="spend-footnote">未分类：{shortTokens(summary.unclassifiedTokens)} Token。来源报告了总量但不能证明各分类；计入总量，不计价。</p>}{summary.unpricedTokens > 0 && summary.cost !== null && <p className="spend-footnote">分类金额覆盖可计价部分。</p>}</section>
         {!model && <section className="spend-card"><h2>模型</h2>{summary.models.length ? <>
           <GroupRows groups={summary.models.slice(modelPage * 8, (modelPage + 1) * 8)} onOpen={group => setModel(group.id)} />
           <Pagination page={modelPage} total={summary.models.length} size={8} onChange={setModelPage} />
         </> : <p className="spend-empty">此范围没有模型用量。</p>}</section>}
         {(!agent || model) && <section className="spend-card"><h2>{model ? 'Agent 贡献' : 'Agent'}</h2><GroupRows groups={summary.agents} onOpen={group => { setAgent(group.id); if (!model) setModel(null) }} /></section>}
-        <section className="spend-card"><h2>每日明细</h2><div className="spend-table-scroll"><table className="spend-table"><thead><tr>
+        {model
+          ? <ModelDetail days={shownDays} records={summary.records} />
+          : <section className="spend-card"><h2>每日明细</h2><div className="spend-table-scroll"><table className="spend-table"><thead><tr>
           {([['day','日期'],['tokens','Token'],['cost','API 金额估算']] as const).map(([key,label]) => <th key={key} aria-sort={sortKey === key ? descending ? 'descending' : 'ascending' : 'none'}><button onClick={() => sort(key)}>{label}{sortKey === key ? descending ? ' ↓' : ' ↑' : ''}</button></th>)}
-        <th>未分类 Token</th></tr></thead><tbody>{shownDays.slice(dayPage * 10, (dayPage + 1) * 10).map(day => <tr key={day.day}><td>{day.day}</td><td title={exactTokenText(day.tokens,day.exactTokens)}>{shortTokens(day.tokens)}</td><td title={day.cost === null ? '金额不可用' : money.exactEstimate(day.cost)}>{formatCost(day.cost)}{day.unpricedTokens > 0 && day.cost !== null ? ' *' : ''}</td><td title={exactTokenText(day.unclassifiedTokens,day.exactUnclassifiedTokens)}>{shortTokens(day.unclassifiedTokens)}</td></tr>)}</tbody></table></div><Pagination page={dayPage} total={shownDays.length} size={10} onChange={setDayPage} /></section>
+        <th>未分类 Token</th></tr></thead><tbody>{shownDays.slice(dayPage * 10, (dayPage + 1) * 10).map(day => <tr key={day.day}><td>{day.day}</td><td title={exactTokenText(day.tokens,day.exactTokens)}>{shortTokens(day.tokens)}</td><td title={day.cost === null ? '金额不可用' : money.exactEstimate(day.cost)}>{formatCost(day.cost)}{day.unpricedTokens > 0 && day.cost !== null ? ' *' : ''}</td><td title={exactTokenText(day.unclassifiedTokens,day.exactUnclassifiedTokens)}>{shortTokens(day.unclassifiedTokens)}</td></tr>)}</tbody></table></div><Pagination page={dayPage} total={shownDays.length} size={10} onChange={setDayPage} /></section>}
         {!model && <><section className="spend-card"><h2>会话 · {summary.sessions.length}</h2><GroupRows groups={summary.sessions.slice(sessionPage * 8, (sessionPage + 1) * 8)} /><Pagination page={sessionPage} total={summary.sessions.length} size={8} onChange={setSessionPage} /><p className="spend-footnote">会话按本机记录标识区分，不读取对话标题或正文。</p></section>
           <section className="spend-card"><h2>项目</h2><GroupRows groups={summary.projects} /><p className="spend-footnote">仅显示记录中明确写出的项目路径；缺少路径的会话仍计入总量。</p></section></>}
         <section className="spend-card spend-sources"><h2>读取来源</h2>{snapshot.sources.map(source => <div key={source.id}><strong>{source.name}{source.origin === 'export' ? ' · 导出 / 捕获' : ''}</strong><span>{source.status === 'counted' ? `${source.files} 个记录文件 · ${source.cachedFiles} 个缓存命中${source.retainedRecords ? ` · 保留 ${source.retainedRecords} 条历史计数` : ''}` : source.status === 'no-data' ? source.id === 'crush' ? '已识别 · 来源只报告费用，无法确定 Token 计数' : '未读取到用量' : source.origin === 'export' ? '尚无导出 / 捕获文件' : '未检测到记录目录'}</span></div>)}
@@ -196,6 +199,21 @@ export function TokenSpendPane({ enabled, onEnabledChange, span: savedSpan, onSp
         <p className="spend-footnote">扫描时间：{new Date(snapshot.scannedAt).toLocaleString('zh-CN')} · {snapshot.pricingStatus === 'unavailable' ? '公开价格暂不可用' : snapshot.pricingStatus === 'stale' ? '使用离线价格缓存' : '价格来源：models.dev'}{snapshot.pricesAt ? ` · ${new Date(snapshot.pricesAt).toLocaleDateString('zh-CN')}` : ''}</p>
       </>}
     </>}
+  </section>
+}
+function ModelDetail({ days, records }: { days: SpendDay[]; records: SpendRecord[] }) {
+  const timing = records.reduce((sum, record) => {
+    const value = record.replyTiming
+    if (value) { sum.replies += value.replies; sum.output += value.outputTokens; sum.seconds += value.seconds; sum.first += value.firstTokenSeconds; sum.turns += value.firstTokenTurns }
+    return sum
+  }, { replies: 0, output: 0, seconds: 0, first: 0, turns: 0 })
+  const rows = days.filter(day => day.tokens > 0 || day.cost !== null)
+  return <section className="spend-card"><h2>模型明细</h2>
+    {timing.replies > 0 && <p className="spend-footnote">{timing.seconds > 0 ? `输出速度约 ${(timing.output / timing.seconds).toFixed(1)} Token/秒（${timing.replies} 次回复）。` : ''}{timing.turns > 0 ? `首字平均约 ${(timing.first / timing.turns).toFixed(2)} 秒（${timing.turns} 次）。` : ''}速度按来源自报的耗时统计，不包含排队时间。</p>}
+    <div className="spend-table-scroll"><table className="spend-table"><thead><tr><th>日期</th><th>输入</th><th>缓存写入</th><th>缓存读取</th><th>输出</th><th>合计</th></tr></thead><tbody>
+      {rows.map(day => <tr key={day.day}><td>{day.day}</td><td>{shortTokens(day.tally.input)}</td><td>{shortTokens(day.tally.cacheWrite)}</td><td>{shortTokens(day.tally.cacheRead)}</td><td>{shortTokens(day.tally.output)}</td><td title={exactTokenText(day.tokens, day.exactTokens)}>{shortTokens(day.tokens)}</td></tr>)}
+    </tbody></table></div>
+    {!rows.length && <p className="spend-empty">此范围没有该模型的每日记录。</p>}
   </section>
 }
 function Metric({ label, value, help }: { label: string; value: string; help?: string }) { return <div><span>{label}</span><strong title={help}>{value}</strong></div> }

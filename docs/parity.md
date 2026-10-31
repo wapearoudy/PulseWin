@@ -85,8 +85,10 @@ allowances; and Codex weaker-model signals treat max/ultra effort as comparable
 while ignoring the local context-window setting. The Settings window uses the system-settings
 title bar with back/forward history and Alt+Left/Right shortcuts; experimental liquid docking
 is off by default and eases, thins and scales a docked panel until it breaks away at 80 pt; the
-notch capsule waits 250 ms before expanding; and each account pane ends with connection
-diagnostics and a credential-free copyable summary; the developer integrations pane copies the
+notch capsule waits 250 ms before expanding; each account pane ends with connection
+diagnostics and a credential-free copyable summary; selecting a model lists its daily
+input/cache-write/cache-read/output/total rows with measured output speed, first-token
+latency and estimated cache savings; the developer integrations pane copies the
 read-only CLI commands and pulsewin:// account links registered by the installer. Validation: 1241 Rust tests plus two
 ignored, 268 frontend tests, tsc --noEmit and vite build clean.
 

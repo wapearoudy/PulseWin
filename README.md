@@ -127,7 +127,9 @@ CLI local logs, plus Cursor exports, Antigravity synchronized cache, Hindsight m
 MCode captured stream-json. These four import formats require files prepared beforehand; PulseWin
 does not connect or sync them. Readers use bounded streaming, replay deduplication, file caching and cooperative cancellation.
 The page has the original's nine ranges plus a custom date range, model and agent details, daily/hourly charts, project and
-session sorting/pagination, and public models.dev price estimates. Unknown prices stay unknown.
+session sorting/pagination, and public models.dev price estimates. Unknown prices stay unknown. Selecting a model opens
+its daily input/cache-write/cache-read/output/total table, measured output speed and first-token latency, and cache-read
+savings estimated from public prices.
 Native read-only readers also cover OpenCode, Kilo CLI, MiMo Code, Pi, Oh My Pi, Kimchi, Amp,
 Droid, OpenClaw, Goose, Hermes, Zed, Kiro and Kimi CLI (both the legacy wire logs and the Kimi Code
 store), including active WAL files; Crush is recognized as a cost-only source. Every remaining
