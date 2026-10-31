@@ -35,6 +35,9 @@ pub struct Preferences {
     /// `continuous` or `segmented`. Segmented bars are taller so their ticks
     /// read as ticks, which changes the card's frame budget.
     pub usage_bar_style: String,
+    /// Experimental: while a docked rail is pulled away, its movement lags the
+    /// pointer and the rail thins like a liquid neck until it breaks free.
+    pub liquid_docking: bool,
     pub shows_remaining: bool,
     pub show_percentages: bool,
     pub label_above: bool,
@@ -87,7 +90,7 @@ pub struct Preferences {
 impl Default for Preferences {
     fn default() -> Self {
         Self { network_proxy:Default::default(), panel_visible:true, tray_shows_usage:false, tray_style:"figure".into(), tray_account:None, accounts: vec![], account_labels: Default::default(), open_settings_shortcut: None, toggle_panel_shortcut: None, alerts: Default::default(), token_spend_enabled: false, token_spend_span: "week".into(), spend_custom_days: Vec::new(), spend_activity_view:"daily".into(),recap_monthly_price:None,recap_hides_projects:false, reset_celebration: true, enabled_providers: vec![], provider_order: vec![], panel_colour: "black".into(), panel_size: 1.0,
-            rail_spacing: 1.0, round_ends: false, usage_bar_style: "continuous".into(), shows_remaining: false,
+            rail_spacing: 1.0, round_ends: false, usage_bar_style: "continuous".into(), liquid_docking: false, shows_remaining: false,
             show_percentages: true, label_above: false, auto_collapse: true,
             warning_threshold: 0.75, refresh_seconds: 120, refresh_automatic: true, show_reset_clock: false,
             clock_remaining: false, show_second_ring: false, top_show_percentages: false, animate_activity: true, dock_alert_colour: true, show_forecast: false, hide_in_fullscreen: true, follow_active_display: false, hide_from_capture: false, account_appearance: Default::default(), pinned_windows: Default::default(),

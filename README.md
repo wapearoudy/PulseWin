@@ -8,7 +8,7 @@
 > All 77 provider adapters are registered; registration is not real-account validation.
 > Token Spend now registers all 54 sources (Crush is cost-only), notifications have
 > evidence-based alert rules and a Settings test button, model prices follow the original's
-> spellings, and the original bot animation engine/effects are ported. Multi-account
+> spellings, the original bot animation engine/effects are ported, and Settings uses the system-settings layout with liquid docking and connection diagnostics. Multi-account
 > authentication, localization and full native/multiple-display acceptance remain open.
 > Existing installations explicitly select the services to monitor; stored credentials are retained.
 
@@ -51,7 +51,9 @@ A rail capsule fused to one screen edge — **left, right or top**. Every explic
   compact pill into a banner.
 - **Drag the rail by a ring or its background.** It docks at the left/right/top while moving,
   floats away from the edges, and keeps the grab position when the dock padding changes. A turn
-  onto the top axis centres under the pointer. Rail position is written to
+  onto the top axis centres under the pointer. With **experimental liquid docking** enabled, a docked
+  rail pulled away eases behind the pointer, thins and scales the panel, and breaks free after 80 pt;
+  a collapsed notch capsule waits 250 ms of stillness before it opens. Rail position is written to
   `%APPDATA%\PulseWin\panel.json` and restored on the next launch.
 - **Unattended, it winds down to a 6pt sliver.** That sliver is the rail's own silhouette at
   `openness` 0 rather than a second shape, so the flare and the corners give way together. It opens
@@ -101,7 +103,9 @@ Tray → **Settings…**, `pulsewin.exe --settings`, or the Settings… button o
 reading. It is a second window rather than a view inside the panel, because the panel's frame is
 worked out from the rail's length and nothing may resize it while a card is open.
 
-It lists every registered provider, whether it was found on this machine, and — under "Where it
+It follows the original's system-settings layout: a sticky title bar names the page, back/forward
+history buttons cover pane moves, and Alt+Left/Right work anywhere in the window. It lists every
+registered provider, whether it was found on this machine, and — under "Where it
 looks" — the paths that provider reads plus the file a pasted credential would be saved to. Reading
 the list makes no network call, so opening the window cannot fire fifty requests at services you do
 not use.
@@ -110,7 +114,8 @@ Each row takes a **pasted API key / token / cookie** and, for the self-hosted ga
 address**. Saving encrypts the complete credential document with Windows current-user DPAPI in
 `%APPDATA%\PulseWin\<id>.json`. Existing plaintext files migrate when read; failed decryption or
 migration remains visible and never falls back to writing plaintext. Saving preserves omitted fields
-and refreshes that enabled account.
+and refreshes that enabled account. Each account pane ends with **connection diagnostics** showing
+the latest check result, its time and displayed source, plus a credential-free summary you can copy.
 
 Notifications are off by default. Settings offers quota thresholds, witnessed reset alerts,
 three-failure protection and a monetary balance threshold where an adapter reports a real balance.

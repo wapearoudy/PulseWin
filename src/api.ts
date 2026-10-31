@@ -153,6 +153,7 @@ export interface PanelPlacement { dockEdge: PanelEdgeName | null; railPosition: 
 export const panelPlacement = () => invoke<PanelPlacement>('panel_placement')
 export const onPlacementChanged = (handler: (p: PanelPlacement) => void) => listen<PanelPlacement>('placement-changed', e => handler(e.payload))
 export const onDragChanged = (handler: (dragging: boolean) => void) => listen<boolean>('drag-changed', e => handler(e.payload))
+export const onLiquidDrag = (handler: (pull: number) => void) => listen<number>('liquid-drag', e => handler(e.payload))
 
 export const showPanelMenu = () => invoke<void>('show_panel_menu')
 export const onMenuChanged = (handler:(open:boolean)=>void) => listen<boolean>('menu-changed',e=>handler(e.payload))

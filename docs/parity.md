@@ -19,8 +19,9 @@ The 0.1.19 working-tree checkpoint adds the original's model-price spellings
 abbreviations), a Settings test-notification button, the direct 不使用代理 mode,
 the Kimi Code session store, 日报/周报 recap periods, the original's
 continuous/segmented progress-bar styles, Qoder credit-part accounting with a
-31-day credit history, Cursor weekly limits with enterprise allowance, and the
-Codex weaker-model signal refinements. 1240 Rust checks pass with
+31-day credit history, Cursor weekly limits with enterprise allowance, the
+Codex weaker-model signal refinements, the system-settings title bar, experimental
+liquid docking, the 250 ms notch hover delay and connection diagnostics. 1240 Rust checks pass with
 2 real-account checks explicitly ignored; 268 frontend unit checks and 81 synthetic
 browser checks pass. Status history, activity, recap logic, local Codex evidence,
 cache timing, accurate pricing/counters and the full 54-source Token catalog have
@@ -66,7 +67,7 @@ All unchecked items remain incomplete or unverified. No overall completion perce
 
 ## Verification baseline
 
-0.1.19 syncs upstream release notes through 1.12.4 (16 versions) and closes nine
+0.1.19 syncs upstream release notes through 1.12.4 (16 versions) and closes thirteen
 gaps: model prices now follow ModelPrices.swift (`-extra-low` effort, Gemini
 `-n`/`-control`/`-xpe` tags, `-[0-9]+[kKmM]` context windows and Kimi `k3`/`k2p6`
 abbreviations; `grok-build-0.1` stays distinct and only one tag is stripped);
@@ -80,8 +81,12 @@ progress bars are continuous or segmented per UsageBar.swift in both the card an
 tray menu; Qoder shows plan, resource-pack and dedicated credit parts with expiry
 plus a 31-day used/charged history; Cursor shows weekly-limit plans and enterprise
 allowances; and Codex weaker-model signals treat max/ultra effort as comparable
-while ignoring the local context-window setting. Validation: 1240 Rust tests plus
-two ignored, 268 frontend tests, tsc --noEmit and vite build clean.
+while ignoring the local context-window setting. The Settings window uses the system-settings
+title bar with back/forward history and Alt+Left/Right shortcuts; experimental liquid docking
+is off by default and eases, thins and scales a docked panel until it breaks away at 80 pt; the
+notch capsule waits 250 ms before expanding; and each account pane ends with connection
+diagnostics and a credential-free copyable summary. Validation: 1240 Rust tests plus two
+ignored, 268 frontend tests, tsc --noEmit and vite build clean.
 
 0.1.18 (published) registered the remaining 13 Token sources so all 54 have a
 reader, ported the 44-provider status catalogue and currency conversion, widened

@@ -51,7 +51,13 @@ export default function Settings() {
   const providers=useMemo(()=>providerRows.map(p=>({...p,name:prefs.accountLabels[p.id]??p.name})),[providerRows,prefs.accountLabels])
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
   const [pane, setPane] = useState(()=>new URLSearchParams(window.location.search).get('account') ?? 'appearance'), [query, setQuery] = useState('')
-  useEffect(()=>{let live=true,off:(()=>void)|undefined;void onSettingsAccount(id=>{if(live){setPane(id);setChoose(false);setDismissed(true)}}).then(fn=>{if(live)off=fn;else fn()}).catch(()=>undefined);return()=>{live=false;off?.()}},[])
+  const [trail, setTrail] = useState<string[]>(()=>[new URLSearchParams(window.location.search).get('account') ?? 'appearance'])
+  const [trailIndex, setTrailIndex] = useState(0)
+  function navigate(id: string) { const next=[...trail.slice(0, trailIndex+1), id]; setTrail(next); setTrailIndex(next.length-1); setPane(id) }
+  function goBack() { if (trailIndex <= 0) return; const index=trailIndex-1; setTrailIndex(index); setPane(trail[index]) }
+  function goForward() { if (trailIndex >= trail.length-1) return; const index=trailIndex+1; setTrailIndex(index); setPane(trail[index]) }
+  useEffect(()=>{const onKey=(event:KeyboardEvent)=>{if(event.altKey&&event.key==='ArrowLeft'){event.preventDefault();goBack()}else if(event.altKey&&event.key==='ArrowRight'){event.preventDefault();goForward()}};window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey)})
+  useEffect(()=>{let live=true,off:(()=>void)|undefined;void onSettingsAccount(id=>{if(live){navigate(id);setChoose(false);setDismissed(true)}}).then(fn=>{if(live)off=fn;else fn()}).catch(()=>undefined);return()=>{live=false;off?.()}},[])
   const [error, setError] = useState<string | null>(null), [busy, setBusy] = useState(false)
   // The window starter's last attempts. Read through its own command rather
   // than out of the preferences, so the pane and the starter report the same
@@ -96,6 +102,7 @@ export default function Settings() {
   const appearance = { ...defaultAccountAppearance, ...prefs.accountAppearance[pane] }
   const setAppearance = (patch:Partial<typeof appearance>) => change({accountAppearance:{...prefs.accountAppearance,[pane]:{...appearance,...patch}}})
   const choosing = loaded && (choose || (!dismissed && !prefs.enabledProviders.length))
+  const paneTitle = choosing ? '选择要监控的服务' : settingsPanes.find(([id])=>id===pane)?.[1] ?? providers.find(p=>p.id===pane)?.name ?? '设置'
   const orderedEnabled=prefs.providerOrder.filter(id=>prefs.enabledProviders.includes(id))
   function moveTo(id:string,target:string) {
     const order=[...orderedEnabled],index=order.indexOf(id),next=order.indexOf(target)
@@ -113,15 +120,22 @@ export default function Settings() {
       <input type="search" aria-label="搜索设置与账号" placeholder="搜索设置与账号" value={query} onChange={e => setQuery(e.target.value)} />
       <nav>{[['面板', ['appearance', 'rings', 'behavior']], ['应用', ['general', 'notifications', 'network', 'accounts', 'token-spend', 'extensions']]].map(([title, ids]) => {
         const entries = settingsPanes.filter(([id, name,,terms]) => (ids as string[]).includes(id) && `${id} ${name} ${terms}`.toLowerCase().includes(query.toLowerCase())).sort((a,b) => (ids as string[]).indexOf(a[0]) - (ids as string[]).indexOf(b[0]))
-        return entries.length > 0 && <div key={String(title)}><p className="nav-section">{title}</p>{entries.map(([id,name,icon]) => <button key={id} className={pane === id ? 'selected' : ''} onClick={() => { setPane(id); setChoose(false); setDismissed(true) }}><span className="settings-nav-icon" aria-hidden="true">{icon}</span><span className="settings-nav-label">{name}</span></button>)}</div>
+        return entries.length > 0 && <div key={String(title)}><p className="nav-section">{title}</p>{entries.map(([id,name,icon]) => <button key={id} className={pane === id ? 'selected' : ''} onClick={() => { navigate(id); setChoose(false); setDismissed(true) }}><span className="settings-nav-icon" aria-hidden="true">{icon}</span><span className="settings-nav-label">{name}</span></button>)}</div>
       })}
         <p className="nav-section">账号</p>
-        {shown.map(p => <button key={p.id} className={pane === p.id ? 'selected' : ''} onClick={() => { setPane(p.id); setChoose(false); setDismissed(true) }}><span className="settings-nav-icon" aria-hidden="true"><ProviderIcon provider={p.id}/></span><span className="account-name">{p.name}</span></button>)}
+        {shown.map(p => <button key={p.id} className={pane === p.id ? 'selected' : ''} onClick={() => { navigate(p.id); setChoose(false); setDismissed(true) }}><span className="settings-nav-icon" aria-hidden="true"><ProviderIcon provider={p.id}/></span><span className="account-name">{p.name}</span></button>)}
         {!shown.length && query && <p className="muted">没有匹配的账号</p>}
-        {settingsPanes.filter(([id,name,,terms]) => id === 'about' && `${id} ${name} ${terms}`.toLowerCase().includes(query.toLowerCase())).map(([id,name,icon]) => <button key={id} className={pane === id ? 'selected' : ''} onClick={() => { setPane(id); setChoose(false); setDismissed(true) }}><span className="settings-nav-icon" aria-hidden="true">{icon}</span><span className="settings-nav-label">{name}</span></button>)}
+        {settingsPanes.filter(([id,name,,terms]) => id === 'about' && `${id} ${name} ${terms}`.toLowerCase().includes(query.toLowerCase())).map(([id,name,icon]) => <button key={id} className={pane === id ? 'selected' : ''} onClick={() => { navigate(id); setChoose(false); setDismissed(true) }}><span className="settings-nav-icon" aria-hidden="true">{icon}</span><span className="settings-nav-label">{name}</span></button>)}
       </nav><div className="sidebar-footer">{prefs.enabledProviders.length} 个账号显示在面板</div>
     </aside>
     <main className="settings-content">
+      <header className="settings-titlebar">
+        <div className="settings-history" role="group" aria-label="设置导航历史">
+          <button aria-label="后退" title="后退 (Alt+←)" disabled={trailIndex <= 0} onClick={goBack}>‹</button>
+          <button aria-label="前进" title="前进 (Alt+→)" disabled={trailIndex >= trail.length-1} onClick={goForward}>›</button>
+        </div>
+        <h1 className="settings-page-title">{paneTitle}</h1>
+      </header>
       {(error || loadError) && <div role="alert" className="settings-alert">{error || loadError}<button aria-label="关闭错误提示" onClick={() => setError(null)}>×</button></div>}
       {!loaded ? <p role="status">正在读取设置…</p> : choosing ? <>
         <h1>选择要监控的服务</h1><p className="page-description">只监控你选择的服务。发现本机凭据不会自动启用监控。</p>
@@ -134,6 +148,7 @@ export default function Settings() {
         <Group title="面板颜色"><Row title="颜色" subtitle="桌面助手与详情卡的表面颜色。"><select aria-label="面板颜色" disabled={busy} value={prefs.panelColour} onChange={e=>change({panelColour:e.target.value as 'black'|'light'})}><option value="black">黑色</option><option value="light">浅色</option></select></Row></Group><Group title="尺寸与形状"><Row title="大小"><select disabled={busy} value={prefs.panelSize} onChange={e => change({ panelSize: Number(e.target.value) })}><option value="0.82">较小</option><option value="1">标准</option><option value="1.22">较大</option></select></Row>
         <Row title="间距"><select disabled={busy} value={prefs.railSpacing} onChange={e => change({ railSpacing: Number(e.target.value) })}><option value="0.6">紧凑</option><option value="1">标准</option><option value="1.4">宽松</option></select></Row>
         <Toggle title="圆润端点" value={prefs.roundEnds} disabled={busy} onChange={v => change({ roundEnds: v })} /><Toggle title="显示工作与刷新动画" value={prefs.animateActivity} disabled={busy} onChange={v=>change({animateActivity:v})}/><Toggle title="额度重置庆祝" subtitle="机器人在见证额度窗口重置时播放庆祝动作。" value={prefs.resetCelebration} disabled={busy} onChange={v=>change({resetCelebration:v})}/></Group><Group title="进度条"><Row title="样式" subtitle="卡片与菜单中额度条的绘制方式。"><select aria-label="进度条样式" disabled={busy} value={prefs.usageBarStyle} onChange={e=>change({usageBarStyle:e.target.value as 'continuous'|'segmented'})}><option value="continuous">连续</option><option value="segmented">分段</option></select></Row></Group>
+        <Group title="实验性"><Toggle title="液态吸附" subtitle="拖离停靠边缘时面板像液体一样拉伸、变细，越过断裂距离后脱离。" value={prefs.liquidDocking} disabled={busy} onChange={v=>change({liquidDocking:v})}/></Group>
         </> : pane === 'rings' ? <>
         <h1>圆环与数字</h1><p className="page-description">圆环、数字与额度窗口的显示方式。达到变红阈值且用量超过时间进度时预警；按进度使用保持正常，额度用尽仍显示警告。</p><Group title="用量显示"><Toggle title="显示剩余额度" subtitle="圆环和数字显示剩余量，预警仍对比已用量与时间进度。" value={prefs.showsRemaining} disabled={busy} onChange={v => change({ showsRemaining: v })} />
         <Toggle title="显示百分比" subtitle="侧边显示数字，顶部面板保持紧凑。" value={prefs.showPercentages} disabled={busy} onChange={v => change({ showPercentages: v })} />
@@ -151,9 +166,9 @@ export default function Settings() {
         : pane === 'token-spend' ? <TokenSpendPane enabled={prefs.tokenSpendEnabled} onEnabledChange={v=>change({tokenSpendEnabled:v})} span={prefs.tokenSpendSpan} onSpanChange={v=>change({tokenSpendSpan:v})} customDays={prefs.spendCustomDays} onCustomDaysChange={v=>change({spendCustomDays:v})} activityView={prefs.spendActivityView} onActivityViewChange={v=>change({spendActivityView:v})} recapMonthlyPrice={prefs.recapMonthlyPrice} recapHidesProjects={prefs.recapHidesProjects} onRecapChange={change}/>
         : pane === 'accounts' ? <>
         <h1>管理账号</h1><p className="page-description">控制面板显示的服务和排列顺序。</p><button onClick={() => { setSelection(prefs.enabledProviders); setChoose(true) }}>选择服务</button>
-        <AddAccountForm onCreated={id=>{void reload();setPane(id)}} onError={setError}/><Group title="排列顺序">{shown.filter(p=>prefs.enabledProviders.includes(p.id)).map(p => <div key={p.id} draggable onDragStart={e=>e.dataTransfer.setData('application/x-pulse-account',p.id)} onDragOver={e=>{if(e.dataTransfer.types.includes('application/x-pulse-account'))e.preventDefault()}} onDrop={e=>{e.preventDefault();moveTo(e.dataTransfer.getData('application/x-pulse-account'),p.id)}}><Row title={p.name} subtitle={prefs.enabledProviders.includes(p.id) ? '显示在面板' : '未显示'}><div className="toolbar"><button disabled={busy || orderedEnabled.indexOf(p.id) === 0} aria-label={`上移 ${p.name}`} onClick={() => move(p.id,-1)}>↑</button><button disabled={busy || orderedEnabled.indexOf(p.id) === orderedEnabled.length-1} aria-label={`下移 ${p.name}`} onClick={() => move(p.id,1)}>↓</button></div></Row></div>)}</Group>
+        <AddAccountForm onCreated={id=>{void reload();navigate(id)}} onError={setError}/><Group title="排列顺序">{shown.filter(p=>prefs.enabledProviders.includes(p.id)).map(p => <div key={p.id} draggable onDragStart={e=>e.dataTransfer.setData('application/x-pulse-account',p.id)} onDragOver={e=>{if(e.dataTransfer.types.includes('application/x-pulse-account'))e.preventDefault()}} onDrop={e=>{e.preventDefault();moveTo(e.dataTransfer.getData('application/x-pulse-account'),p.id)}}><Row title={p.name} subtitle={prefs.enabledProviders.includes(p.id) ? '显示在面板' : '未显示'}><div className="toolbar"><button disabled={busy || orderedEnabled.indexOf(p.id) === 0} aria-label={`上移 ${p.name}`} onClick={() => move(p.id,-1)}>↑</button><button disabled={busy || orderedEnabled.indexOf(p.id) === orderedEnabled.length-1} aria-label={`下移 ${p.name}`} onClick={() => move(p.id,1)}>↓</button></div></Row></div>)}</Group>
       </> : provider ? <Fragment key={provider.id}>
-        <h1>{provider.name}</h1><AccountIdentity provider={provider} onRename={name=>update({accountLabels:{...prefs.accountLabels,[provider.id]:name}})} onRemoved={()=>{void reload();setPane('accounts')}} onError={setError}/><p className="page-description">{provider.configured ? '已发现凭据；连接结果以下方实际检查为准。' : '尚未发现可用凭据。'}</p>
+        <h1>{provider.name}</h1><AccountIdentity provider={provider} onRename={name=>update({accountLabels:{...prefs.accountLabels,[provider.id]:name}})} onRemoved={()=>{void reload();navigate('accounts')}} onError={setError}/><p className="page-description">{provider.configured ? '已发现凭据；连接结果以下方实际检查为准。' : '尚未发现可用凭据。'}</p>
         {provider.credentialError&&<div role="alert" className="settings-alert">{provider.credentialError}</div>}
         {enabled&&accountUsage?.creditRemaining&&<LowBalanceAlert value={prefs.alerts.lowBalance[pane]} currency={accountUsage.creditRemaining.currency} disabled={busy} onChange={v=>{const lowBalance={...prefs.alerts.lowBalance};if(v===undefined)delete lowBalance[pane];else lowBalance[pane]=v;change({alerts:{...prefs.alerts,lowBalance}})}}/>}
         <Group title="面板"><Toggle title="显示在面板" subtitle="关闭后停止此账号的用量检查。" disabled={busy} value={enabled} onChange={v => change({ enabledProviders: v ? [...prefs.enabledProviders,pane] : prefs.enabledProviders.filter(id => id !== pane) })} /></Group>
@@ -186,7 +201,7 @@ function Group({ title, children }: { title: string; children: ReactNode }) { re
 function Row({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) { return <div className="setting-row"><div><strong>{title}</strong>{subtitle && <small>{subtitle}</small>}</div><div className="setting-control">{children}</div></div> }
 function Toggle({ title, subtitle, value, disabled, onChange }: { title: string; subtitle?: string; value: boolean; disabled: boolean; onChange: (v:boolean) => void }) { return <Row title={title} subtitle={subtitle}><input type="checkbox" role="switch" aria-label={title} checked={value} disabled={disabled} onChange={e => onChange(e.target.checked)} /></Row> }
 function AccountDetails({ provider, usage, onError, onChanged }: { provider: ProviderSetting; usage?: ProviderUsage; onError:(e:string|null)=>void; onChanged:()=>void }) {
-  const [key,setKey] = useState(''), [address,setAddress] = useState(''), [busy,setBusy] = useState(false), [saved,setSaved] = useState(false)
+  const [key,setKey] = useState(''), [address,setAddress] = useState(''), [busy,setBusy] = useState(false), [saved,setSaved] = useState(false), [copied,setCopied] = useState(false)
   const action = async (save:boolean) => {
     setBusy(true); setSaved(false); onError(null)
     try { if(save) { await saveProviderCredential(provider.id,key||null,address||null); setKey(''); setAddress(''); setSaved(true); onChanged() } else await refreshProvider(provider.id) }
@@ -201,7 +216,11 @@ function AccountDetails({ provider, usage, onError, onChanged }: { provider: Pro
     {usage?.source && <p className="group-copy" data-testid="credential-source">凭据来源：{usage.source}</p>}
     <Group title="当前用量">{usage?.error&&<div className="connection-error"><strong>{usage.windows.length||creditText(usage.creditRemaining)?'检查失败，显示上次有效读数':'无法获取用量'}</strong><p>{usage.error}</p></div>}{usage?.stale&&<p className="group-copy">旧读数 · {new Date(usage.fetchedAt).toLocaleString()}</p>}{usage?.windows.length ? usage.windows.map((w,i) => <Row key={`${w.label}-${i}`} title={w.label} subtitle={[w.detail,formatReset(w.resetsAt)].filter(Boolean).join(' · ')}><span className="usage-value">{w.percentUsed === null ? '—' : `${percentFigure(w.percentUsed/100)}%`}</span></Row>) : !usage?.error&&!creditText(usage?.creditRemaining)&&<p className="group-copy">尚未完成检查。</p>}
     {creditText(usage?.creditRemaining)&&<Row title="余额"><span className="usage-value">{creditText(usage?.creditRemaining)}</span></Row>}
-    <div className="group-actions"><small>{usage ? `最近检查：${new Date(usage.fetchedAt).toLocaleString()}` : ''}</small><button disabled={busy} onClick={() => { void action(false) }}>{busy ? '正在检查…' : '刷新此账号'}</button></div></Group></>
+    <div className="group-actions"><small>{usage ? `最近检查：${new Date(usage.fetchedAt).toLocaleString()}` : ''}</small><button disabled={busy} onClick={() => { void action(false) }}>{busy ? '正在检查…' : '刷新此账号'}</button></div></Group>
+    <Group title="连接诊断"><Row title="最近检查" subtitle={usage?.error ?? (usage ? '最近一次检查已完成。' : '启动后尚未完成检查。')}><span>{usage?.stale ? '旧读数' : usage?.error ? '失败' : '—'}</span></Row>
+      <Row title="检查时间">{usage ? new Date(usage.fetchedAt).toLocaleString() : '—'}</Row>
+      <Row title="显示来源" subtitle="只包含来源、状态与时间，不包含凭据。">{usage?.source ?? '未记录'}</Row>
+      <div className="group-actions"><small>{copied ? '已复制诊断信息' : '可复制后在反馈中粘贴；不含凭据。'}</small><button disabled={!usage} onClick={() => { if (!usage) return; void navigator.clipboard.writeText(JSON.stringify({ provider: provider.id, fetchedAt: usage.fetchedAt, source: usage.source ?? null, stale: usage.stale, configured: usage.configured, error: usage.error ?? null, windows: usage.windows.map(w => ({ label: w.label, percentUsed: w.percentUsed, resetsAt: w.resetsAt, detail: w.detail })) }, null, 2)).then(() => setCopied(true)).catch(e => onError(String(e))) }}>复制诊断</button></div></Group></>
 }
 
 

@@ -12,6 +12,7 @@ import {
   panelPlacement,
   onPlacementChanged,
   onDragChanged,
+  onLiquidDrag,
   getSnapshot,
   onEdgeChanged,
   onHoverChanged,
@@ -53,6 +54,8 @@ import { balanceOnly, creditRailText } from './creditAmount'
  * ring to its card.
  */
 const COLLAPSE_GRACE_MS = 320
+/** How long a collapsed rail waits before unfolding under a passing pointer. */
+const NOTCH_DWELL_MS = 250
 
 /** Length of the wind-down, in milliseconds. */
 const OPENNESS_MS = 180
@@ -110,6 +113,8 @@ export default function App() {
   /** Which edge the rail is fused to. Rust owns this; the rail is drawn from it. */
   const [isDocked, setDocked] = useState(true)
   const [dragging, setDragging] = useState(false)
+  /** 0 while the rail is at rest; grows as a docked rail is pulled away. */
+  const [liquidPull, setLiquidPull] = useState(0)
   const [edge, setEdge] = useState<PanelEdge>('right')
   /** Docked and unattended: the rail winds down to a sliver. */
   const [expanded, setExpanded] = useState(true)
@@ -146,7 +151,8 @@ export default function App() {
     onPlacementChanged(p => { setDocked(p.dockEdge !== null || !p.railPosition); setCardId(null) }).then(keep)
     onRefreshChanged(event=>setRefreshingIds(old=>{const next=new Set(old);event.ids.forEach(id=>event.refreshing?next.add(id):next.delete(id));return next})).then(keep).catch(()=>undefined)
     onMenuChanged(setMenuOpen).then(keep).catch(() => undefined)
-    onDragChanged(d => { setDragging(d); if(d) setCardId(null) }).then(keep)
+    onDragChanged(d => { setDragging(d); if(d) setCardId(null); else setLiquidPull(0) }).then(keep)
+    onLiquidDrag(p => mounted.current && setLiquidPull(p)).then(keep).catch(() => undefined)
 
     getSnapshot()
       .then((s) => mounted.current && setSnapshot(s))
@@ -199,14 +205,20 @@ export default function App() {
   }, [])
 
   // Open on any contact, close only after the pointer has been away a while.
+  // While collapsed, a passing pointer must dwell briefly before the rail
+  // unfolds — the notch stays out of the way of the cursor crossing it.
   useEffect(() => {
+    if (region !== null && !expanded && preferences.autoCollapse && isDocked && !dragging && !menuOpen) {
+      const dwell = window.setTimeout(() => setExpanded(true), NOTCH_DWELL_MS)
+      return () => window.clearTimeout(dwell)
+    }
     if (region !== null || !preferences.autoCollapse || !isDocked || dragging || menuOpen) {
       setExpanded(true)
       return
     }
     const timer = window.setTimeout(() => setExpanded(false), COLLAPSE_GRACE_MS)
     return () => window.clearTimeout(timer)
-  }, [region, preferences.autoCollapse, isDocked, dragging, menuOpen])
+  }, [region, expanded, preferences.autoCollapse, isDocked, dragging, menuOpen])
 
   const handleRefresh = useCallback(async (provider?: string) => {
     const key=provider??'*'
@@ -456,6 +468,8 @@ export default function App() {
           left: railLeft,
           width: isTop ? railLength : railW,
           height: isTop ? railW : railLength,
+          transform: liquidPull > 0 ? `scale(${1 - 0.12 * liquidPull})` : undefined,
+          opacity: liquidPull > 0 ? 1 - 0.18 * liquidPull : undefined,
         }}
       >
         <Rail

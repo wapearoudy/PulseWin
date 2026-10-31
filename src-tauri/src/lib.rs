@@ -120,6 +120,12 @@ pub struct Drag {
     grab: (f64, f64),
     moved: bool,
     awaiting_metrics: bool,
+    /// Edge the rail was docked to when the drag began, and the rail's
+    /// top-left at that moment. The liquid tether only exists while the rail
+    /// is being pulled away from a docked edge.
+    edge: PanelEdge,
+    docked: bool,
+    rail: (i32, i32),
 }
 
 pub struct AppState {
@@ -1118,6 +1124,10 @@ async fn begin_drag(app: AppHandle, state: State<'_, AppState>) -> Result<(), St
     let origin = window.outer_position().map_err(|e| e.to_string())?;
     let scale=window.scale_factor().unwrap_or(1.0);
     let (rx,ry,_,_)=*state.rail_metrics.lock().unwrap();
+    let (drag_edge, drag_docked, drag_rail) = {
+        let placement=state.placement.lock().unwrap();
+        (*state.edge.lock().unwrap(), placement.dock_edge.is_some(), placement.rail_position.unwrap_or((origin.x,origin.y)))
+    };
 
     // While the rail is off its edge nothing may be click-through, or the
     // button-up would land on whatever is underneath.
@@ -1128,6 +1138,9 @@ async fn begin_drag(app: AppHandle, state: State<'_, AppState>) -> Result<(), St
         grab: ((cursor.x-origin.x as f64)/scale-rx,(cursor.y-origin.y as f64)/scale-ry),
         moved: false,
         awaiting_metrics: false,
+        edge: drag_edge,
+        docked: drag_docked,
+        rail: drag_rail,
     });
 
     Ok(())
@@ -1265,6 +1278,7 @@ fn advance_drag(app: &AppHandle, window: &tauri::WebviewWindow) -> bool {
 
     if !left_button_down() {
         *state.drag.lock().unwrap()=None;
+        let _=app.emit("liquid-drag",0.0f64);
         if drag.moved {
             settings::save(&state.placement.lock().unwrap());
             let _=app.emit("drag-changed",false);
@@ -1286,6 +1300,25 @@ fn advance_drag(app: &AppHandle, window: &tauri::WebviewWindow) -> bool {
         let prefs=state.preferences.lock().unwrap().clone();
         let flare=if prefs.round_ends{32.}else{24.}*prefs.panel_size;
         let landing=desktop::drag_landing((cursor.x,cursor.y),drag.grab,(rw,rh),edge,old.dock_edge.is_some(),screen,monitor.scale_factor(),flare);
+        let mut landing=landing;
+        // Liquid tether: while the rail is docked and the pointer is still
+        // within the break distance, the rail lags the pointer along the
+        // outward normal. The pointer keeps moving at full speed; the rail
+        // starts slowly, then catches up as the neck thins out.
+        if drag.docked && old.dock_edge.is_some() && prefs.liquid_docking {
+            let scale=monitor.scale_factor();
+            let limit=80.0*scale;
+            let (ix,iy)=match drag.edge {PanelEdge::Left=>(1.,0.),PanelEdge::Right=>(-1.,0.),PanelEdge::Top=>(0.,1.),PanelEdge::Bottom=>(0.,-1.)};
+            let travel=(cursor.x-drag.cursor.0 as f64)*ix+(cursor.y-drag.cursor.1 as f64)*iy;
+            if travel>0.0 && travel<limit {
+                let eased=travel*(1.0-0.85*(1.0-travel/limit).powi(2));
+                let factor=eased/travel.max(1.0);
+                landing.origin=((drag.rail.0 as f64+(landing.origin.0 as f64-drag.rail.0 as f64)*factor).round() as i32,(drag.rail.1 as f64+(landing.origin.1 as f64-drag.rail.1 as f64)*factor).round() as i32);
+                let _=app.emit("liquid-drag",eased/limit);
+            } else {
+                let _=app.emit("liquid-drag",0.0f64);
+            }
+        }
         let changed=landing.edge!=edge||landing.docked!=old.dock_edge.is_some();
         if let Some(active)=state.drag.lock().unwrap().as_mut(){active.moved=true;active.grab=landing.grab;active.awaiting_metrics=changed;}
         if !drag.moved{let _=app.emit("drag-changed",true);}

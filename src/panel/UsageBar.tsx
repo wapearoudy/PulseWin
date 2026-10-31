@@ -78,6 +78,7 @@ export function UsageBar({
       aria-hidden="true"
     >
       <span
+        className="card__bar-fill"
         style={{
           display: 'block',
           height: '100%',
