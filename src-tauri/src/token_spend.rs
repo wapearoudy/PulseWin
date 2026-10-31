@@ -89,6 +89,21 @@ pub fn reading_changed(){warmer::changed()}
 pub fn forget_kept(){warmer::forget()}
 #[tauri::command]pub fn spend_kept_snapshot()->Option<SpendSnapshot>{if crate::preferences::load().token_spend_enabled{warmer::snapshot()}else{None}}
 
+/// One read-only scan for `--recap`: same readers and public prices as the page,
+/// never starts a GUI, never writes settings, and refuses when reading is off.
+pub async fn cli_snapshot()->Result<SpendSnapshot,String>{
+    if !crate::preferences::load().token_spend_enabled{return Err("Token spend reading is off. Turn it on in Settings, then run this again.".into())}
+    let home=crate::credentials::home_dir().ok_or("无法定位用户目录。")?;
+    let cache=crate::credentials::cache_dir().unwrap_or_else(||home.join(".cache")).join("PulseWin/token-spend");
+    let cancel=Arc::new(AtomicBool::new(false));
+    let (prices,prices_at,pricing_status)=fetch_prices(&cache,&cancel).await;
+    let worker=cancel.clone();
+    let (scan_home,scan_cache)=(home.clone(),cache.clone());
+    let mut snapshot=tokio::task::spawn_blocking(move||scan_sources(&scan_home,&scan_cache,&prices,false,&worker,|_,_|{})).await.map_err(|e|e.to_string())??;
+    snapshot.prices_at=prices_at;snapshot.pricing_status=pricing_status;
+    Ok(snapshot)
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Tally {

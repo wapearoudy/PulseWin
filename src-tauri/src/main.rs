@@ -5,10 +5,17 @@
 
 fn main() {
     let args=std::env::args().collect::<Vec<_>>();
-    if args.iter().any(|arg|arg=="--json"||arg=="--statusline") {
+    if args.iter().any(|arg|arg=="--json"||arg=="--statusline"||arg=="--recap") {
         #[cfg(windows)] unsafe {
             #[link(name="kernel32")] extern "system" {fn AttachConsole(process_id:u32)->i32;}
             let _=AttachConsole(u32::MAX);
+        }
+        if args.iter().any(|arg|arg=="--recap") {
+            if let Err(error)=pulsewin_lib::recap_report::print(&args) {
+                eprintln!("PulseWin: {error}");
+                std::process::exit(if error.starts_with("usage:"){2}else{1});
+            }
+            return;
         }
         if let Err(error)=pulsewin_lib::usage_report::print(args.iter().any(|arg|arg=="--statusline")) {
             eprintln!("PulseWin: {error}");std::process::exit(1);

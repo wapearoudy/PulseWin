@@ -156,9 +156,9 @@ All 54 catalogued Token sources now have a reader; per-reader notes live in
 scorecard — with a monthly subscription price prorated by day for a day or a week.
 
 General settings offers two optional global shortcuts and reads the actual Windows login-startup
-state. `pulsewin.exe --json` and `--statusline` read the saved quota cache without opening the GUI,
-accessing credentials or fetching providers; observations carry their age. Full original JSON and
-deep-link integration compatibility remains incomplete.
+state. `pulsewin.exe --json`, `--statusline` and `--recap [YYYY-MM-DD | week-YYYY-MM-DD | YYYY-MM | YYYY]` read the saved
+quota cache or Token Spend records without opening the GUI, accessing credentials or fetching providers; observations
+carry their age. Full original JSON and deep-link integration compatibility remains incomplete.
 
 ---
 

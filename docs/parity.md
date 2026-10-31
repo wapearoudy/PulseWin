@@ -89,7 +89,7 @@ notch capsule waits 250 ms before expanding; each account pane ends with connect
 diagnostics and a credential-free copyable summary; selecting a model lists its daily
 input/cache-write/cache-read/output/total rows with measured output speed, first-token
 latency and estimated cache savings, and the cache-read split has a hover/focus card with the cached share and savings; the developer integrations pane copies the
-read-only CLI commands and pulsewin:// account links registered by the installer. Validation: 1241 Rust tests plus two
+read-only CLI commands (--json, --statusline and --recap), saves a status-line script and shows pulsewin:// account links registered by the installer. Validation: 1242 Rust tests plus two
 ignored, 268 frontend tests, tsc --noEmit and vite build clean.
 
 0.1.18 (published) registered the remaining 13 Token sources so all 54 have a

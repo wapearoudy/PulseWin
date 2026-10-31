@@ -29,6 +29,7 @@ pub mod updates;
 pub mod service_status;
 pub mod exchange_rates;
 pub mod recap_export;
+pub mod recap_report;
 pub mod recap_notice;
 pub mod deepseek_console;
 mod console_pager;
