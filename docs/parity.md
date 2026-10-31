@@ -3,35 +3,38 @@
 Reference: the checked-in `../../Pulse-original` source and its authoritative `Docs/` topics.
 Target: equivalent product behavior on Windows, and faithful layout and interaction. A registered provider, passing parser fixture, or successful build is not proof of product parity.
 
-Upstream release-note sync (2026-10-11): latest stable Pulse is 1.9.0.
+Upstream release-note sync (2026-10-31): latest stable Pulse is 1.12.4.
 [Summaries and Windows follow-up inventory](upstream-release-notes.md) cover
-1.7.0 through 1.9.0. The reference source checkout remains at its earlier
+1.7.0 through 1.12.4. The reference source checkout remains at its earlier
 commit; this documentation sync does not establish parity with the new release.
 
 The user authorized an interim 0.1.16 release on 2026-10-11 and requested hiding
 unported Token sources from the UI. On 2026-10-18 the user requested committing,
-pushing and releasing the 0.1.17 Token-source implementation. Remaining parity
-work is tracked in [release-progress.json](release-progress.json). Light assistant
-surfaces, horizontal floating/bottom docking and durable counter history are now implemented.
-The 0.1.17 release checkpoint is recorded in [release-progress.json](release-progress.json):
-1060 Rust checks passed, 2 real-account checks explicitly ignored; 205 frontend
-unit checks and 81 synthetic browser checks passed. Status history, activity,
-recap logic, local Codex evidence, cache timing, accurate pricing/counters and
-additional native readers have running implementations. DeepSeek console,
-recap visual/native flow, detailed-card integration and authenticated billing
-remain partial. The rebuilt 0.1.17 Windows/WebView2 binary passed both isolated native suites, including thirteen
-synthetic source fixtures and native PNG export, plus CLI and signed-updater checks.
-Interactive clipboard/dialogs remain unrun. DeepSeek interactive login and 30-day real billing read passed;
+pushing and releasing the 0.1.17 Token-source implementation; 0.1.18 was then
+published from GitHub Actions. Remaining parity work is tracked in
+[release-progress.json](release-progress.json). Light assistant surfaces,
+horizontal floating/bottom docking and durable counter history are now implemented.
+The 0.1.19 working-tree checkpoint adds the original's model-price spellings
+(`-extra-low`, Gemini `-n`/`-control`/`-xpe`, context windows and Kimi
+abbreviations) and a Settings test-notification button. 1213 Rust checks pass with
+2 real-account checks explicitly ignored; 260 frontend unit checks and 81 synthetic
+browser checks pass. Status history, activity, recap logic, local Codex evidence,
+cache timing, accurate pricing/counters and the full 54-source Token catalog have
+running implementations. DeepSeek console, recap visual/native flow, detailed-card
+integration and authenticated billing remain partial. The 0.1.18 Windows build was
+produced and signed on GitHub Actions windows-latest with 1212 passing Rust checks
+and 260 frontend checks; no installer was executed. Interactive clipboard/dialogs
+remain unrun. DeepSeek interactive login and 30-day real billing read passed;
 OpenCode interactive login and resume completed: 20,364 unique Go request IDs,
 no pending ranges. Restart recovery and account-disable cancellation passed. Original detailed-card acceptance remains pending.
 The explicit live Go quota GET passed; the live Harness integrity test failed
 because source logs changed during scanning and is not counted as accepted.
-The Token source catalog now declares 41 integrations (Crush recognizes a
-cost-only store and intentionally emits no token records); 13 source entries
-remain unported. This is a source inventory, not an overall parity percentage.
-The 0.1.17 release does not establish full parity. The 13 unported sources
-remain in [the internal backlog](token-source-backlog.md); their entries are
-hidden from the Token page. Existing source failures and no-data states remain visible.
+The Token source catalog now declares 54 integrations (Crush recognizes a
+cost-only store and intentionally emits no token records); every source has a
+reader. This is a source inventory, not an overall parity percentage.
+The 0.1.19 tree does not establish full parity. Existing source failures and
+no-data states remain visible; [the internal backlog](token-source-backlog.md)
+records per-reader notes.
 
 ## Acceptance inventory
 
@@ -58,6 +61,21 @@ All unchecked items remain incomplete or unverified. No overall completion perce
 - [ ] Installer plus end-to-end acceptance with screenshots and actual native interaction
 
 ## Verification baseline
+
+0.1.19 syncs upstream release notes through 1.12.4 (16 versions) and closes two
+gaps: model prices now follow ModelPrices.swift (`-extra-low` effort, Gemini
+`-n`/`-control`/`-xpe` tags, `-[0-9]+[kKmM]` context windows and Kimi `k3`/`k2p6`
+abbreviations; `grok-build-0.1` stays distinct and only one tag is stripped), and
+Settings has a test-notification button that sends through the same Windows
+notification path as quota and recap alerts. Validation: 1213 Rust tests plus two
+ignored, 260 frontend tests, tsc --noEmit and vite build clean.
+
+0.1.18 (published) registered the remaining 13 Token sources so all 54 have a
+reader, ported the 44-provider status catalogue and currency conversion, widened
+Token spend to the original's nine spans with a custom range, added user
+extensions with extension metric trends, and hid the window from screen capture.
+It was built and signed on GitHub Actions windows-latest (1212 Rust, 260
+frontend); no installer was executed.
 
 0.1.17 adds seventeen Pulse 1.9 native Token readers: Roo Code, Kilo Code and
 Cline VS Code task logs plus Cline CLI sessions; Cherry Studio, Command Code,

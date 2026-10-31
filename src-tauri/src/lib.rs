@@ -393,6 +393,13 @@ fn update_tray(app: &AppHandle, snapshot: &Snapshot) {
     }else{let _=tray.set_icon(app.default_window_icon().cloned());}
 }
 
+/// Prove the Windows notification path end to end without waiting for a quota.
+#[tauri::command]
+fn send_test_notification(app: AppHandle) -> Result<(), String> {
+    use tauri_plugin_notification::NotificationExt;
+    app.notification().builder().title("PulseWin 测试通知").body("通知已启用；额度告警与回顾提醒会以同样的方式送达。").show().map_err(|error| format!("发送测试通知失败：{error}"))
+}
+
 fn post_alerts(app:&AppHandle,memory:&mut alerts::AlertMemory,raw:&model::ProviderUsage,display:&model::ProviderUsage,prefs:&alerts::AlertPreferences,now:i64) {
     use tauri_plugin_notification::NotificationExt;
     let mut candidate=memory.clone();
@@ -1708,6 +1715,7 @@ pub fn run() {
             application::open_about_link,
             get_network_status,
             save_network_settings,
+            send_test_notification,
             save_preferences,
             refresh_provider,
             refresh_now,

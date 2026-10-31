@@ -14,6 +14,9 @@ const EVENT_EDGE_CHANGED = 'edge-changed'
 /** Which screen edge the rail is fused to. Mirrors `PanelEdge` in lib.rs. */
 export type PanelEdgeName = 'left' | 'right' | 'top' | 'bottom'
 
+/** Settings' "Send test notification" button; mirrors `send_test_notification`. */
+export const sendTestNotification = () => invoke<void>('send_test_notification')
+
 /** One row of the settings list. Mirrors `ProviderSetting` in lib.rs. */
 export interface ProviderSetting {
   providerId?: string

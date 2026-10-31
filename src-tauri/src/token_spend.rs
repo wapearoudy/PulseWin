@@ -317,16 +317,47 @@ fn parse_prices(root: &Value) -> Prices {
     }
     prices
 }
+fn dotted_model(value: &str) -> String {
+    let chars: Vec<_> = value.chars().collect(); chars.iter().enumerate().map(|(i, c)| {
+        if *c == '-' && i > 0 && i + 1 < chars.len() && chars[i-1].is_ascii_digit() && chars[i+1].is_ascii_digit() { '.' } else { *c }
+    }).collect()
+}
+/// Context windows (`k3-256k`, `gemini-3-pro-1m`) bill at the base model's rate.
+fn without_context_suffix(model: &str) -> Option<&str> {
+    let (base, tag) = model.rsplit_once('-')?;
+    let (digits, unit) = tag.split_at(tag.len().checked_sub(1)?);
+    (!base.is_empty() && !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())
+        && matches!(unit, "k" | "K" | "m" | "M")).then_some(base)
+}
+fn price_aliases(model: &str) -> Vec<String> {
+    let mut candidates: Vec<String> = Vec::new();
+    if model.ends_with("-build") && model != "grok-build-0.1" { candidates.push(model.trim_end_matches("-build").into()); }
+    // `-extra-low` precedes `-low` so Antigravity's lowest Flash effort does not
+    // leave a bogus `gemini-3.5-flash-extra` base behind.
+    for effort in ["-medium", "-high", "-extra-low", "-low", "-minimal"] {
+        if let Some(base) = model.strip_suffix(effort) { candidates.push(base.into()); candidates.push(dotted_model(base)); }
+    }
+    candidates.push(dotted_model(model));
+    if model.starts_with("gemini-") {
+        for tag in ["-n", "-control", "-xpe"] { if let Some(base) = model.strip_suffix(tag) { candidates.push(base.into()); } }
+    }
+    if let Some(base) = without_context_suffix(model) {
+        candidates.push(base.into());
+        candidates.extend(price_aliases(base));
+    }
+    // Kimi's CLI abbreviates: `k2p6` is `kimi-k2.6`, `k3` is `kimi-k3`.
+    if let Some(rest) = model.strip_prefix('k') {
+        if !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit() || c == 'p') {
+            candidates.push(format!("kimi-k{}", rest.replace('p', ".")));
+        }
+    }
+    candidates.retain(|alias| alias != model);
+    candidates.dedup();
+    candidates
+}
 fn price_for<'a>(model: &str, prices: &'a Prices) -> Option<&'a Price> {
-    fn dotted(value: &str) -> String {
-        let chars: Vec<_> = value.chars().collect(); chars.iter().enumerate().map(|(i, c)| {
-            if *c == '-' && i > 0 && i + 1 < chars.len() && chars[i-1].is_ascii_digit() && chars[i+1].is_ascii_digit() { '.' } else { *c }
-        }).collect()
-    }
-    let mut aliases = vec![model.to_owned(), dotted(model)];
-    for suffix in ["-medium", "-high", "-low", "-minimal", "-build"] {
-        if let Some(base) = model.strip_suffix(suffix) { if model != "grok-build-0.1" { aliases.push(base.into()); aliases.push(dotted(base)); } }
-    }
+    let mut aliases = vec![model.to_owned(), dotted_model(model)];
+    aliases.extend(price_aliases(model));
     for alias in aliases { if let Some(found) = prices.get(&alias).or_else(|| prices.iter().find(|(key, _)| key.eq_ignore_ascii_case(&alias)).map(|(_, p)| p)) { return Some(found); } }
     None
 }
@@ -1337,6 +1368,34 @@ mod tests {
         let before = stamp(&unsloth, "unsloth").unwrap(); fs::write(dir.join("logs/unsloth/studio.db-journal"), "journal").unwrap();
         assert_ne!(stamp(&unsloth, "unsloth").unwrap(), before, "unsloth rollback journal must invalidate");
         let stable = stamp(&ui, "roocode").unwrap(); assert_eq!(stamp(&ui, "roocode").unwrap(), stable, "an untouched candidate keeps its fingerprint");
+    }
+    #[test] fn model_price_aliases_follow_the_original_spellings() {
+        let price = || Price { input: 1., output: 2., cache_read: None, cache_write: None, name: None, tiers: vec![] };
+        let mut prices = Prices::new();
+        for key in ["gemini-3.8-flash", "gemini-3.5-flash", "claude-sonnet-4", "kimi-k3", "kimi-k2.6", "grok-4.6", "gpt-5.6-sol"] {
+            prices.insert(key.into(), price());
+        }
+        // Antigravity tags the same Flash (`-n`/`-control`/`-xpe`), its lowest
+        // effort is `-extra-low`, Devin spells versions with dashes, and Kimi's
+        // CLI abbreviates (`k3`, `k2p6`) or appends a context window (`k3-256k`).
+        for (model, expected) in [
+            ("gemini-3.8-flash-n", "gemini-3.8-flash"),
+            ("gemini-3.8-flash-control", "gemini-3.8-flash"),
+            ("gemini-3.8-flash-xpe", "gemini-3.8-flash"),
+            ("gemini-3.5-flash-extra-low", "gemini-3.5-flash"),
+            ("claude-sonnet-4-high", "claude-sonnet-4"),
+            ("gpt-5-6-sol-medium", "gpt-5.6-sol"),
+            ("k3", "kimi-k3"),
+            ("k3-256k", "kimi-k3"),
+            ("k2p6", "kimi-k2.6"),
+            ("grok-4.6-build", "grok-4.6"),
+        ] {
+            let found = price_for(model, &prices).unwrap_or_else(|| panic!("{model} should resolve to {expected}"));
+            assert_eq!(found.input, 1.0, "{model}");
+        }
+        // `grok-build-0.1` is a distinct model, and only one Gemini tag is stripped.
+        assert!(price_for("grok-build-0.1", &prices).is_none());
+        assert!(price_for("gemini-3.8-flash-control-xpe", &prices).is_none());
     }
     #[test] fn ported_sources_count_natively_and_survive_rescans() {
         let fixture = Fixture::new(); let home = fixture.dir.join("home");

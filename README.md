@@ -1,18 +1,18 @@
 # PulseWin
 
-> **Parity work in progress (2026-10-17).** This is not yet a complete port of Pulse.
+> **Parity work in progress (2026-10-31).** This is not yet a complete port of Pulse.
 > The desktop assistant now includes original provider artwork, per-account bots with eight
 > personalities/eighteen bodies, lifecycle activity, hover cards, scoped refresh, forecast,
 > drag docking and persisted preferences. The precise implemented/partial/missing status is in
 > [the official README feature/UI comparison](docs/readme-coverage.md).
 > All 77 provider adapters are registered; registration is not real-account validation.
-> Token Spend now registers 41 of 54 sources (40 that emit token records; Crush is
-> cost-only), notifications have evidence-based alert rules, and the original bot
-> animation engine/effects are ported. Multi-account authentication, the remaining 13 Token Spend
-> sources, extensions, localization and full native/multiple-display acceptance remain open.
+> Token Spend now registers all 54 sources (Crush is cost-only), notifications have
+> evidence-based alert rules and a Settings test button, model prices follow the original's
+> spellings, and the original bot animation engine/effects are ported. Multi-account
+> authentication, localization and full native/multiple-display acceptance remain open.
 > Existing installations explicitly select the services to monitor; stored credentials are retained.
 
-**Upstream release notes:** [Pulse 1.7.0 through 1.9.0](docs/upstream-release-notes.md), checked on 2026-10-11. Includes a Windows follow-up inventory; these notes do not imply feature parity.
+**Upstream release notes:** [Pulse 1.7.0 through 1.12.4](docs/upstream-release-notes.md), checked on 2026-10-31. Includes a Windows follow-up inventory; these notes do not imply feature parity.
 
 **Download:** [GitHub Releases](https://github.com/wapearoudy/PulseWin/releases). Install 0.1.7 once if upgrading from 0.1.3 or earlier; 0.1.4–0.1.6 can update directly. Subsequent releases can be installed with **Settings → General → Software updates → Update and restart**; preferences and credentials stay in place. Both GitHub Releases and local build directories are supported. See [update and release instructions](docs/updates.md).
 

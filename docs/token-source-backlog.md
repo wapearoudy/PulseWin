@@ -1,6 +1,6 @@
 # Token 来源移植状态
 
-对照 Pulse v1.9.0：54 个 Token 来源**全部登记**（`src-tauri/src/token_spend.rs` 的 `AGENTS` 目录，54 项）。
+对照 Pulse v1.12.4：54 个 Token 来源**全部登记**（`src-tauri/src/token_spend.rs` 的 `AGENTS` 目录，54 项）。
 没有 reader 的来源不会进入这个目录，因此「已登记」等于「有读取器」，不再是「先占位」。
 
 ## 0.1.17 之后新移植的 13 个来源

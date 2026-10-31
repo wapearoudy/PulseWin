@@ -1,9 +1,9 @@
 {
- "version": "0.1.18",
- "status": "published",
+ "version": "0.1.19",
+ "status": "implementation-in-progress",
  "releaseHold": true,
- "reason": "0.1.18 is published from GitHub Actions (run 39527437524 at 2f88f41): the nsis setup and msi bundles were built and signed on windows-latest with the original updater key, and all five assets are on the v0.1.18 release. The hold is restored because the next release is a new decision, not a continuation of this one. This release does not establish full Pulse parity.",
- "upstream": "1.9.0",
+ "reason": "0.1.19 is a working tree, not a release. After the published 0.1.18, upstream 1.10.0-1.12.4 release notes were synced and two gaps closed: the original's model-price spellings and a Settings test-notification button. The hold remains because a new release is a new decision, and this tree does not establish full Pulse parity.",
+ "upstream": "1.12.4",
  "publishedVersion": "0.1.18",
  "implementedVerified": [
   "Light assistant surfaces, rings and detail cards",
@@ -30,10 +30,12 @@
   "Currency conversion for the original's 7 display currencies: estimates only (a service's own balance, credits and console charges keep the currency the service stated), network only when the chosen currency is not USD, manual rate overrides",
   "Token spend spans widened from 3 to the original's 9 including a custom start/end day pair; a one-day range swaps the day bars for the hour profile as the original does",
   "Extension metrics rendered with hand-written SVG trends on the card (at most two, like the original's metricTrendLimit) and in Settings (every series), with no new dependency",
-  "Hide from screen capture via Tauri's set_content_protected, which tao maps to SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE) on Windows and the original's NSWindow.sharingType on macOS; off by default, and a request rather than a guarantee"
+  "Hide from screen capture via Tauri's set_content_protected, which tao maps to SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE) on Windows and the original's NSWindow.sharingType on macOS; off by default, and a request rather than a guarantee",
+  "Model-price spellings follow ModelPrices.swift: `-extra-low` effort, Gemini `-n`/`-control`/`-xpe` tags, `-[0-9]+[kKmM]` context windows and Kimi's `k3`/`k2p6` abbreviations resolve to the base model; `grok-build-0.1` stays distinct and only one tag is stripped",
+  "Settings test-notification button sends the same Windows notification path as quota and recap alerts and reports success or the permission failure"
  ],
  "verification": {
-  "rust": "1176 passed, 35 failed, 2 explicitly ignored. The 35 failures are the pre-existing macOS run of Windows-only path/PATH tests and their names are identical to the pre-change baseline (comm -23 and comm -13 against /tmp/baseline_failures.txt are both empty).",
+  "rust": "1213 passed, 0 failed, 2 explicitly ignored real-account checks (1215 total) on this Windows machine, including the new price-alias test. The 35 failures recorded on macOS are Windows-only path/PATH tests that pass here; the Windows workflow reports the same green result.",
   "frontendUnit": "260 passed in 25 files; tsc --noEmit and vite build clean.",
   "browser": "81 passed, three consecutive full-suite runs. Two test-side defects were fixed: the status mock did not answer the new status_pages command, and the prompt-cache countdown test raced its own fake clock (install({time: T}) then pauseAt(T) throws \"Cannot fast-forward to the past\"; it failed on pristine specs too, about one full-suite run in three).",
   "native": "0.1.18 was built on GitHub Actions windows-latest and the artifacts are published. No installer was executed and no installed client was upgraded, so the install and in-app update paths remain unverified on a real machine.",
@@ -63,10 +65,11 @@
   "Windows multi-DPI/multi-monitor, full-screen and live-account regression acceptance",
   "Window starter real CLI send and Windows no-window launch acceptance",
   "User extensions acceptance with a real installed extension program",
-  "Stable real Harness source integrity acceptance"
+  "Stable real Harness source integrity acceptance",
+  "New in upstream 1.10.0-1.12.4 and not yet ported: daily/weekly recap periods, Qoder credit-part accounting, Cursor weekly limit and enterprise allowance, Codex weaker-model warning signs, liquid docking, progress-bar styles, the settings-window style, connection diagnostics, an explicit proxy-off mode and the notch hover delay"
  ],
- "checkpointDate": "2026-10-21",
- "reference": "Pulse v1.9.0 tag objects, alongside the unchanged old checkout",
+ "checkpointDate": "2026-10-31",
+ "reference": "Pulse v1.12.4 tag objects, alongside the unchanged old checkout",
  "implementedPartial": [
   "DeepSeek independent encrypted console login, 30-day actual billing and 60-second cache; interactive live read passed, renewal/import and detailed-card acceptance pending",
   "Background opt-in spend warmer and native kept-snapshot reuse; timer acceptance pending",

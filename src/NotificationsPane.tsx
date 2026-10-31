@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { sendTestNotification } from './api'
 import type { Preferences } from './preferences'
 
 export function LowBalanceAlert({ value, currency, disabled, onChange }: {
@@ -22,6 +23,7 @@ export function LowBalanceAlert({ value, currency, disabled, onChange }: {
 export function NotificationsPane({ alerts, disabled, onChange }: {
   alerts: Preferences['alerts']; disabled: boolean; onChange: (patch: Partial<Preferences['alerts']>) => void
 }) {
+  const [test, setTest] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
   return <>
     <h1>通知</h1><p className="page-description">在 Windows 通知中心提醒额度状态。所有提醒默认关闭。</p>
     <section className="group-wrap"><h2>额度提醒</h2><div className="settings-group">
@@ -33,6 +35,7 @@ export function NotificationsPane({ alerts, disabled, onChange }: {
     </div></section>
     <section className="group-wrap"><h2>官方服务状态</h2><div className="settings-group"><label className="setting-row"><div><strong>服务故障与恢复通知</strong><small>每五分钟检查已启用的 Codex、Claude Code 和 DeepSeek。故障首次出现、加重和恢复时通知；计划维护与读取失败不算故障。</small></div><input type="checkbox" role="switch" aria-label="服务故障与恢复通知" checked={alerts.onServiceOutage ?? false} disabled={disabled} onChange={e=>onChange({onServiceOutage:e.target.checked})}/></label></div></section>
     <section className="group-wrap"><h2>工作回顾</h2><div className="settings-group"><label className="setting-row"><div><strong>月度回顾准备好时通知</strong><small>每月前三天提醒一次。需要开启 Token 读取并已有上月记录；通知本身不会读取新的历史。</small></div><input type="checkbox" role="switch" aria-label="月度回顾准备好时通知" checked={alerts.onRecap??false} disabled={disabled} onChange={e=>onChange({onRecap:e.target.checked})}/></label></div></section>
+    <section className="group-wrap"><h2>测试通知</h2><div className="settings-group"><div className="setting-row"><div><strong>发送一条测试通知</strong><small>{test === 'sending' ? '正在发送…' : test === 'sent' ? '已发送，请查看 Windows 通知中心。' : test === 'error' ? '发送失败，请检查 Windows 的通知权限。' : '使用与额度提醒相同的方式发送，用来确认通知能正常送达。'}</small></div><div className="setting-control"><button disabled={disabled || test === 'sending'} onClick={() => { setTest('sending'); void sendTestNotification().then(() => setTest('sent')).catch(() => setTest('error')) }}>发送测试通知</button></div></div></div></section>
     <p className="group-copy">例如门槛为 75%：时间已过 75%、额度已用 75% 不提醒；额度已用 80% 才提醒。周期进度由窗口时长和重置时间计算，缺少信息时不发送超前提醒；额度确实用尽仍会提醒。</p>
     <p className="group-copy">开启时也会检查当前有效读数，同一窗口不会反复提醒。声音和通知显示方式由 Windows 的应用通知设置控制。</p>
   </>
