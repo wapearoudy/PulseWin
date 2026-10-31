@@ -20,9 +20,12 @@ export function renderRecap(recap:Recap,card:RecapCard,hidesProjects:boolean):HT
   const s=recap.summary
   if(card==='poster'){
     text(recap.isYear?'这一年的工作':recap.isWeek?'这一周的工作':recap.isDay?'这一天的工作':'这个月的工作',80,370,82,true);text(shortTokens(s.tokens),80,535,132,true);text('TOKEN',85,586,30,false,secondary)
+    if(recap.change!==null){text(`${recap.change>=0?'↑':'↓'} ${Math.abs(recap.change*100).toFixed(0)}%`,790,525,42,true,recap.change>=0?'#5C7A00':'#A33A2E');text('比上一期',795,566,24,false,secondary)}
     if(recap.isWeek){const days=recap.summary.days.slice(-7),peak=Math.max(1,...days.map(d=>d.tokens));days.forEach((d,i)=>{c.fillStyle=heat[d.tokens<=0?0:Math.min(4,Math.ceil(d.tokens/peak*4))];c.beginPath();c.roundRect(80+i*130,608,112,16,8);c.fill()})}
     stat('活跃日',String(s.activeDays),80,652,440,lime);stat('会话',String(s.sessions.length),560,652)
     stat('API 估算费用',formatCost(s.cost,10),80,862);stat(recap.payback!==null?'订阅回报':'最长连续工作',recap.payback!==null?`${recap.payback.toFixed(1)} ×`:`${recap.longestStreak} 天`,560,862,440,ink)
+    if(recap.busiest)text(`最忙的一天 ${recap.busiest.day} · ${shortTokens(recap.busiest.tokens)} Token`,80,1085,26,false,secondary)
+    if(recap.cacheHitRate!==null)text(`缓存命中率 ${(recap.cacheHitRate*100).toFixed(1)}%`,660,1085,26,false,secondary)
     text('工作伙伴',80,1130,28,true);ranks(s.agents,1190);text('模型与项目',80,1720,28,true);text(s.models.slice(0,2).map(g=>g.name).join(' / '),80,1770,25,false,secondary)
   }else if(card==='opener'){
     text(recap.isYear?String(recap.start.getFullYear()):recap.isWeek?`${recap.start.getDate()}–${addDay(recap.start,6).getDate()}`:recap.isDay?String(recap.start.getDate()).padStart(2,'0'):String(recap.start.getMonth()+1).padStart(2,'0'),80,690,340,true);text(recap.isYear?'年度回顾':recap.isWeek?'周报':recap.isDay?'日报':'月度回顾',80,805,96,true);text('一起完成的工作',80,980,40,true);ranks(s.agents,1080)
