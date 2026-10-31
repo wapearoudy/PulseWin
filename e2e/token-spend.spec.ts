@@ -46,7 +46,7 @@ test.beforeEach(async ({ page }) => {
 test('recap uses full-size images, persists privacy and price, and exports each real card',async({page})=>{
   await page.evaluate(()=>{const w=window as any;w.recapPaint=[];const original=CanvasRenderingContext2D.prototype.fillText;CanvasRenderingContext2D.prototype.fillText=function(...args:any[]){w.recapPaint.push(args[0]);return original.apply(this,args as [string,number,number])}})
   await page.getByRole('switch',{name:'读取本机 Token 用量记录'}).check();await page.getByRole('button',{name:'月度 / 年度回顾'}).click()
-  const region=page.getByRole('region',{name:'月度与年度回顾'}),image=region.getByRole('img');await expect(image).toBeVisible();expect(await image.evaluate((img:HTMLImageElement)=>[img.naturalWidth,img.naturalHeight])).toEqual([1080,1920])
+  const region=page.getByRole('region',{name:'工作回顾'}),image=region.getByRole('img');await expect(image).toBeVisible();expect(await image.evaluate((img:HTMLImageElement)=>[img.naturalWidth,img.naturalHeight])).toEqual([1080,1920])
   await region.getByRole('textbox',{name:'回顾月订阅价'}).fill('20');await region.getByRole('textbox',{name:'回顾月订阅价'}).press('Enter');await expect(region.getByRole('button',{name:'订阅回报',exact:true})).toBeVisible()
   await region.getByRole('button',{name:'成绩单',exact:true}).click();expect(await page.evaluate(()=>(window as any).recapPaint)).toContain('E:\\synthetic-project')
   await page.evaluate(()=>(window as any).recapPaint=[]);await region.getByRole('checkbox',{name:'隐藏项目名称'}).check();expect(await page.evaluate(()=>(window as any).recapPaint)).toContain('Project 1');expect(await page.evaluate(()=>(window as any).recapPaint)).not.toContain('E:\\synthetic-project')
