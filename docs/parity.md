@@ -22,12 +22,13 @@ continuous/segmented progress-bar styles, Qoder credit-part accounting with a
 31-day credit history, Cursor weekly limits with enterprise allowance, the
 Codex weaker-model signal refinements, the system-settings title bar, experimental
 liquid docking, the 250 ms notch hover delay, connection diagnostics and developer integrations
-(read-only --json/--statusline commands plus pulsewin:// account and recap links). 1241 Rust checks pass with
+(read-only --json/--statusline commands plus pulsewin:// account and recap links). 1244 Rust checks pass with
 2 real-account checks explicitly ignored; 268 frontend unit checks and 81 synthetic
 browser checks pass. Status history, activity, recap logic, local Codex evidence,
 cache timing, accurate pricing/counters and the full 54-source Token catalog have
-running implementations. DeepSeek console, recap visual/native flow, detailed-card
-integration and authenticated billing remain partial. The 0.1.18 Windows build was
+running implementations. DeepSeek console renewal/import scans Chrome, Edge, Brave
+and Chromium LevelDB stores after a signed-out read and Settings can import the
+session explicitly; the console detailed card and recap visual/native flow remain partial. The 0.1.18 Windows build was
 produced and signed on GitHub Actions windows-latest with 1212 passing Rust checks
 and 260 frontend checks; no installer was executed. Interactive clipboard/dialogs
 remain unrun. DeepSeek interactive login and 30-day real billing read passed;
@@ -90,7 +91,7 @@ diagnostics and a credential-free copyable summary; selecting a model lists its 
 input/cache-write/cache-read/output/total rows with measured output speed, first-token
 latency and estimated cache savings, and the cache-read split has a hover/focus card with the cached share and savings; the developer integrations pane copies the
 read-only CLI commands (--json, --statusline and --recap), saves a status-line script and shows pulsewin://
-account and recap links registered by the installer. Validation: 1242 Rust tests plus two
+account and recap links registered by the installer. Validation: 1244 Rust tests plus two
 ignored, 268 frontend tests, tsc --noEmit and vite build clean.
 
 0.1.18 (published) registered the remaining 13 Token sources so all 54 have a

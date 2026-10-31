@@ -2,7 +2,7 @@
  "version": "0.1.19",
  "status": "implementation-in-progress",
  "releaseHold": true,
- "reason": "0.1.19 is a working tree, not a release. After the published 0.1.18, upstream 1.10.0-1.12.4 release notes were synced and fourteen gaps closed: the original's model-price spellings, a Settings test-notification button, the direct 不使用代理 mode, the Kimi Code session store, 日报/周报 recap periods, the original's continuous/segmented progress-bar styles, Qoder credit-part accounting with a 31-day credit history, Cursor weekly limits with enterprise allowance, the Codex weaker-model signal refinements, the system-settings-style title bar, experimental liquid docking, the notch hover delay, connection diagnostics and the prompt-cache hover card. The hold remains because a new release is a new decision, and this tree does not establish full Pulse parity.",
+ "reason": "0.1.19 is a working tree, not a release. After the published 0.1.18, upstream 1.10.0-1.12.4 release notes were synced and fifteen gaps closed: the original's model-price spellings, a Settings test-notification button, the direct 不使用代理 mode, the Kimi Code session store, 日报/周报 recap periods, the original's continuous/segmented progress-bar styles, Qoder credit-part accounting with a 31-day credit history, Cursor weekly limits with enterprise allowance, the Codex weaker-model signal refinements, the system-settings-style title bar, experimental liquid docking, the notch hover delay, connection diagnostics, the prompt-cache hover card and DeepSeek console browser renewal/import. The hold remains because a new release is a new decision, and this tree does not establish full Pulse parity.",
  "upstream": "1.12.4",
  "publishedVersion": "0.1.18",
  "implementedVerified": [
@@ -46,10 +46,11 @@
   "Developer integrations: a settings pane documents the read-only --json/--statusline/--recap output, copies commands, saves a PowerShell status-line script and shows pulsewin://account links plus a pulsewin://recap shortcut that opens the Token Spend recap; the NSIS installer registers the pulsewin:// URL protocol, and the app accepts only the settings/account/recap navigation paths (a URL cannot change settings, run commands or start a login)",
   "The --recap command prints one day, week, month or year of real Token figures as read-only JSON, refuses when Token Spend reading is off, and writes no setting",
   "Model spend detail shows the selected model's daily input, cache write, cache read, output and total columns, measured output speed and first-token latency from reply timing, and estimated cache-read savings on the Token split",
-  "The Token split's cache-read figure has a hover/focus card showing cached tokens, its share of the input side, cache-write tokens and the estimated cache-read savings"
+  "The Token split's cache-read figure has a hover/focus card showing cached tokens, its share of the input side, cache-write tokens and the estimated cache-read savings",
+  "DeepSeek console renewal: a saved login that the console has signed out is renewed from Chrome, Edge, Brave or Chromium LevelDB stores after the token is verified against the account summary, and Settings can import the browser session explicitly."
  ],
  "verification": {
-  "rust": "1241 passed, 0 failed, 2 explicitly ignored real-account checks (1243 total) on this Windows machine, including the new price-alias, Kimi Code, Qoder, Cursor and progress-bar tests. The 35 failures recorded on macOS are Windows-only path/PATH tests that pass here; the Windows workflow reports the same green result.",
+  "rust": "1244 passed, 0 failed, 2 explicitly ignored real-account checks (1246 total) on this Windows machine, including the new price-alias, Kimi Code, Qoder, Cursor, progress-bar and browser-session tests. The 35 failures recorded on macOS are Windows-only path/PATH tests that pass here; the Windows workflow reports the same green result.",
   "frontendUnit": "268 passed in 26 files; tsc --noEmit and vite build clean.",
   "browser": "81 passed in the full browser suite on the 0.1.19 working tree (45.8s); browser IPC responses are synthetic.",
   "native": "0.1.18 was built on GitHub Actions windows-latest and the artifacts are published. No installer was executed and no installed client was upgraded, so the install and in-app update paths remain unverified on a real machine.",
@@ -71,7 +72,7 @@
   "Exchange-rate endpoint, offline fallback and 429 behaviour on the real network",
   "Real extension metric series (long, mixed units, non-monotonic timestamps)",
   "Custom spend ranges across month, year and DST boundaries on real data",
-  "DeepSeek console renewal/import and detailed-card integration",
+  "DeepSeek console detailed-card integration; browser renewal/import and automatic retry are implemented",
   "OpenCode Go session renewal and detailed-card integration",
   "Original recap visual parity, native recap flow, notification click navigation",
   "Prompt-cache hover-card integration is implemented; live per-model output/TTFT acceptance on real accounts remains partial",

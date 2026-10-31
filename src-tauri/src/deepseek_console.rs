@@ -121,6 +121,29 @@ pub fn remove_deepseek_console_login(window: WebviewWindow) -> Result<Connection
     }
     Ok(Connection { connected: false })
 }
+#[tauri::command]
+pub async fn import_deepseek_console_browser(
+    state: State<'_, crate::AppState>,
+) -> Result<Connection, String> {
+    let ctx = state.ctx.read().unwrap().clone();
+    let candidates = crate::browser_session::deepseek_tokens();
+    if candidates.is_empty() {
+        return Err("没有找到 Chromium 浏览器中的 DeepSeek 控制台登录。请先在 Chrome、Edge 或 Brave 中登录 platform.deepseek.com。".into());
+    }
+    for (_browser, token) in candidates {
+        if get(&ctx, "/api/v0/users/get_user_summary", &[], &token)
+            .await
+            .is_ok()
+        {
+            let path = path().ok_or("无法定位登录保存目录。")?;
+            crate::credential_store::write_document(&path, SLOT, &json!({"token":token}))
+                .map_err(|_| "无法加密保存控制台登录。")?;
+            cancel_read();
+            return Ok(Connection { connected: true });
+        }
+    }
+    Err("浏览器中的控制台登录已失效，请重新登录后再试。".into())
+}
 fn figure(v: &Value) -> Option<f64> {
     let n = v.as_f64().or_else(|| v.as_str()?.trim().parse().ok())?;
     (n.is_finite() && n.abs() < 1e15).then_some(n)
@@ -397,6 +420,24 @@ fn complete_shapes(amount: &Value, cost: &Value) -> Result<(), String> {
     }
     Ok(())
 }
+async fn browser_renewal(ctx: &crate::providers::Ctx) -> Option<String> {
+    for (_browser, token) in crate::browser_session::deepseek_tokens() {
+        if get(ctx, "/api/v0/users/get_user_summary", &[], &token)
+            .await
+            .is_ok()
+        {
+            if let Some(path) = path() {
+                if crate::credential_store::write_document(&path, SLOT, &json!({"token":&token}))
+                    .is_ok()
+                {
+                    *LOGIN.lock().unwrap() += 1;
+                    return Some(token);
+                }
+            }
+        }
+    }
+    None
+}
 #[tauri::command]
 pub async fn get_deepseek_console_history(
     state: State<'_, crate::AppState>,
@@ -419,8 +460,13 @@ async fn read_deepseek_history(
     {
         return Err("请先启用 DeepSeek 账号。".into());
     }
-    let token = token().ok_or("请先连接 DeepSeek 控制台。")?;
     let ctx = state.ctx.read().unwrap().clone();
+    let mut token = match token() {
+        Some(token) => token,
+        None => browser_renewal(&ctx)
+            .await
+            .ok_or("请先连接 DeepSeek 控制台。")?,
+    };
     let now = chrono::Local::now();
     let key = CacheKey {
         login: *LOGIN.lock().unwrap(),
@@ -447,10 +493,25 @@ async fn read_deepseek_history(
         }
     }
     let query = range(now).ok_or("无法计算控制台日期范围。")?;
-    let (amount, cost) = tokio::join!(
+    let (mut amount, mut cost) = tokio::join!(
         get(&ctx, "/api/v0/usage/by_api_key/amount", &query, &token),
         get(&ctx, "/api/v0/usage/by_api_key/cost", &query, &token)
     );
+    let signed_out = |result: &Result<Value, String>| {
+        result
+            .as_ref()
+            .err()
+            .is_some_and(|error| error.contains("登录已失效"))
+    };
+    if signed_out(&amount) || signed_out(&cost) {
+        if let Some(renewed) = browser_renewal(&ctx).await {
+            token = renewed;
+            (amount, cost) = tokio::join!(
+                get(&ctx, "/api/v0/usage/by_api_key/amount", &query, &token),
+                get(&ctx, "/api/v0/usage/by_api_key/cost", &query, &token)
+            );
+        }
+    }
     let amount = amount?;
     let cost = cost?;
     complete_shapes(&amount, &cost)?;

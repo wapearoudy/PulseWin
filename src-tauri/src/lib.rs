@@ -32,6 +32,7 @@ pub mod recap_export;
 pub mod recap_report;
 pub mod recap_notice;
 pub mod deepseek_console;
+mod browser_session;
 mod console_pager;
 mod console_reads;
 pub mod opencode_console;
@@ -1801,6 +1802,7 @@ pub fn run() {
             deepseek_console::begin_deepseek_console_login,
             deepseek_console::finish_deepseek_console_login,
             deepseek_console::remove_deepseek_console_login,
+            deepseek_console::import_deepseek_console_browser,
             deepseek_console::get_deepseek_console_history,
             service_status::get_service_status,
             service_status::status_pages,
