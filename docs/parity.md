@@ -88,7 +88,7 @@ is off by default and eases, thins and scales a docked panel until it breaks awa
 notch capsule waits 250 ms before expanding; each account pane ends with connection
 diagnostics and a credential-free copyable summary; selecting a model lists its daily
 input/cache-write/cache-read/output/total rows with measured output speed, first-token
-latency and estimated cache savings; the developer integrations pane copies the
+latency and estimated cache savings, and the cache-read split has a hover/focus card with the cached share and savings; the developer integrations pane copies the
 read-only CLI commands and pulsewin:// account links registered by the installer. Validation: 1241 Rust tests plus two
 ignored, 268 frontend tests, tsc --noEmit and vite build clean.
 
