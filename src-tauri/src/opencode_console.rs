@@ -137,6 +137,34 @@ pub async fn finish_opencode_console_login(
     let _ = login.close();
     Ok(Connection { connected: true })
 }
+fn cookie_from_app(app: &tauri::AppHandle) -> Option<String> {
+    for window in app.webview_windows().into_values() {
+        let Ok(cookies) = window.cookies_for_url(format!("{ORIGIN}/console").parse().unwrap()) else {
+            continue;
+        };
+        let header = cookies
+            .iter()
+            .filter(|c| matches!(c.name(), "__Host-console_session" | "auth"))
+            .map(|c| format!("{}={}", c.name(), c.value()))
+            .collect::<Vec<_>>()
+            .join("; ");
+        if let Some(cookie) = keep_cookie(&header) {
+            return Some(cookie);
+        }
+    }
+    None
+}
+fn renew_cookie(app: &tauri::AppHandle) -> Option<String> {
+    let cookie = cookie_from_app(app)?;
+    crate::credential_store::write_document(
+        &path(SLOT)?,
+        SLOT,
+        &json!({"cookie": &cookie}),
+    )
+    .ok()?;
+    *LOGIN.lock().unwrap() += 1;
+    Some(cookie)
+}
 #[tauri::command]
 pub fn remove_opencode_console_login(window: WebviewWindow) -> Result<Connection, String> {
     local(&window)?;
@@ -456,8 +484,8 @@ async fn read_opencode_history(
     if !enabled(&state) {
         return Err("请先启用 OpenCode Go 账号。".into());
     }
-    let cookie = cookie().ok_or("请先连接 OpenCode 控制台。")?;
-    let generation = *LOGIN.lock().unwrap();
+    let mut cookie = cookie().ok_or("请先连接 OpenCode 控制台。")?;
+    let mut generation = *LOGIN.lock().unwrap();
     let ctx = state.ctx.read().unwrap().clone();
     let context = std::sync::Arc::as_ptr(&ctx) as usize;
     let mut memory = MEMORY.lock().await;
@@ -471,13 +499,22 @@ async fn read_opencode_history(
     let (workspace, proven) = if let Some(w) = existing {
         (w, true)
     } else {
-        tokio::time::timeout(Duration::from_secs(30), workspace(&ctx, &cookie))
+        let mut attempt = tokio::time::timeout(Duration::from_secs(30), workspace(&ctx, &cookie))
             .await
-            .unwrap_or(Err(Failure::Network))
-            .map_err(|e| match e {
-                Failure::SignedOut => "控制台登录已失效，请重新登录。",
-                Failure::Network => "无法读取控制台工作区，请检查网络或代理。",
-            })?
+            .unwrap_or(Err(Failure::Network));
+        if matches!(attempt, Err(Failure::SignedOut)) {
+            if let Some(renewed) = renew_cookie(&app) {
+                cookie = renewed;
+                generation = *LOGIN.lock().unwrap();
+                attempt = tokio::time::timeout(Duration::from_secs(30), workspace(&ctx, &cookie))
+                    .await
+                    .unwrap_or(Err(Failure::Network));
+            }
+        }
+        attempt.map_err(|e| match e {
+            Failure::SignedOut => "控制台登录已失效，请重新登录。",
+            Failure::Network => "无法读取控制台工作区，请检查网络或代理。",
+        })?
     };
     let new_scope = memory.as_ref().is_none_or(|m| {
         m.generation != generation || m.context != context || m.workspace.id != workspace.id

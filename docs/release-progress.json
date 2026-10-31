@@ -2,7 +2,7 @@
  "version": "0.1.19",
  "status": "implementation-in-progress",
  "releaseHold": true,
- "reason": "0.1.19 is a working tree, not a release. After the published 0.1.18, upstream 1.10.0-1.12.4 release notes were synced and fifteen gaps closed: the original's model-price spellings, a Settings test-notification button, the direct 不使用代理 mode, the Kimi Code session store, 日报/周报 recap periods, the original's continuous/segmented progress-bar styles, Qoder credit-part accounting with a 31-day credit history, Cursor weekly limits with enterprise allowance, the Codex weaker-model signal refinements, the system-settings-style title bar, experimental liquid docking, the notch hover delay, connection diagnostics, the prompt-cache hover card and DeepSeek console browser renewal/import. The hold remains because a new release is a new decision, and this tree does not establish full Pulse parity.",
+ "reason": "0.1.19 is a working tree, not a release. After the published 0.1.18, upstream 1.10.0-1.12.4 release notes were synced and sixteen gaps closed: the original's model-price spellings, a Settings test-notification button, the direct 不使用代理 mode, the Kimi Code session store, 日报/周报 recap periods, the original's continuous/segmented progress-bar styles, Qoder credit-part accounting with a 31-day credit history, Cursor weekly limits with enterprise allowance, the Codex weaker-model signal refinements, the system-settings-style title bar, experimental liquid docking, the notch hover delay, connection diagnostics, the prompt-cache hover card DeepSeek console browser renewal/import and OpenCode console cookie-jar renewal. The hold remains because a new release is a new decision, and this tree does not establish full Pulse parity.",
  "upstream": "1.12.4",
  "publishedVersion": "0.1.18",
  "implementedVerified": [
@@ -47,7 +47,8 @@
   "The --recap command prints one day, week, month or year of real Token figures as read-only JSON, refuses when Token Spend reading is off, and writes no setting",
   "Model spend detail shows the selected model's daily input, cache write, cache read, output and total columns, measured output speed and first-token latency from reply timing, and estimated cache-read savings on the Token split",
   "The Token split's cache-read figure has a hover/focus card showing cached tokens, its share of the input side, cache-write tokens and the estimated cache-read savings",
-  "DeepSeek console renewal: a saved login that the console has signed out is renewed from Chrome, Edge, Brave or Chromium LevelDB stores after the token is verified against the account summary, and Settings can import the browser session explicitly."
+  "DeepSeek console renewal: a saved login that the console has signed out is renewed from Chrome, Edge, Brave or Chromium LevelDB stores after the token is verified against the account summary, and Settings can import the browser session explicitly.",
+  "OpenCode console renewal: a signed-out read re-reads the app WebView cookie jar for opencode.ai console sessions, saves the renewed sign-in and retries the workspace read once."
  ],
  "verification": {
   "rust": "1244 passed, 0 failed, 2 explicitly ignored real-account checks (1246 total) on this Windows machine, including the new price-alias, Kimi Code, Qoder, Cursor, progress-bar and browser-session tests. The 35 failures recorded on macOS are Windows-only path/PATH tests that pass here; the Windows workflow reports the same green result.",
@@ -73,7 +74,7 @@
   "Real extension metric series (long, mixed units, non-monotonic timestamps)",
   "Custom spend ranges across month, year and DST boundaries on real data",
   "DeepSeek console detailed-card integration; browser renewal/import and automatic retry are implemented",
-  "OpenCode Go session renewal and detailed-card integration",
+  "OpenCode Go detailed-card integration; console cookie-jar renewal and retry are implemented",
   "Original recap visual parity, native recap flow, notification click navigation",
   "Prompt-cache hover-card integration is implemented; live per-model output/TTFT acceptance on real accounts remains partial",
   "Third-party status-line installers (Raycast/Sketchybar) remain unimplemented; --json/--statusline/--recap, the in-app developer integrations pane and pulsewin:// settings/account/recap navigation links are done",
