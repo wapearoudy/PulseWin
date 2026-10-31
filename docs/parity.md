@@ -17,8 +17,11 @@ horizontal floating/bottom docking and durable counter history are now implement
 The 0.1.19 working-tree checkpoint adds the original's model-price spellings
 (`-extra-low`, Gemini `-n`/`-control`/`-xpe`, context windows and Kimi
 abbreviations), a Settings test-notification button, the direct 不使用代理 mode,
-the Kimi Code session store and 日报/周报 recap periods. 1216 Rust checks pass with
-2 real-account checks explicitly ignored; 263 frontend unit checks and 81 synthetic
+the Kimi Code session store, 日报/周报 recap periods, the original's
+continuous/segmented progress-bar styles, Qoder credit-part accounting with a
+31-day credit history, Cursor weekly limits with enterprise allowance, and the
+Codex weaker-model signal refinements. 1240 Rust checks pass with
+2 real-account checks explicitly ignored; 268 frontend unit checks and 81 synthetic
 browser checks pass. Status history, activity, recap logic, local Codex evidence,
 cache timing, accurate pricing/counters and the full 54-source Token catalog have
 running implementations. DeepSeek console, recap visual/native flow, detailed-card
@@ -63,7 +66,7 @@ All unchecked items remain incomplete or unverified. No overall completion perce
 
 ## Verification baseline
 
-0.1.19 syncs upstream release notes through 1.12.4 (16 versions) and closes five
+0.1.19 syncs upstream release notes through 1.12.4 (16 versions) and closes nine
 gaps: model prices now follow ModelPrices.swift (`-extra-low` effort, Gemini
 `-n`/`-control`/`-xpe` tags, `-[0-9]+[kKmM]` context windows and Kimi `k3`/`k2p6`
 abbreviations; `grok-build-0.1` stays distinct and only one tag is stripped);
@@ -71,10 +74,14 @@ Settings has a test-notification button that sends through the same Windows
 notification path as quota and recap alerts; proxy mode 不使用代理 connects directly
 even when a system or environment proxy exists; the Kimi Code store
 (`~/.kimi-code`) is read next to the legacy wire logs with named models priced and
-migrated copies folded; and recaps now offer 日报/周报 beside 月报/年报, with the
-original's day/week cards, previous-period chips and day-prorated payback.
-Validation: 1216 Rust tests plus two ignored, 263 frontend tests, tsc --noEmit and
-vite build clean.
+migrated copies folded; recaps now offer 日报/周报 beside 月报/年报, with the
+original's day/week cards, previous-period chips and day-prorated payback;
+progress bars are continuous or segmented per UsageBar.swift in both the card and
+tray menu; Qoder shows plan, resource-pack and dedicated credit parts with expiry
+plus a 31-day used/charged history; Cursor shows weekly-limit plans and enterprise
+allowances; and Codex weaker-model signals treat max/ultra effort as comparable
+while ignoring the local context-window setting. Validation: 1240 Rust tests plus
+two ignored, 268 frontend tests, tsc --noEmit and vite build clean.
 
 0.1.18 (published) registered the remaining 13 Token sources so all 54 have a
 reader, ported the 44-provider status catalogue and currency conversion, widened

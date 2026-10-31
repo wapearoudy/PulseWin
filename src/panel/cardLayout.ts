@@ -28,6 +28,8 @@ export interface DetailCardLayout {
   contentSpacing: number
   rowInternalSpacing: number
   progressBarHeight: number
+  /** How the limit bar is drawn; segmented bars are twice as tall. */
+  usageBarStyle: 'continuous' | 'segmented'
   headerHeight: number
   titleFontSize: number
   rowFontSize: number
@@ -42,8 +44,9 @@ export interface DetailCardLayout {
 /** The ring's outer edge: one circle sets every curve on the panel. */
 export const RING_OUTER_RADIUS = (36 + 4) / 2
 
-export function detailCardLayout(size: PanelSizeName = 'standard', showForecast=false, detailed=false): DetailCardLayout {
+export function detailCardLayout(size: PanelSizeName = 'standard', showForecast=false, detailed=false, usageBarStyle: 'continuous' | 'segmented' = 'continuous'): DetailCardLayout {
   const s = PANEL_SCALE[size]
+  const segmented = usageBarStyle === 'segmented'
   return {
     detailed, activityHeight: 231 * s, activitySpacing: 10 * s, footnoteHeight: 13 * s, headerLineSpacing: 4 * s,
     showForecast,
@@ -55,7 +58,8 @@ export function detailCardLayout(size: PanelSizeName = 'standard', showForecast=
     horizontalGap: 8 * s,
     contentSpacing: 14 * s,
     rowInternalSpacing: 7 * s,
-    progressBarHeight: 6 * s,
+    progressBarHeight: (segmented ? 12 : 6) * s,
+    usageBarStyle,
     headerHeight: 19 * s,
     titleFontSize: 14 * s,
     rowFontSize: 11.5 * s,

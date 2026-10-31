@@ -31,6 +31,10 @@ pub struct Preferences {
     pub panel_size: f64,
     pub rail_spacing: f64,
     pub round_ends: bool,
+    /// How limit bars are drawn on the card and in the menu (`UsageBarStyle`):
+    /// `continuous` or `segmented`. Segmented bars are taller so their ticks
+    /// read as ticks, which changes the card's frame budget.
+    pub usage_bar_style: String,
     pub shows_remaining: bool,
     pub show_percentages: bool,
     pub label_above: bool,
@@ -83,7 +87,7 @@ pub struct Preferences {
 impl Default for Preferences {
     fn default() -> Self {
         Self { network_proxy:Default::default(), panel_visible:true, tray_shows_usage:false, tray_style:"figure".into(), tray_account:None, accounts: vec![], account_labels: Default::default(), open_settings_shortcut: None, toggle_panel_shortcut: None, alerts: Default::default(), token_spend_enabled: false, token_spend_span: "week".into(), spend_custom_days: Vec::new(), spend_activity_view:"daily".into(),recap_monthly_price:None,recap_hides_projects:false, reset_celebration: true, enabled_providers: vec![], provider_order: vec![], panel_colour: "black".into(), panel_size: 1.0,
-            rail_spacing: 1.0, round_ends: false, shows_remaining: false,
+            rail_spacing: 1.0, round_ends: false, usage_bar_style: "continuous".into(), shows_remaining: false,
             show_percentages: true, label_above: false, auto_collapse: true,
             warning_threshold: 0.75, refresh_seconds: 120, refresh_automatic: true, show_reset_clock: false,
             clock_remaining: false, show_second_ring: false, top_show_percentages: false, animate_activity: true, dock_alert_colour: true, show_forecast: false, hide_in_fullscreen: true, follow_active_display: false, hide_from_capture: false, account_appearance: Default::default(), pinned_windows: Default::default(),
@@ -97,6 +101,7 @@ impl Preferences {
     pub fn normalize(&mut self, known: &[String]) {
         self.network_proxy.normalize();
         if !["black","light"].contains(&self.panel_colour.as_str()) {self.panel_colour="black".into();}
+        if !["continuous","segmented"].contains(&self.usage_bar_style.as_str()) {self.usage_bar_style="continuous".into();}
         let mut seen_accounts=std::collections::HashSet::new();
         // An extension is an account of its own but has no credential and no
         // provider in `accounts::SUPPORTED`, which is the list the add-account
@@ -201,6 +206,12 @@ mod tests {
         let saved:Preferences=serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
         assert_eq!(saved.panel_colour,"light");assert!(saved.enabled_providers.is_empty());
         p.panel_colour="invalid".into();p.normalize(&[]);assert_eq!(p.panel_colour,"black");
+    }
+    #[test] fn usage_bar_style_defaults_and_normalizes(){
+        let mut p:Preferences=serde_json::from_str("{}").unwrap();
+        assert_eq!(p.usage_bar_style,"continuous");
+        p.usage_bar_style="segmented".into();p.normalize(&[]);assert_eq!(p.usage_bar_style,"segmented");
+        p.usage_bar_style="ticks".into();p.normalize(&[]);assert_eq!(p.usage_bar_style,"continuous");
     }
     #[test] fn tray_only_keeps_collection_and_legacy_defaults() {
         let mut p:Preferences=serde_json::from_str(r#"{"enabledProviders":["codex"],"panelVisible":false,"trayShowsUsage":true,"trayStyle":"ring","trayAccount":"codex"}"#).unwrap();

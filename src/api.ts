@@ -17,6 +17,12 @@ export type PanelEdgeName = 'left' | 'right' | 'top' | 'bottom'
 /** Settings' "Send test notification" button; mirrors `send_test_notification`. */
 export const sendTestNotification = () => invoke<void>('send_test_notification')
 
+/** One local day of Qoder's own credit records. Mirrors `CreditDay` in qoder.rs. */
+export interface QoderCreditDay { date: string; used: number; charged: number }
+
+/** The last 31 days of Qoder's account records; mirrors `qoder_credit_history`. */
+export const qoderCreditHistory = () => invoke<QoderCreditDay[]>('qoder_credit_history')
+
 /** One row of the settings list. Mirrors `ProviderSetting` in lib.rs. */
 export interface ProviderSetting {
   providerId?: string

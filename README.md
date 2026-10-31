@@ -41,7 +41,8 @@ What is covered by tests, and what is not, is set out under [Tests](#tests).
 A rail capsule fused to one screen edge — **left, right or top**. Every explicitly enabled service gets a ring; credential discovery does not enable monitoring. A missing reading is shown as unavailable, never a fabricated zero.
 
 - **Hovering a ring opens a bubble card** beside it, listing that tool's limits, each with its own
-  bar, percentage, detail line and reset. **The window does not resize while a card is open.** The
+  bar, percentage, detail line and reset. Appearance can draw those bars as continuous (6 px) or
+  segmented (12 px ticks), matching the original's `UsageBar`. **The window does not resize while a card is open.** The
   frame is sized in advance for the largest card any provider could open and the card is drawn as an
   overlay inside it, which is why every length in `cardLayout.ts` is a budget rather than a
   measurement.
@@ -133,6 +134,10 @@ Streamed snapshots merge by field maximum, abandoned branches are counted, cache
 from each store's own reported total, and ambiguous cache/reasoning relations stay visible as
 notes instead of guessed numbers. Sidecar fingerprints cover JCode journals, Fx session metadata,
 editor conversation histories, Command Code config and ZCode/Unsloth WAL files.
+Qoder cards show plan, resource-pack and dedicated credit parts with their own expiry when the
+account enables parts, plus a 31-day used/charged credit history with daily bars; Cursor
+weekly-limit plans show the 7d ring and reset instead of the monthly pools, while enterprise
+accounts show one monthly USD allowance.
 DeepSeek Harness reads normal and versioned JSONL sessions, including concatenated Zstandard checkpoints,
 under `~/.dsh/sessions` or `$DSH_HOME/sessions`. CLI and the current desktop share this directory.
 It includes provider-reported failed attempts and compaction calls, excludes fork-inherited counters,
@@ -141,7 +146,6 @@ All 54 catalogued Token sources now have a reader; per-reader notes live in
 [docs/token-source-backlog.md](docs/token-source-backlog.md). Settings also builds shareable
 1080×1920 recap cards for 日报/周报/月报/年报 — poster, opener, calendar/timetable, payback and
 scorecard — with a monthly subscription price prorated by day for a day or a week.
-generate a fabricated hour chart.
 
 General settings offers two optional global shortcuts and reads the actual Windows login-startup
 state. `pulsewin.exe --json` and `--statusline` read the saved quota cache without opening the GUI,

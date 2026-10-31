@@ -400,6 +400,13 @@ fn send_test_notification(app: AppHandle) -> Result<(), String> {
     app.notification().builder().title("PulseWin 测试通知").body("通知已启用；额度告警与回顾提醒会以同样的方式送达。").show().map_err(|error| format!("发送测试通知失败：{error}"))
 }
 
+/// The account's own credit records for the last 31 days, for the settings pane.
+#[tauri::command]
+async fn qoder_credit_history() -> Result<Vec<providers::qoder::CreditDay>, String> {
+    let ctx = providers::Ctx::new().map_err(|error| error.to_string())?;
+    providers::qoder::credit_days(&ctx).await
+}
+
 fn post_alerts(app:&AppHandle,memory:&mut alerts::AlertMemory,raw:&model::ProviderUsage,display:&model::ProviderUsage,prefs:&alerts::AlertPreferences,now:i64) {
     use tauri_plugin_notification::NotificationExt;
     let mut candidate=memory.clone();
@@ -1716,6 +1723,7 @@ pub fn run() {
             get_network_status,
             save_network_settings,
             send_test_notification,
+            qoder_credit_history,
             save_preferences,
             refresh_provider,
             refresh_now,

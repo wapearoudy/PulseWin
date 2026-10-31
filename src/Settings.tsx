@@ -20,6 +20,7 @@ import { AboutPane } from './AboutPane'
 import { PromptCacheGroup } from './PromptCacheGroup'
 import { CodexSignalsGroup } from './CodexSignalsGroup'
 import {DeepSeekConsoleGroup} from './DeepSeekConsoleGroup'
+import { QoderCreditsGroup } from './QoderCreditsGroup'
 import { TokenSpendPane, releaseSpendSession } from './token-spend/TokenSpendPane'
 import { WindowStarterGroup } from './WindowStarterGroup'
 import { ExtensionsSettingsView, ExtensionProgramGroup } from './ExtensionsSettingsView'
@@ -132,7 +133,7 @@ export default function Settings() {
         {!prefs.enabledProviders.length && <div className="empty-banner">尚未选择监控服务。<button onClick={() => { setSelection([]); setChoose(true) }}>选择服务</button></div>}
         <Group title="面板颜色"><Row title="颜色" subtitle="桌面助手与详情卡的表面颜色。"><select aria-label="面板颜色" disabled={busy} value={prefs.panelColour} onChange={e=>change({panelColour:e.target.value as 'black'|'light'})}><option value="black">黑色</option><option value="light">浅色</option></select></Row></Group><Group title="尺寸与形状"><Row title="大小"><select disabled={busy} value={prefs.panelSize} onChange={e => change({ panelSize: Number(e.target.value) })}><option value="0.82">较小</option><option value="1">标准</option><option value="1.22">较大</option></select></Row>
         <Row title="间距"><select disabled={busy} value={prefs.railSpacing} onChange={e => change({ railSpacing: Number(e.target.value) })}><option value="0.6">紧凑</option><option value="1">标准</option><option value="1.4">宽松</option></select></Row>
-        <Toggle title="圆润端点" value={prefs.roundEnds} disabled={busy} onChange={v => change({ roundEnds: v })} /><Toggle title="显示工作与刷新动画" value={prefs.animateActivity} disabled={busy} onChange={v=>change({animateActivity:v})}/><Toggle title="额度重置庆祝" subtitle="机器人在见证额度窗口重置时播放庆祝动作。" value={prefs.resetCelebration} disabled={busy} onChange={v=>change({resetCelebration:v})}/></Group>
+        <Toggle title="圆润端点" value={prefs.roundEnds} disabled={busy} onChange={v => change({ roundEnds: v })} /><Toggle title="显示工作与刷新动画" value={prefs.animateActivity} disabled={busy} onChange={v=>change({animateActivity:v})}/><Toggle title="额度重置庆祝" subtitle="机器人在见证额度窗口重置时播放庆祝动作。" value={prefs.resetCelebration} disabled={busy} onChange={v=>change({resetCelebration:v})}/></Group><Group title="进度条"><Row title="样式" subtitle="卡片与菜单中额度条的绘制方式。"><select aria-label="进度条样式" disabled={busy} value={prefs.usageBarStyle} onChange={e=>change({usageBarStyle:e.target.value as 'continuous'|'segmented'})}><option value="continuous">连续</option><option value="segmented">分段</option></select></Row></Group>
         </> : pane === 'rings' ? <>
         <h1>圆环与数字</h1><p className="page-description">圆环、数字与额度窗口的显示方式。达到变红阈值且用量超过时间进度时预警；按进度使用保持正常，额度用尽仍显示警告。</p><Group title="用量显示"><Toggle title="显示剩余额度" subtitle="圆环和数字显示剩余量，预警仍对比已用量与时间进度。" value={prefs.showsRemaining} disabled={busy} onChange={v => change({ showsRemaining: v })} />
         <Toggle title="显示百分比" subtitle="侧边显示数字，顶部面板保持紧凑。" value={prefs.showPercentages} disabled={busy} onChange={v => change({ showPercentages: v })} />
@@ -163,6 +164,7 @@ export default function Settings() {
         <Row title="机器人颜色"><div className="toolbar"><input type="color" aria-label="机器人颜色" value={appearance.markColour??'#8e9dff'} disabled={busy} onChange={e=>setAppearance({markColour:e.target.value})}/><button disabled={busy||!appearance.markColour} onClick={()=>setAppearance({markColour:null})}>自动</button></div></Row></>}</Group>
         <Group title="圆环颜色"><Row title="高亮色" subtitle="自动随用量变化；用尽时仍显示深红。"><div className="toolbar"><input type="color" aria-label="圆环高亮色" value={appearance.ringColour??'#00e68c'} disabled={busy} onChange={e=>setAppearance({ringColour:e.target.value})}/><button disabled={busy||!appearance.ringColour} onClick={()=>setAppearance({ringColour:null})}>自动</button></div></Row></Group><AccountDetails key={provider.id} provider={provider} usage={snapshot?.providers.find(p => p.id === pane)} onError={setError} onChanged={reload} /></> : <Group title="当前用量"><p className="group-copy">未显示。启用后配置连接并检查用量。</p></Group>}
         {provider.id==='deepseek'&&<DeepSeekConsoleGroup enabled={enabled} onChanged={reload}/>}
+        {provider.id==='qoder'&&<QoderCreditsGroup enabled={enabled}/>}
     {provider.id==='opencode-go'&&<OpenCodeConsoleGroup enabled={enabled} onChanged={reload}/>}
         {/* The pane decides for itself whether this provider publishes a page:
             which services do is the Rust catalogue's fact, not a list kept here. */}

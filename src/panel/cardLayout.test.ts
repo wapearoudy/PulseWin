@@ -17,8 +17,15 @@ describe('detailCardLayout', () => {
     expect(l.rowTextLineHeight).toBe(14)
   })
 
-  it('gives the card the same curve as the rings', () => {
-    // (DockLayout.ringDiameter + DockLayout.ringLineWidth) / 2 = 20 at standard.
+  it('doubles the bar and its frame budget when segmented', () => {
+    const continuous = detailCardLayout('standard')
+    const segmented = detailCardLayout('standard', false, false, 'segmented')
+    expect(segmented.progressBarHeight).toBe(12)
+    expect(segmented.usageBarStyle).toBe('segmented')
+    expect(detailCardHeight(segmented, 2) - detailCardHeight(continuous, 2)).toBeCloseTo(12, 6)
+  })
+
+  it('gives the card the same curve as the rings', () => {    // (DockLayout.ringDiameter + DockLayout.ringLineWidth) / 2 = 20 at standard.
     expect(RING_OUTER_RADIUS).toBe(20)
     expect(detailCardLayout('standard').cornerRadius).toBe(20)
     expect(detailCardLayout('large').cornerRadius).toBeCloseTo(20 * PANEL_SCALE.large, 6)

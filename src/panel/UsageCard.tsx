@@ -2,6 +2,7 @@ import { memo, useEffect, useId, useMemo, useState } from 'react'
 import { bubblePath, bubbleTransform } from './bubbleShape'
 import type { PanelEdge } from './berthShape'
 import { cardBox, type DetailCardLayout } from './cardLayout'
+import { UsageBar } from './UsageBar'
 import { tintColour, usageTint } from './tint'
 import { openSettings } from '../api'
 import type { ProviderUsage, UsageMetric } from '../types'
@@ -189,19 +190,14 @@ function UsageCardImpl({
                   <span className="card__row-label" title={w.detail??undefined}>{w.label}{w.scope?` · ${w.scope}`:''}</span>
                 </div>
 
-                <div
+                <UsageBar
                   className="card__bar"
-                  style={{ height: layout.progressBarHeight, borderRadius: layout.progressBarHeight / 2 }}
-                >
-                  <div
-                    className="card__bar-fill"
-                    style={{
-                      width: `${Math.max(0, Math.min(1, displayed ?? 0)) * 100}%`,
-                      background: tint,
-                      borderRadius: layout.progressBarHeight / 2,
-                    }}
-                  />
-                </div>
+                  fraction={displayed ?? 0}
+                  tint={tint}
+                  style={layout.usageBarStyle}
+                  height={layout.progressBarHeight}
+                  width={layout.width - layout.padding * 2}
+                />
 
                 <div
                   className="card__row-line"

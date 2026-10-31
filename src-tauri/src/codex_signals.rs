@@ -62,7 +62,6 @@ struct Parser {
     at_start: (Option<String>, Option<String>),
     previous: (Option<String>, Option<String>),
     subturns: HashSet<String>,
-    window: Option<(u64, Option<String>)>,
     applied_any: bool,
     own: bool,
     replay: Option<i64>,
@@ -111,7 +110,6 @@ impl Parser {
         }
         match kind {
             "session_meta" => {
-                self.window = None;
                 if self.version.is_some() {
                     return;
                 }
@@ -150,7 +148,7 @@ impl Parser {
                         self.change("model", wanted, ran.clone(), date)
                     }
                 }
-                let ranks = ["none", "minimal", "low", "medium", "high", "xhigh"];
+                let ranks = ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"];
                 if !ran.as_deref().is_some_and(own) {
                     if let (Some(have), Some(want)) = (&effort, asked.1) {
                         if ranks
@@ -191,21 +189,6 @@ impl Parser {
                     let info = &p["info"];
                     if !info.is_object() {
                         return;
-                    }
-                    if let Some(size) = info["model_context_window"].as_u64().filter(|n| *n > 0) {
-                        if self.facts.judged {
-                            if let (Some((old, model)), Some(date)) = (&self.window, date) {
-                                if size < *old && model == &self.model {
-                                    self.change(
-                                        "contextWindow",
-                                        old.to_string(),
-                                        size.to_string(),
-                                        date,
-                                    )
-                                }
-                            }
-                            self.window = Some((size, self.model.clone()));
-                        }
                     }
                     if info["total_token_usage"].is_object() {
                         let usage = &info["total_token_usage"];
@@ -314,7 +297,7 @@ mod tests {
         assert!(f.changes.is_empty());
     }
     #[test]
-    fn model_effort_and_context_drops_require_new_user_setting_evidence() {
+    fn model_and_effort_drops_require_new_user_setting_evidence() {
         let f = parse(vec![
             meta("0.146.0-alpha.3"),
             applied("gpt-6-astra", "high", 1),
@@ -332,10 +315,10 @@ mod tests {
                 .iter()
                 .map(|c| c.kind.as_str())
                 .collect::<Vec<_>>(),
-            vec!["effort", "contextWindow", "model"]
+            vec!["effort", "model"]
         );
-        assert_eq!(f.changes[1].asked, "272000");
-        assert_eq!(f.changes[1].ran, "128000");
+        assert_eq!(f.changes[1].asked, "gpt-6-astra");
+        assert_eq!(f.changes[1].ran, "gpt-6-luna");
     }
     #[test]
     fn settings_applied_mid_turn_wait_until_the_next_task() {

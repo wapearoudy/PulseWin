@@ -2,7 +2,7 @@
  "version": "0.1.19",
  "status": "implementation-in-progress",
  "releaseHold": true,
- "reason": "0.1.19 is a working tree, not a release. After the published 0.1.18, upstream 1.10.0-1.12.4 release notes were synced and five gaps closed: the original's model-price spellings, a Settings test-notification button, the direct 不使用代理 mode, the Kimi Code session store and 日报/周报 recap periods. The hold remains because a new release is a new decision, and this tree does not establish full Pulse parity.",
+ "reason": "0.1.19 is a working tree, not a release. After the published 0.1.18, upstream 1.10.0-1.12.4 release notes were synced and nine gaps closed: the original's model-price spellings, a Settings test-notification button, the direct 不使用代理 mode, the Kimi Code session store, 日报/周报 recap periods, the original's continuous/segmented progress-bar styles, Qoder credit-part accounting with a 31-day credit history, Cursor weekly limits with enterprise allowance, and the Codex weaker-model signal refinements. The hold remains because a new release is a new decision, and this tree does not establish full Pulse parity.",
  "upstream": "1.12.4",
  "publishedVersion": "0.1.18",
  "implementedVerified": [
@@ -35,11 +35,15 @@
   "Settings test-notification button sends the same Windows notification path as quota and recap alerts and reports success or the permission failure",
   "Proxy mode 不使用代理 (the original's direct mode) connects without any proxy even when the environment or Windows configures one, hands no proxy key to CLI children and keeps the updater's own policy",
   "Kimi Code's ~/.kimi-code session store is read next to the legacy ~/.kimi wire logs: usage.record counters, provider-prefixed model names stripped and priced through the Kimi aliases, and a migrated request folds by second plus counters instead of counting twice",
-  "Recaps offer 日报/周报 beside 月报/年报: day and week keys follow RecapPeriods.swift (a week starts on the reader's first weekday), day/week cards drop the calendar, a finished day compares with the day before while a running day has no chip, and payback is prorated per day across the months the week touches"
+  "Recaps offer 日报/周报 beside 月报/年报: day and week keys follow RecapPeriods.swift (a week starts on the reader's first weekday), day/week cards drop the calendar, a finished day compares with the day before while a running day has no chip, and payback is prorated per day across the months the week touches",
+  "Progress-bar styles follow UsageBar.swift: continuous (6 px) or segmented (12 px ticks with a 2.5 px tick, 2 px gap and whole-tick lighting), selectable in Appearance and shared by the card and tray menu",
+  "Qoder credit parts follow QoderUsageService.swift: plan, resource-pack and dedicated rows with their own expiry when showsParts is enabled, a de-duplicated total expiry, and a 31-day credit history with today/7-day/31-day used and charged totals plus a daily bar chart",
+  "Cursor weekly-limit plans show the weekly 7d ring and reset instead of the two monthly pools; enterprise accounts show one monthly USD allowance and on-demand spend keeps its own row, with the legacy usage endpoint retained as a fallback",
+  "Codex weaker-model signals follow 1.12.4: max and ultra effort ranks participate in comparisons while the Codex context-window setting is no longer treated as a server-side downgrade"
  ],
  "verification": {
-  "rust": "1216 passed, 0 failed, 2 explicitly ignored real-account checks (1218 total) on this Windows machine, including the new price-alias and Kimi Code tests. The 35 failures recorded on macOS are Windows-only path/PATH tests that pass here; the Windows workflow reports the same green result.",
-  "frontendUnit": "263 passed in 25 files; tsc --noEmit and vite build clean.",
+  "rust": "1240 passed, 0 failed, 2 explicitly ignored real-account checks (1242 total) on this Windows machine, including the new price-alias, Kimi Code, Qoder, Cursor and progress-bar tests. The 35 failures recorded on macOS are Windows-only path/PATH tests that pass here; the Windows workflow reports the same green result.",
+  "frontendUnit": "268 passed in 26 files; tsc --noEmit and vite build clean.",
   "browser": "81 passed, three consecutive full-suite runs. Two test-side defects were fixed: the status mock did not answer the new status_pages command, and the prompt-cache countdown test raced its own fake clock (install({time: T}) then pauseAt(T) throws \"Cannot fast-forward to the past\"; it failed on pristine specs too, about one full-suite run in three).",
   "native": "0.1.18 was built on GitHub Actions windows-latest and the artifacts are published. No installer was executed and no installed client was upgraded, so the install and in-app update paths remain unverified on a real machine.",
   "localUpdateFeed": "0.1.18 is promoted on GitHub; no local updates/ feed was produced on this machine.",
@@ -69,7 +73,7 @@
   "Window starter real CLI send and Windows no-window launch acceptance",
   "User extensions acceptance with a real installed extension program",
   "Stable real Harness source integrity acceptance",
-  "New in upstream 1.10.0-1.12.4 and not yet ported: Qoder credit-part accounting, Cursor weekly limit and enterprise allowance, Codex weaker-model warning signs, liquid docking, progress-bar styles, the settings-window style, connection diagnostics and the notch hover delay"
+  "New in upstream 1.10.0-1.12.4 and not yet ported: liquid docking, the settings-window style, connection diagnostics and the notch hover delay"
  ],
  "checkpointDate": "2026-10-31",
  "reference": "Pulse v1.12.4 tag objects, alongside the unchanged old checkout",

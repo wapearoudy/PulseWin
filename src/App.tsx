@@ -303,8 +303,8 @@ export default function App() {
     () => dockLayout({ scale: PANEL_SIZE, spacing: RAIL_SPACING, usesRoundEnds: preferences.roundEnds }),
     [PANEL_SIZE, RAIL_SPACING, preferences.roundEnds],
   )
-  const cardLayout = useMemo(() => detailCardLayout(PANEL_SIZE < 1 ? 'small' : PANEL_SIZE > 1 ? 'large' : 'standard', preferences.showForecast, detailed), [PANEL_SIZE, preferences.showForecast,detailed])
-  const maximumCardLayout = useMemo(() => detailCardLayout(PANEL_SIZE < 1 ? 'small' : PANEL_SIZE > 1 ? 'large' : 'standard', preferences.showForecast, hasDetailed), [PANEL_SIZE, preferences.showForecast,hasDetailed])
+  const cardLayout = useMemo(() => detailCardLayout(PANEL_SIZE < 1 ? 'small' : PANEL_SIZE > 1 ? 'large' : 'standard', preferences.showForecast, detailed, preferences.usageBarStyle), [PANEL_SIZE, preferences.showForecast,detailed,preferences.usageBarStyle])
+  const maximumCardLayout = useMemo(() => detailCardLayout(PANEL_SIZE < 1 ? 'small' : PANEL_SIZE > 1 ? 'large' : 'standard', preferences.showForecast, hasDetailed, preferences.usageBarStyle), [PANEL_SIZE, preferences.showForecast,hasDetailed,preferences.usageBarStyle])
 
   const railW = layout.width
   /** The rail's length along the edge it is docked to. */

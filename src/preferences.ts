@@ -45,6 +45,8 @@ export interface Preferences {
   panelSize: number
   railSpacing: number
   roundEnds: boolean
+  /** How limit bars are drawn: continuous fills or discrete ticks. */
+  usageBarStyle: 'continuous' | 'segmented'
   showsRemaining: boolean
   showPercentages: boolean
   labelAbove: boolean
@@ -93,7 +95,7 @@ export const defaultPreferences: Preferences = {
   openSettingsShortcut: null, togglePanelShortcut: null,
   alerts: { threshold: null, onReset: false, onFailure: false, lowBalance: {}, onServiceOutage: false,onRecap:false }, tokenSpendEnabled: false, tokenSpendSpan: 'week', spendCustomDays: [], spendActivityView:'daily', recapMonthlyPrice:null,recapHidesProjects:false,resetCelebration: true,
   enabledProviders: [], providerOrder: [], panelColour: 'black', panelSize: 1, railSpacing: 1,
-  roundEnds: false, showsRemaining: false, showPercentages: true,
+  roundEnds: false, usageBarStyle: 'continuous', showsRemaining: false, showPercentages: true,
   labelAbove: false, autoCollapse: true, warningThreshold: 0.75, refreshSeconds: 120, refreshAutomatic: true,
   showSecondRing: false, topShowPercentages: false, animateActivity: true, dockAlertColour: true, accountAppearance: {},
   showResetClock: false, clockRemaining: false, showForecast: false, hideInFullscreen:true, followActiveDisplay:false, hideFromCapture:false, pinnedWindows: {},
