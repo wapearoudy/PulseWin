@@ -209,12 +209,23 @@ function ModelDetail({ days, records }: { days: SpendDay[]; records: SpendRecord
     if (value) { sum.replies += value.replies; sum.output += value.outputTokens; sum.seconds += value.seconds; sum.first += value.firstTokenSeconds; sum.turns += value.firstTokenTurns }
     return sum
   }, { replies: 0, output: 0, seconds: 0, first: 0, turns: 0 })
-  const rows = days.filter(day => day.tokens > 0 || day.cost !== null)
+  const [sort, setSort] = useState<'date' | 'input' | 'cacheWrite' | 'cacheRead' | 'output' | 'total'>('date')
+  const [ascending, setAscending] = useState(false)
+  const [page, setPage] = useState(0)
+  const value = (day: SpendDay) => sort === 'date' ? day.day : sort === 'input' ? day.tally.input : sort === 'cacheWrite' ? day.tally.cacheWrite : sort === 'cacheRead' ? day.tally.cacheRead : sort === 'output' ? day.tally.output : day.tokens
+  const rows = days.filter(day => day.tokens > 0 || day.cost !== null).sort((left, right) => {
+    const a = value(left), b = value(right), order = typeof a === 'string' && typeof b === 'string' ? a.localeCompare(b) : Number(a) - Number(b)
+    return ascending ? order : -order
+  })
+  const size = 10, pages = Math.max(1, Math.ceil(rows.length / size)), current = Math.min(page, pages - 1)
+  const shown = rows.slice(current * size, (current + 1) * size)
+  const head = (key: typeof sort, label: string) => <th><button className={sort === key ? 'spend-sort active' : 'spend-sort'} onClick={() => { setPage(0); if (sort === key) setAscending(!ascending); else { setSort(key); setAscending(false) } }}>{label}{sort === key ? (ascending ? ' ↑' : ' ↓') : ''}</button></th>
   return <section className="spend-card"><h2>模型明细</h2>
     {timing.replies > 0 && <p className="spend-footnote">{timing.seconds > 0 ? `输出速度约 ${(timing.output / timing.seconds).toFixed(1)} Token/秒（${timing.replies} 次回复）。` : ''}{timing.turns > 0 ? `首字平均约 ${(timing.first / timing.turns).toFixed(2)} 秒（${timing.turns} 次）。` : ''}速度按来源自报的耗时统计，不包含排队时间。</p>}
-    <div className="spend-table-scroll"><table className="spend-table"><thead><tr><th>日期</th><th>输入</th><th>缓存写入</th><th>缓存读取</th><th>输出</th><th>合计</th></tr></thead><tbody>
-      {rows.map(day => <tr key={day.day}><td>{day.day}</td><td>{shortTokens(day.tally.input)}</td><td>{shortTokens(day.tally.cacheWrite)}</td><td>{shortTokens(day.tally.cacheRead)}</td><td>{shortTokens(day.tally.output)}</td><td title={exactTokenText(day.tokens, day.exactTokens)}>{shortTokens(day.tokens)}</td></tr>)}
+    <div className="spend-table-scroll"><table className="spend-table"><thead><tr>{head('date', '日期')}{head('input', '输入')}{head('cacheWrite', '缓存写入')}{head('cacheRead', '缓存读取')}{head('output', '输出')}{head('total', '合计')}</tr></thead><tbody>
+      {shown.map(day => <tr key={day.day}><td>{day.day}</td><td>{shortTokens(day.tally.input)}</td><td>{shortTokens(day.tally.cacheWrite)}</td><td>{shortTokens(day.tally.cacheRead)}</td><td>{shortTokens(day.tally.output)}</td><td title={exactTokenText(day.tokens, day.exactTokens)}>{shortTokens(day.tokens)}</td></tr>)}
     </tbody></table></div>
+    <Pagination page={current} total={rows.length} size={size} onChange={setPage}/>
     {!rows.length && <p className="spend-empty">此范围没有该模型的每日记录。</p>}
   </section>
 }
