@@ -1,8 +1,8 @@
 {
  "version": "0.1.19",
- "status": "implementation-in-progress",
- "releaseHold": true,
- "reason": "0.1.19 is a working tree, not a release. After the published 0.1.18, upstream 1.10.0-1.12.4 release notes were synced and eighteen gaps closed: the original's model-price spellings, a Settings test-notification button, the direct 不使用代理 mode, the Kimi Code session store, 日报/周报 recap periods, the original's continuous/segmented progress-bar styles, Qoder credit-part accounting with a 31-day credit history, Cursor weekly limits with enterprise allowance, the Codex weaker-model signal refinements, the system-settings-style title bar, experimental liquid docking, the notch hover delay, connection diagnostics, the prompt-cache hover card, DeepSeek console browser renewal/import, OpenCode console cookie-jar renewal, the DeepSeek/OpenCode console ledgers in the detailed card, and a recap reminder whose Windows toast opens the Token Spend recap. The hold remains because a new release is a new decision, and this tree does not establish full Pulse parity.",
+ "status": "release-preparation",
+ "releaseHold": false,
+ "reason": "User requested commit and release on 2026-10-31 after the 0.1.19 implementation. This release does not establish full Pulse parity; remaining acceptance items continue afterwards.",
  "upstream": "1.12.4",
  "publishedVersion": "0.1.18",
  "implementedVerified": [
@@ -56,10 +56,10 @@
   "rust": "1245 passed, 0 failed, 2 explicitly ignored real-account checks (1247 total) on this Windows machine, including the new price-alias, Kimi Code, Qoder, Cursor, progress-bar, browser-session and warmer-timer tests. The 35 failures recorded on macOS are Windows-only path/PATH tests that pass here; the Windows workflow reports the same green result.",
   "frontendUnit": "269 passed in 26 files; tsc --noEmit and vite build clean.",
   "browser": "81 passed in the full browser suite on the 0.1.19 working tree (45.8s); browser IPC responses are synthetic.",
-  "native": "0.1.18 was built on GitHub Actions windows-latest and the artifacts are published. No installer was executed and no installed client was upgraded, so the install and in-app update paths remain unverified on a real machine.",
-  "localUpdateFeed": "0.1.18 is promoted on GitHub; no local updates/ feed was produced on this machine.",
-  "buildBlocker": "None for 0.1.18. The updater signing key is now a repository secret (TAURI_SIGNING_PRIVATE_KEY, key id 218D1940E2C4F3DC) and .github/workflows/release-windows.yml builds, signs and publishes.",
-  "publicRelease": "0.1.18 is published as the latest release with all five assets; anonymous download, minisign key id, Ed25519 verification over the BLAKE2b-512 prehash and the releases/latest/download/latest.json endpoint were all verified (see docs/release-0.1.18.json publicVerification).",
+  "native": "GitHub Actions windows-latest release build for 0.1.19 has not run yet; .github/workflows/release-windows.yml will build, sign and publish it.",
+  "localUpdateFeed": "No 0.1.19 feed yet; GitHub publication pending.",
+  "buildBlocker": "None for 0.1.19. The updater signing key is a repository secret (TAURI_SIGNING_PRIVATE_KEY, key id 218D1940E2C4F3DC) and .github/workflows/release-windows.yml builds, signs and publishes.",
+  "publicRelease": "PENDING for 0.1.19: no artifacts exist yet.",
   "externalLimitations": [
    "44 status pages verified against fixtures only; gemini-cli, command-code and hugging-face timed out from this network (curl times out too) and stay unverified",
    "Exchange-rate endpoint, offline and 429 behaviour not exercised against the real service",
