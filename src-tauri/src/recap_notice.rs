@@ -7,7 +7,6 @@ use std::{
     time::Duration,
 };
 use tauri::Manager;
-use tauri_plugin_notification::NotificationExt;
 static KEPT: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 static CHECK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 pub fn keep(snapshot: &crate::token_spend::SpendSnapshot) {
@@ -84,14 +83,31 @@ pub fn check(app: &tauri::AppHandle) {
         {
             return;
         }
-        let _ = app
-            .notification()
-            .builder()
-            .title("Pulse · 月度回顾")
-            .body(format!(
-                "你的 {month} 工作回顾已准备好，可在 Token 消耗页查看。"
-            ))
-            .show();
+        let identifier = app.config().identifier.clone();
+        let body = format!("你的 {month} 工作回顾已准备好，可在 Token 消耗页查看。");
+        // A Windows toast click opens the recap directly; notify-rust exposes the
+        // desktop activation callback that the Tauri notification plugin does not.
+        std::thread::spawn(move || {
+            let Ok(handle) = notify_rust::Notification::new()
+                .app_id(&identifier)
+                .summary("Pulse · 月度回顾")
+                .body(&body)
+                .show()
+            else {
+                return;
+            };
+            let _ = handle.wait_for_response(
+                move |response: &notify_rust::NotificationResponse| {
+                    if matches!(
+                        response,
+                        notify_rust::NotificationResponse::Default
+                            | notify_rust::NotificationResponse::Action(_)
+                    ) {
+                        crate::open_recap(&app);
+                    }
+                },
+            );
+        });
     });
 }
 pub fn watch(app: tauri::AppHandle) {

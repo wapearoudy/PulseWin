@@ -29,8 +29,9 @@ cache timing, accurate pricing/counters and the full 54-source Token catalog hav
 running implementations. DeepSeek console renewal/import scans Chrome, Edge, Brave
 and Chromium LevelDB stores after a signed-out read and Settings can import the
 session explicitly; OpenCode console sessions renew from the app cookie jar. Both consoles'
-daily ledgers now feed their detailed cards, though live detailed-card acceptance and the recap
-visual/native flow remain partial. The 0.1.18 Windows build was
+daily ledgers now feed their detailed cards, though live detailed-card acceptance and the original
+recap visual/native flow remain partial; the monthly recap reminder's Windows toast opens the
+Token Spend recap when clicked. The 0.1.18 Windows build was
 produced and signed on GitHub Actions windows-latest with 1212 passing Rust checks
 and 260 frontend checks; no installer was executed. Interactive clipboard/dialogs
 remain unrun. DeepSeek interactive login and 30-day real billing read passed;
@@ -93,7 +94,8 @@ diagnostics and a credential-free copyable summary; selecting a model lists its 
 input/cache-write/cache-read/output/total rows with measured output speed, first-token
 latency and estimated cache savings, and the cache-read split has a hover/focus card with the cached share and savings; the developer integrations pane copies the
 read-only CLI commands (--json, --statusline and --recap), saves a status-line script and shows pulsewin://
-account and recap links registered by the installer. Validation: 1245 Rust tests plus two
+account and recap links registered by the installer; the monthly recap reminder uses a WinRT toast
+activation callback so clicking it opens the Token Spend recap. Validation: 1245 Rust tests plus two
 ignored, 268 frontend tests, tsc --noEmit and vite build clean.
 
 0.1.18 (published) registered the remaining 13 Token sources so all 54 have a

@@ -2,7 +2,7 @@
  "version": "0.1.19",
  "status": "implementation-in-progress",
  "releaseHold": true,
- "reason": "0.1.19 is a working tree, not a release. After the published 0.1.18, upstream 1.10.0-1.12.4 release notes were synced and seventeen gaps closed: the original's model-price spellings, a Settings test-notification button, the direct 不使用代理 mode, the Kimi Code session store, 日报/周报 recap periods, the original's continuous/segmented progress-bar styles, Qoder credit-part accounting with a 31-day credit history, Cursor weekly limits with enterprise allowance, the Codex weaker-model signal refinements, the system-settings-style title bar, experimental liquid docking, the notch hover delay, connection diagnostics, the prompt-cache hover card, DeepSeek console browser renewal/import, OpenCode console cookie-jar renewal, and the DeepSeek/OpenCode console ledgers in the detailed card. The hold remains because a new release is a new decision, and this tree does not establish full Pulse parity.",
+ "reason": "0.1.19 is a working tree, not a release. After the published 0.1.18, upstream 1.10.0-1.12.4 release notes were synced and eighteen gaps closed: the original's model-price spellings, a Settings test-notification button, the direct 不使用代理 mode, the Kimi Code session store, 日报/周报 recap periods, the original's continuous/segmented progress-bar styles, Qoder credit-part accounting with a 31-day credit history, Cursor weekly limits with enterprise allowance, the Codex weaker-model signal refinements, the system-settings-style title bar, experimental liquid docking, the notch hover delay, connection diagnostics, the prompt-cache hover card, DeepSeek console browser renewal/import, OpenCode console cookie-jar renewal, the DeepSeek/OpenCode console ledgers in the detailed card, and a recap reminder whose Windows toast opens the Token Spend recap. The hold remains because a new release is a new decision, and this tree does not establish full Pulse parity.",
  "upstream": "1.12.4",
  "publishedVersion": "0.1.18",
  "implementedVerified": [
@@ -49,7 +49,8 @@
   "The Token split's cache-read figure has a hover/focus card showing cached tokens, its share of the input side, cache-write tokens and the estimated cache-read savings",
   "DeepSeek console renewal: a saved login that the console has signed out is renewed from Chrome, Edge, Brave or Chromium LevelDB stores after the token is verified against the account summary, and Settings can import the browser session explicitly.",
   "OpenCode console renewal: a signed-out read re-reads the app WebView cookie jar for opencode.ai console sessions, saves the renewed sign-in and retries the workspace read once.",
-  "DeepSeek and OpenCode Go console ledgers feed their detailed cards: one record per console day with the day's tokens, its top model and the console-reported cost, so the card's 31-day figures, chart, speed and cache summaries use the service's own accounting instead of local transcripts."
+  "DeepSeek and OpenCode Go console ledgers feed their detailed cards: one record per console day with the day's tokens, its top model and the console-reported cost, so the card's 31-day figures, chart, speed and cache summaries use the service's own accounting instead of local transcripts.",
+  "The monthly recap reminder's Windows toast opens the Token Spend recap when activated: the notification is sent through notify-rust and its WinRT activation callback routes a body click to the recap view, because the Tauri notification plugin exposes no desktop action events"
  ],
  "verification": {
   "rust": "1245 passed, 0 failed, 2 explicitly ignored real-account checks (1247 total) on this Windows machine, including the new price-alias, Kimi Code, Qoder, Cursor, progress-bar, browser-session and warmer-timer tests. The 35 failures recorded on macOS are Windows-only path/PATH tests that pass here; the Windows workflow reports the same green result.",
@@ -76,7 +77,7 @@
   "Custom spend ranges across month, year and DST boundaries on real data",
   "DeepSeek console detailed-card live acceptance on a real account; browser renewal/import, automatic retry and the console ledger card are implemented",
   "OpenCode Go detailed-card live acceptance on a real account; console cookie-jar renewal, retry and the console ledger card are implemented",
-  "Original recap visual parity and native recap flow remain partial; Windows toast click activation is not exposed by tauri-plugin-notification 2.5.1 (desktop action callbacks are mobile-only), so notification click navigation needs a custom WinRT toast handler",
+  "Original recap visual parity and native recap flow remain partial; the recap reminder's toast opens the Token Spend recap through notify-rust WinRT activation, but real toast-click acceptance remains pending",
   "Prompt-cache hover-card integration is implemented; live per-model output/TTFT acceptance on real accounts remains partial",
   "Raycast/Sketchybar are macOS-only integrations with no Windows equivalent; the developer kit exports PowerShell and POSIX status-line helpers with the same read-only commands",
   "Windows multi-DPI/multi-monitor, full-screen and live-account regression acceptance",

@@ -156,7 +156,8 @@ and deduplicates migrated copies. Reasoning stays inside output; input and cache
 All 54 catalogued Token sources now have a reader; per-reader notes live in
 [docs/token-source-backlog.md](docs/token-source-backlog.md). Settings also builds shareable
 1080×1920 recap cards for 日报/周报/月报/年报 — poster, opener, calendar/timetable, payback and
-scorecard — with a monthly subscription price prorated by day for a day or a week.
+scorecard — with a monthly subscription price prorated by day for a day or a week. The monthly
+recap reminder's Windows toast opens the same view when clicked.
 
 General settings offers two optional global shortcuts and reads the actual Windows login-startup
 state. `pulsewin.exe --json`, `--statusline` and `--recap [YYYY-MM-DD | week-YYYY-MM-DD | YYYY-MM | YYYY]` read the saved

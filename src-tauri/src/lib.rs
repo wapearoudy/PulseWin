@@ -1005,7 +1005,7 @@ fn open_settings(app: &AppHandle) {
 
 /// Open the settings window directly on the Token Spend recap, for
 /// `pulsewin://recap` and notification-driven recaps.
-fn open_recap(app: &AppHandle) {
+pub(crate) fn open_recap(app: &AppHandle) {
     let state=app.state::<AppState>();
     let _creation=state.settings_creation.lock().unwrap();
     if let Some(window) = app.get_webview_window("settings") {
