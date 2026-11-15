@@ -3,10 +3,11 @@
 Reference: the checked-in `../../Pulse-original` source and its authoritative `Docs/` topics.
 Target: equivalent product behavior on Windows, and faithful layout and interaction. A registered provider, passing parser fixture, or successful build is not proof of product parity.
 
-Upstream release-note sync (2026-10-31): latest stable Pulse is 1.12.4.
+Upstream release-note sync (2026-11-15): latest stable Pulse is 1.13.0.
 [Summaries and Windows follow-up inventory](upstream-release-notes.md) cover
-1.7.0 through 1.12.4. The reference source checkout remains at its earlier
-commit; this documentation sync does not establish parity with the new release.
+1.7.0 through 1.13.0. The reference source checkout is now at 338c796
+(2026-11-11); 1.12.5-1.13.0 are documented but not yet ported, so this
+documentation sync does not establish parity with those releases.
 
 The user authorized an interim 0.1.16 release on 2026-10-11 and requested hiding
 unported Token sources from the UI. On 2026-10-18 the user requested committing,

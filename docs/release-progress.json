@@ -2,8 +2,8 @@
  "version": "0.1.19",
  "status": "interim-published",
  "releaseHold": true,
- "reason": "0.1.19 was published on GitHub on 2026-10-31 by .github/workflows/release-windows.yml at b8afed3. The hold is restored because the remaining items are real-machine and live-service acceptance, and this release does not establish full Pulse parity.",
- "upstream": "1.12.4",
+ "reason": "0.1.19 was published on GitHub on 2026-10-31 by .github/workflows/release-windows.yml at b8afed3. The hold is restored because the remaining items are real-machine and live-service acceptance, and this release does not establish full Pulse parity. Upstream 1.12.5-1.13.0 release notes were synced on 2026-11-15 as a documented-but-unported gap list.",
+ "upstream": "1.13.0",
  "publishedVersion": "0.1.19",
  "implementedVerified": [
   "Light assistant surfaces, rings and detail cards",
@@ -83,10 +83,11 @@
   "Windows multi-DPI/multi-monitor, full-screen and live-account regression acceptance",
   "Window starter real CLI send and Windows no-window launch acceptance",
   "User extensions acceptance with a real installed extension program",
-  "Stable real Harness source integrity acceptance"
+  "Stable real Harness source integrity acceptance",
+  "Upstream 1.12.5-1.13.0 is synced as documentation but not ported: DimAgent, extension PNG icons, ego lite browser reads, Antigravity group rings and the Gemini.app agy source, the Xiaomi prepaid balance ring, the scrollable detail card, settings-row icons, the About Star/afdian entries, the renewal-failure classification and the Z.ai key-change history re-read; upstream 1.12.0's MiniMax/MiniMax CN merge is also still outstanding (they remain two providers). See docs/upstream-release-notes.md"
  ],
- "checkpointDate": "2026-10-31",
- "reference": "Pulse v1.12.4 tag objects, alongside the unchanged old checkout",
+ "checkpointDate": "2026-11-15",
+ "reference": "Pulse v1.13.0 tag objects, alongside the unchanged old checkout",
  "implementedPartial": [
   "DeepSeek independent encrypted console login, 30-day actual billing and 60-second cache; interactive live read passed, browser renewal/import and the console ledger card are implemented, live detailed-card acceptance pending",
   "Background opt-in spend warmer and native kept-snapshot reuse; the 20-second launch delay and 10-minute refresh interval are covered by a unit test, wall-clock acceptance pending",
