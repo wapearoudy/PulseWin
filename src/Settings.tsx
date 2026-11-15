@@ -230,10 +230,11 @@ const openAbout = (key: string) => invoke('open_about_link', { key }).catch((err
     </main>
   </div>
 }
-// A small symbol beside a settings group's title, as the original puts one in
-// front of its rows. It is chosen from the title rather than passed at every
-// call site, so a group added later still gets one.
-function groupSymbol(title: string): ReactNode {
+// A small symbol beside a settings group's title and in front of its rows, as
+// the original puts one in front of each item. It is chosen from the title
+// rather than passed at every call site, so a row added later still gets one;
+// a title that matches nothing stays bare instead of borrowing a generic mark.
+function symbolFor(title: string): ReactNode | null {
   const icon = (paths: ReactNode) => <SidebarSymbol>{paths}</SidebarSymbol>
   if (/站|站点|货币|汇率|地址/.test(title)) return icon(<><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></>)
   if (/通知|提醒|告警/.test(title)) return icon(<><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M10 21h4"/></>)
@@ -247,13 +248,21 @@ function groupSymbol(title: string): ReactNode {
   if (/账号|账户|登录|凭据/.test(title)) return icon(<><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></>)
   if (/缓存|历史|记录/.test(title)) return icon(<><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9"/><path d="M10 13h4"/></>)
   if (/额度|余额|积分|配额/.test(title)) return icon(<><path d="M12 20a8 8 0 1 1 8-8"/><path d="M12 12l4-4"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></>)
-  if (/更新|版本|软件/.test(title)) return icon(<><path d="M12 4v10"/><path d="M8 10l4 4 4-4"/><path d="M4 20h16"/></>)
+  if (/刷新|间隔|更新|版本|软件/.test(title)) return icon(<><path d="M12 4v10"/><path d="M8 10l4 4 4-4"/><path d="M4 20h16"/></>)
   if (/扩展|程序|脚本|集成/.test(title)) return icon(<><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><path d="M16.5 13v7M13 16.5h7"/></>)
-  if (/回顾|月度|年度|报表/.test(title)) return icon(<><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/></>)
-  return icon(<><circle cx="12" cy="12" r="8"/><path d="M12 8v.01M12 11v5"/></>)
+  if (/货币|汇率|换算/.test(title)) return icon(<><path d="M4 8h11l-3-3M20 16H9l3 3"/><path d="M4 8l3 3M20 16l-3-3"/></>)
+  if (/站|站点|地址/.test(title)) return icon(<><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></>)
+  if (/代理|网络|离线|直连/.test(title)) return icon(<><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18" strokeDasharray="2.5 2.5"/></>)
+  if (/机器人|性格|外形|表情/.test(title)) return icon(<><rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 3v4M9 13h.01M15 13h.01"/></>)
+  if (/显示|布局|样式/.test(title)) return icon(<><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></>)
+  if (/回顾|月度|年度|报表|海报/.test(title)) return icon(<><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/></>)
+  return null
+}
+function groupSymbol(title: string): ReactNode {
+  return symbolFor(title) ?? <SidebarSymbol><><circle cx="12" cy="12" r="8"/><path d="M12 8v.01M12 11v5"/></></SidebarSymbol>
 }
 function Group({ title, children }: { title: string; children: ReactNode }) { return <section className="group-wrap"><h2><span className="group-symbol" aria-hidden="true">{groupSymbol(title)}</span>{title}</h2><div className="settings-group">{children}</div></section> }
-function Row({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) { return <div className="setting-row"><div><strong>{title}</strong>{subtitle && <small>{subtitle}</small>}</div><div className="setting-control">{children}</div></div> }
+function Row({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) { const symbol = symbolFor(title); return <div className="setting-row"><div><strong>{symbol && <span className="row-symbol" aria-hidden="true">{symbol}</span>}{title}</strong>{subtitle && <small>{subtitle}</small>}</div><div className="setting-control">{children}</div></div> }
 function Toggle({ title, subtitle, value, disabled, onChange }: { title: string; subtitle?: string; value: boolean; disabled: boolean; onChange: (v:boolean) => void }) { return <Row title={title} subtitle={subtitle}><input type="checkbox" role="switch" aria-label={title} checked={value} disabled={disabled} onChange={e => onChange(e.target.checked)} /></Row> }
 function AccountDetails({ provider, usage, onError, onChanged }: { provider: ProviderSetting; usage?: ProviderUsage; onError:(e:string|null)=>void; onChanged:()=>void }) {
   const [key,setKey] = useState(''), [address,setAddress] = useState(''), [busy,setBusy] = useState(false), [saved,setSaved] = useState(false), [copied,setCopied] = useState(false)

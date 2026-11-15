@@ -56,8 +56,11 @@ html.settings-view,html.settings-view body {background:#f5f5f7;color:#242428;ove
 .star-banner button{border:1px solid #d8c58d;background:#fffdf4;color:#6b5416;border-radius:6px;padding:5px 11px;cursor:pointer;font:inherit;font-size:12px}
 .star-banner button:last-child{border:0;background:transparent;font-size:15px;line-height:1;padding:4px 6px;color:#8a7430}
 @media(prefers-color-scheme:dark){.star-banner{background:#3b3320;border-color:#55492a;color:#f0dfae}.star-banner small{color:#c9b478}.star-banner button{border-color:#6a5a33;background:#4a4026;color:#f0dfae}.star-banner button:last-child{color:#c9b478}}
-/* A small symbol in front of a settings group title, as the original has. */
+/* A small symbol in front of a settings group title and its rows, as the original has. */
 .group-wrap h2{display:flex;align-items:center;gap:7px}
 .group-symbol{display:inline-flex;align-items:center;color:#8a8a90}
 .group-symbol svg{width:14px;height:14px}
-@media(prefers-color-scheme:dark){.group-symbol{color:#9a9aa2}}
+.setting-row strong{display:flex;align-items:center;gap:7px}
+.row-symbol{display:inline-flex;align-items:center;color:#a3a3a9}
+.row-symbol svg{width:13px;height:13px}
+@media(prefers-color-scheme:dark){.group-symbol,.row-symbol{color:#9a9aa2}}
