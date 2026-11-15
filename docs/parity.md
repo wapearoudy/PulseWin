@@ -53,7 +53,7 @@ prepaid balance ring, extension PNG icons scoped to the extension folder, ego li
 browser reads, renewal-failure classification that keeps the last reading, the
 site-switch and Z.ai key-change history re-reads, Command Code models.dev pricing and
 its working mark, the daily chart drawn from the first day of records, Devin usage
-folded into Oh My Pi, the scrollable detail card, settings group symbols, the About
+folded into Oh My Pi, the scrollable detail card, settings group and row symbols, the About
 Star/afdian entries with the one-time request after a fortnight of real use, and the
 Windows browser-permission wording. 1310 Rust checks pass with 2 real-account checks
 explicitly ignored; 287 frontend unit checks and 81 synthetic browser checks pass.
@@ -102,7 +102,7 @@ switching a console site or changing a Z.ai/Zhipu key discards the previous seri
 Command Code is priced from models.dev and shows the working mark mid-turn; the Token
 Spend daily chart starts at the first day of records and survives a single-day range;
 Devin usage arriving through Oh My Pi is folded into that card; a detail card longer than
-its bubble scrolls with its title held; settings groups carry a symbol; and the About pane
+its bubble scrolls with its title held; settings groups and their rows carry a symbol; and the About pane
 has Star and afdian entries with the one-time request after a fortnight of real use.
 Validation: 1310 Rust tests plus two ignored, 287 frontend tests, tsc --noEmit and vite
 build clean. No native 0.1.20 artifact was rebuilt; 0.1.19 remains the last verified Windows build.
