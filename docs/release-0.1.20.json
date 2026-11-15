@@ -1,0 +1,60 @@
+{
+ "version": "0.1.20",
+ "status": "prepared",
+ "authorization": "推送、发布（2026-11-15，用户指令「推送 发布」）",
+ "releaseHold": false,
+ "buildBlocker": [],
+ "toFinishOnWindows": [],
+ "tests": {
+  "rust": {
+   "passed": 1310,
+   "failed": 0,
+   "ignored": 2,
+   "note": "cargo test --lib on the Windows development machine for the 0.1.20 working tree (1312 total). The two ignored tests are real-account checks. The GitHub Actions release run re-runs cargo test --all-targets."
+  },
+  "frontend": {
+   "passed": 287,
+   "files": 28
+  },
+  "browser": {
+   "passed": 81,
+   "note": "Full local browser suite on the 0.1.20 working tree (49.1s); the release workflow does not run Playwright."
+  },
+  "typescript": {
+   "passed": true,
+   "note": "tsc --noEmit clean; vite build succeeds (about 0.7s)."
+  }
+ },
+ "portedFromUpstream": [
+  "DimAgent provider: `dim usage --json` with a 20-second deadline and a 256 KB ceiling, subscription bucket, 5h/1d/7d token windows, top-ups kept as separate windows and the web-search allowance",
+  "MiniMax and MiniMax CN merged into one provider with an international/mainland site setting; the retired key file is renamed and its settings folded at startup",
+  "Antigravity group rings (up to three, each switchable, more groups keep the whole account) and the Gemini.app `agy` source behind an auto/CLI/desktop choice sharing the desktop reply mapping",
+  "Xiaomi pay-as-you-go balance ring with a low-balance note",
+  "Extension PNG icons: manifest `icon`, scoped-path and PNG validation (absolute paths, `..`, non-files, empty files and APNG rejected), drawn in the extension's own colours with fallbacks in the UI",
+  "ego lite browser profile roots for console logins, plus the Windows browser-permission wording",
+  "Console renewal failures classified into eight kinds; only a refused credential asks for a new login and the rest keep the last reading with a note",
+  "Z.ai/Zhipu history cached per site and per key fingerprint, so a site switch discards the old series and a new key re-reads the history",
+  "Command Code priced through models.dev and given a working mark from `~/.commandcode/projects` (messages only, `.checkpoints.jsonl` ignored)",
+  "Usage chart drawn from the first day of records and still shown for a single-day range",
+  "Devin card folds usage that arrived through Oh My Pi without double counting",
+  "Detail cards scroll with their title held, settings groups and rows carry a small symbol, and the About pane has Star/afdian entries with a single request after a fortnight of real use"
+ ],
+ "installationExecuted": false,
+ "fullParity": false,
+ "limitations": [
+  "Not full Pulse 1.13.0 parity; real-account and real-machine acceptance remain open and are listed in docs/release-progress.json",
+  "Extension PNG icons are not drawn in the tray, which keeps the built-in monochrome icon",
+  "Icons are added to settings group titles and rows but not to action buttons",
+  "Proxy mode 使用代理 still relies on the manual proxy; the original's \"no network until the system proxy is on\" mode is not implemented",
+  "Localization is out of scope: the interface is Chinese only"
+ ],
+ "externalLimitations": [
+  "44 status pages verified against fixtures only; gemini-cli, command-code and hugging-face timed out from this network",
+  "Exchange-rate endpoint, offline and 429 behaviour not exercised against the real service",
+  "Anonymous GitHub backup API rate limited; live fallback not accepted",
+  "Real Harness read-only integrity check failed because source logs changed during its scan",
+  "Raycast and Sketchybar status-line helpers are macOS-only; the developer kit exports PowerShell and POSIX helpers with the same read-only commands"
+ ],
+ "releaseCommit": null,
+ "publicVerification": null
+}
