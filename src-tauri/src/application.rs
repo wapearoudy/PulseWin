@@ -109,6 +109,8 @@ fn about_link(key:&str)->Result<&'static str,String>{match key{
     "vinz"=>Ok("https://x.com/hivinz_/status/2092996055248126353"),
     "icons"=>Ok("https://github.com/lobehub/lobe-icons"),
     "morphbot"=>Ok("https://github.com/iduu/grokbot-animation"),
+    "star"=>Ok("https://github.com/qunqin24/Pulse"),
+    "afdian"=>Ok("https://afdian.com/a/qunqin"),
     _=>Err("未知的关于页面链接。".into()),
 }}
 #[tauri::command]
@@ -120,7 +122,7 @@ pub fn open_about_link(app:AppHandle,key:String)->Result<(),String>{
 #[cfg(test)] mod about_tests {
     use super::*;
     #[test] fn only_known_public_about_links_can_be_opened(){
-        for key in ["source","upstream","vinz","icons","morphbot"] {assert!(about_link(key).unwrap().starts_with("https://"));}
+        for key in ["source","upstream","vinz","icons","morphbot","star","afdian"] {assert!(about_link(key).unwrap().starts_with("https://"));}
         for key in ["https://evil.example","file:///C:/Windows","javascript:alert(1)","source?token=secret",""] {assert!(about_link(key).is_err());}
     }
     #[test] fn version_and_attribution_come_from_bundled_sources(){

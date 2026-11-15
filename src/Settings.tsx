@@ -1,7 +1,8 @@
 import { OpenCodeConsoleGroup } from './OpenCodeConsoleGroup'
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { getSnapshot, onUsageUpdated, onSettingsAccount, onSettingsRecap, panelPlacement, onPlacementChanged, setPanelPosition, providerSettings, addAccount, removeAccount, importAccountLogin, refreshProvider, saveProviderCredential, type ProviderSetting } from './api'
-import { usePreferences, savePreferences, defaultAccountAppearance, type Preferences } from './preferences'
+import { getSnapshot, onUsageUpdated, onSettingsAccount, onSettingsRecap, panelPlacement, onPlacementChanged, setPanelPosition, providerSettings, addAccount, removeAccount, importAccountLogin, refreshProvider, saveProviderCredential, claimStarRequest, type ProviderSetting } from './api'
+import { usePreferences, savePreferences, defaultAccountAppearance, groupsShown, modelGroups, type Preferences } from './preferences'
+import { AntigravitySettingsGroup } from './AntigravitySettingsGroup'
 import { formatReset, type ProviderUsage, type Snapshot } from './types'
 import { percentFigure } from './usagePresentation'
 import { creditText } from './creditAmount'
@@ -62,6 +63,11 @@ export default function Settings() {
   const [trail, setTrail] = useState<string[]>(()=>[new URLSearchParams(window.location.search).get('account') ?? 'appearance'])
   const [trailIndex, setTrailIndex] = useState(0)
   const [recapSignal, setRecapSignal] = useState(()=>new URLSearchParams(window.location.search).get('recap') ? 1 : 0)
+// The one request for a star. The backend decides whether it is due and spends
+// it when it says yes, so opening this window twice cannot ask twice.
+const [starBanner, setStarBanner] = useState(false)
+useEffect(() => { let live = true; claimStarRequest().then(due => { if (live && due) setStarBanner(true) }).catch(() => undefined); return () => { live = false } }, [])
+const openAbout = (key: string) => invoke('open_about_link', { key }).catch((error: unknown) => setError(String(error)))
   function navigate(id: string) { const next=[...trail.slice(0, trailIndex+1), id]; setTrail(next); setTrailIndex(next.length-1); setPane(id) }
   function goBack() { if (trailIndex <= 0) return; const index=trailIndex-1; setTrailIndex(index); setPane(trail[index]) }
   function goForward() { if (trailIndex >= trail.length-1) return; const index=trailIndex+1; setTrailIndex(index); setPane(trail[index]) }
@@ -147,6 +153,7 @@ export default function Settings() {
         <h1 className="settings-page-title">{paneTitle}</h1>
       </header>
       {(error || loadError) && <div role="alert" className="settings-alert">{error || loadError}<button aria-label="关闭错误提示" onClick={() => setError(null)}>×</button></div>}
+      {starBanner && <section className="star-banner" role="status"><div><strong>给 Pulse 加个星</strong><small>加星能让更多人找到 Pulse。</small></div><button onClick={() => { void openAbout('star') }}>去加星</button><button aria-label="关闭加星提示" onClick={() => setStarBanner(false)}>×</button></section>}
       {!loaded ? <p role="status">正在读取设置…</p> : choosing ? <>
         <h1>选择要监控的服务</h1><p className="page-description">只监控你选择的服务。发现本机凭据不会自动启用监控。</p>
         <div className="toolbar"><button disabled={busy} onClick={() => setSelection(providers.filter(p => p.configured).map(p => p.id))}>选择已检测到的服务</button><button disabled={busy} onClick={() => setSelection([])}>清空选择</button></div>
@@ -192,6 +199,21 @@ export default function Settings() {
         {provider.id==='deepseek'&&<DeepSeekConsoleGroup enabled={enabled} onChanged={reload}/>}
         {provider.id==='qoder'&&<QoderCreditsGroup enabled={enabled}/>}
     {provider.id==='opencode-go'&&<OpenCodeConsoleGroup enabled={enabled} onChanged={reload}/>}
+    {provider.id==='minimax'&&<Group title="站点"><Row title="购买站点" subtitle="两个站点是同一服务的国际与国内入口，密钥各自独立；换站点后需要重新填写该站点的密钥。"><select aria-label="MiniMax 站点" disabled={busy} value={prefs.minimaxSite} onChange={e=>change({minimaxSite:e.target.value as 'international'|'china'})}><option value="international">国际站 api.minimax.io</option><option value="china">国内站 api.minimaxi.com</option></select></Row></Group>}
+        {provider.id==='antigravity'&&<AntigravitySettingsGroup
+          source={prefs.antigravityUsageSource}
+          split={prefs.splitAccounts.includes(pane)}
+          groups={modelGroups(accountUsage?.windows ?? [])}
+          shown={prefs.shownModelGroups[pane] ?? []}
+          disabled={busy}
+          onSource={v=>change({antigravityUsageSource:v})}
+          onSplit={on=>change({splitAccounts:on?[...prefs.splitAccounts.filter(id=>id!==pane),pane]:prefs.splitAccounts.filter(id=>id!==pane)})}
+          onGroup={(group,on)=>{
+            const groups=modelGroups(accountUsage?.windows ?? [])
+            const drawn=groupsShown(groups,prefs.shownModelGroups[pane]??[])
+            const next=on?(drawn.includes(group)?drawn:[...drawn,group]):drawn.filter(g=>g!==group)
+            change({shownModelGroups:{...prefs.shownModelGroups,[pane]:next.length===groups.length?[]:next}})
+          }}/>}
         {/* The pane decides for itself whether this provider publishes a page:
             which services do is the Rust catalogue's fact, not a list kept here. */}
         <ServiceStatusGroup provider={provider.id} base={provider.providerId??provider.id}/>
@@ -208,7 +230,29 @@ export default function Settings() {
     </main>
   </div>
 }
-function Group({ title, children }: { title: string; children: ReactNode }) { return <section className="group-wrap"><h2>{title}</h2><div className="settings-group">{children}</div></section> }
+// A small symbol beside a settings group's title, as the original puts one in
+// front of its rows. It is chosen from the title rather than passed at every
+// call site, so a group added later still gets one.
+function groupSymbol(title: string): ReactNode {
+  const icon = (paths: ReactNode) => <SidebarSymbol>{paths}</SidebarSymbol>
+  if (/站|站点|货币|汇率|地址/.test(title)) return icon(<><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></>)
+  if (/通知|提醒|告警/.test(title)) return icon(<><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M10 21h4"/></>)
+  if (/诊断|连接|状态|服务/.test(title)) return icon(<><path d="M4 13h4l2-5 3 10 2-5h5"/></>)
+  if (/实验|吸附|液态/.test(title)) return icon(<><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/></>)
+  if (/颜色|外观|配色|主题/.test(title)) return icon(<><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.5-3.3 1.4 1.4 0 0 1 1-2.4H18a3 3 0 0 0 3-3A9 9 0 0 0 12 3Z"/></>)
+  if (/价格|费用|金额|计价/.test(title)) return icon(<><path d="M20 12l-8 8-8-8 8-8h8v8Z"/><circle cx="15.5" cy="8.5" r="1"/></>)
+  if (/圆环|数字|百分比/.test(title)) return icon(<><circle cx="12" cy="12" r="8" strokeDasharray="2.5 2.5"/></>)
+  if (/位置|行为|面板|停靠/.test(title)) return icon(<><rect x="3" y="4" width="18" height="16" rx="2"/><rect x="14" y="7" width="4" height="10" rx=".5" fill="currentColor" stroke="none"/></>)
+  if (/快捷键|启动|键盘/.test(title)) return icon(<><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></>)
+  if (/账号|账户|登录|凭据/.test(title)) return icon(<><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></>)
+  if (/缓存|历史|记录/.test(title)) return icon(<><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9"/><path d="M10 13h4"/></>)
+  if (/额度|余额|积分|配额/.test(title)) return icon(<><path d="M12 20a8 8 0 1 1 8-8"/><path d="M12 12l4-4"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></>)
+  if (/更新|版本|软件/.test(title)) return icon(<><path d="M12 4v10"/><path d="M8 10l4 4 4-4"/><path d="M4 20h16"/></>)
+  if (/扩展|程序|脚本|集成/.test(title)) return icon(<><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><path d="M16.5 13v7M13 16.5h7"/></>)
+  if (/回顾|月度|年度|报表/.test(title)) return icon(<><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/></>)
+  return icon(<><circle cx="12" cy="12" r="8"/><path d="M12 8v.01M12 11v5"/></>)
+}
+function Group({ title, children }: { title: string; children: ReactNode }) { return <section className="group-wrap"><h2><span className="group-symbol" aria-hidden="true">{groupSymbol(title)}</span>{title}</h2><div className="settings-group">{children}</div></section> }
 function Row({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) { return <div className="setting-row"><div><strong>{title}</strong>{subtitle && <small>{subtitle}</small>}</div><div className="setting-control">{children}</div></div> }
 function Toggle({ title, subtitle, value, disabled, onChange }: { title: string; subtitle?: string; value: boolean; disabled: boolean; onChange: (v:boolean) => void }) { return <Row title={title} subtitle={subtitle}><input type="checkbox" role="switch" aria-label={title} checked={value} disabled={disabled} onChange={e => onChange(e.target.checked)} /></Row> }
 function AccountDetails({ provider, usage, onError, onChanged }: { provider: ProviderSetting; usage?: ProviderUsage; onError:(e:string|null)=>void; onChanged:()=>void }) {

@@ -13,6 +13,7 @@ import {
   onPlacementChanged,
   onDragChanged,
   onLiquidDrag,
+  noteStarActivity,
   getSnapshot,
   onEdgeChanged,
   onHoverChanged,
@@ -33,12 +34,19 @@ import { cardMetricTrends } from './metricTrend'
 import { cardSurfaceRegion, cardTrackingRegion, railSurfaceRegion, sliverTrackingRegion, type ShapeHitRegion } from './panel/hitRegions'
 import { ProviderIcon } from './panel/ProviderIcon'
 import { personaAt } from './panel/botmark/programme'
-import { defaultAccountAppearance, usePreferences } from './preferences'
+import {
+  defaultAccountAppearance,
+  groupsShown,
+  groupSlotId,
+  modelGroups,
+  splitsIntoGroups,
+  usePreferences,
+} from './preferences'
 import { useMoney } from './money'
 import { clockFraction, headlineWindow, secondWindow } from './usagePresentation'
 import { quotaTimeFraction, quotaWarning } from './quotaPacing'
 import { UsageCard } from './panel/UsageCard'
-import type { Snapshot } from './types'
+import type { ProviderUsage, Snapshot } from './types'
 import { balanceOnly, creditRailText } from './creditAmount'
 
 /** `PanelMetrics.scale` — `PanelSize.standard` for now. */
@@ -153,6 +161,9 @@ export default function App() {
     onMenuChanged(setMenuOpen).then(keep).catch(() => undefined)
     onDragChanged(d => { setDragging(d); if(d) setCardId(null); else setLiquidPull(0) }).then(keep)
     onLiquidDrag(p => mounted.current && setLiquidPull(p)).then(keep).catch(() => undefined)
+    // A launch is a day of use, which is what the one request for a star counts
+    // — not days since it was installed.
+    noteStarActivity().catch(() => undefined)
 
     getSnapshot()
       .then((s) => mounted.current && setSnapshot(s))
@@ -250,18 +261,53 @@ export default function App() {
     [providers],
   )
 
+  // A split account draws one slot per model group, so the rail's slots and the
+  // snapshot's accounts are not the same list. Each slot keeps the account's
+  // figures — its own group's windows, its own icon and tint — so two rings for
+  // one account still read as one account.
+  const slots = useMemo(() => {
+    const out: { id: string; group: string | null; provider: ProviderUsage }[] = []
+    for (const provider of providers) {
+      const groups = modelGroups(provider.windows)
+      if (!splitsIntoGroups(preferences.splitAccounts.includes(provider.id), groups)) {
+        out.push({ id: provider.id, group: null, provider })
+        continue
+      }
+      for (const group of groupsShown(groups, preferences.shownModelGroups[provider.id])) {
+        out.push({ id: groupSlotId(provider.id, group), group, provider })
+      }
+    }
+    return out
+  }, [providers, preferences.splitAccounts, preferences.shownModelGroups])
+
+  /** The account a slot draws: a group slot narrows the account to that group. */
+  const accountOf = useCallback(
+    (slot: { group: string | null; provider: ProviderUsage }) =>
+      slot.group === null
+        ? slot.provider
+        : {
+            ...slot.provider,
+            name: `${slot.provider.name} · ${slot.group}`,
+            windows: slot.provider.windows.filter((w) => w.scope === slot.group),
+          },
+    [],
+  )
+
   const entries: RailEntry[] = useMemo(
     () =>
-      providers.map((p, index) => {
-        const appearance={...defaultAccountAppearance,...preferences.accountAppearance[p.id]}
-        const refreshing=refreshingIds.has(p.id)||refreshingIds.has('*')
-        const headline = headlineWindow(p, preferences.pinnedWindows[p.id])
-        const second = secondWindow(p, preferences.pinnedWindows[p.id])
+      slots.map((slot) => {
+        const p = accountOf(slot)
+        const account = slot.provider
+        const index = providers.indexOf(account)
+        const appearance={...defaultAccountAppearance,...preferences.accountAppearance[account.id]}
+        const refreshing=refreshingIds.has(account.id)||refreshingIds.has('*')
+        const headline = headlineWindow(p, preferences.pinnedWindows[slot.id])
+        const second = secondWindow(p, preferences.pinnedWindows[slot.id])
         const used = headline?.percentUsed
         const paceNow=Date.now()
         const hasReading = p.windows.length > 0 || (balanceOnly(p) && !p.error)
         return ({
-        id: p.id,
+        id: slot.id,
         title: p.error ? `${p.name} — ${p.error}` : p.name,
         usedFraction: used === null || used === undefined ? null : used / 100,
         elapsedFraction: p.stale || p.error ? null : quotaTimeFraction(headline,paceNow),
@@ -271,7 +317,7 @@ export default function App() {
         isSpent: headline?.isExhausted ?? false,
         windowClockFraction: preferences.showResetClock ? clockFraction(headline, now, preferences.clockRemaining) : null,
         isRefreshing: refreshing,
-        isBusy: activity.running.includes(p.id),
+        isBusy: activity.running.includes(account.id),
         // A provider with one limit draws one ring: an empty second ring reads
         // as a limit at zero, or as a fault.
         secondFraction: !preferences.showSecondRing ? null : second?.percentUsed == null ? null : second.percentUsed / 100,
@@ -284,28 +330,28 @@ export default function App() {
             persona={personaAt(appearance.persona,index)}
             body={appearance.body}
             gaze={edge}
-            isPointedAt={cardId===p.id}
+            isPointedAt={cardId===slot.id}
             isQuiet={quietSince(activity.lastWrite,now)}
             pointer={region===null?null:undefined}
-            finishedAt={activity.finishedAt[p.id]}
-            resetAt={resets[p.id]}
+            finishedAt={activity.finishedAt[account.id]}
+            resetAt={resets[account.id]}
             resetCelebrationAllowed={preferences.resetCelebration}
             mood={resolveMood({
-              isBusy: activity.running.includes(p.id),
+              isBusy: activity.running.includes(account.id),
               isRefreshing: refreshing,
               isSpent: windowIsSpent(headline),
               hasReading,
             })}
             colour={appearance.markColour ?? markColours[index] ?? markColours[0] ?? 'oklch(0.78 0.13 0deg)'}
           />
-        ) : <ProviderIcon provider={p.id} />,
+        ) : <ProviderIcon provider={account.id} />,
       })}),
-    [providers, refreshingIds, activity, resets, markColours, preferences.accountAppearance, preferences.warningThreshold, preferences.showSecondRing, preferences.resetCelebration, edge, cardId, region, preferences.pinnedWindows, preferences.showResetClock, preferences.clockRemaining, now],
+    [slots, accountOf, providers, refreshingIds, activity, resets, markColours, preferences.accountAppearance, preferences.warningThreshold, preferences.showSecondRing, preferences.resetCelebration, edge, cardId, region, preferences.pinnedWindows, preferences.showResetClock, preferences.clockRemaining, now],
   )
 
   // ---- geometry -----------------------------------------------------------
   const activeIndex = dragging ? -1 : entries.findIndex((e) => e.id === cardId)
-  const activeProvider = activeIndex >= 0 ? providers[activeIndex] : undefined
+  const activeProvider = activeIndex >= 0 && slots[activeIndex] ? accountOf(slots[activeIndex]) : undefined
   const detailed = !!(activeProvider && preferences.accountAppearance[activeProvider.id]?.detailedCard)
   const hasDetailed = providers.some(p=>preferences.accountAppearance[p.id]?.detailedCard)
   // Every length below is a budget taken from the original's layout constants.
@@ -489,7 +535,11 @@ export default function App() {
           openness={openness}
           highlightId={cardId}
           warningAt={preferences.warningThreshold}
-          onClick={handleRefresh}
+          onClick={(id) => {
+            // A split ring's id names a group; the account is what refreshes.
+            const slot = slots.find((s) => s.id === id)
+            void handleRefresh(slot ? slot.provider.id : id)
+          }}
           onDragStart={handleDragStart}
         />
       </div>

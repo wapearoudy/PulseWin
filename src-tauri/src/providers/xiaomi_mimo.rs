@@ -8,12 +8,13 @@
 //! Disk Access for Safari); PulseWin reads neither, so the `Cookie` header
 //! copied out of a signed-in request is the credential here instead.
 //!
-//! **The ring is the Coding Plan, not the balance.** The account carries two
-//! separate things: a monthly token allowance bought as a plan, and a prepaid
-//! cash balance for anything past it. Only the first has a denominator, so only
-//! the first is a ring — the balance rides along as money on the card. An
-//! account with no plan is not a fault; it is an account that buys tokens by
-//! the yuan, and it says so.
+//! **Two things live on one account, and which of them is the ring depends on
+//! what is there.** A monthly token allowance bought as a plan has a
+//! denominator, so it is the ring, and the prepaid cash balance rides along as
+//! money on the card. An account that buys tokens by the yuan has no plan and
+//! no denominator — its balance *is* the ring, drawn as money, with the
+//! reader's low-balance alert beside it. Only an account with neither a plan
+//! nor a balance says it has no plan.
 
 use std::sync::Arc;
 
@@ -160,38 +161,79 @@ async fn fetch_inner(ctx: Arc<Ctx>) -> ProviderUsage {
 
     let detail = detail.as_deref().ok();
     let usage = usage.as_deref().ok();
+    let balance = balance.as_deref().ok();
+    // The reader's own threshold, so the card and the alert say the same thing
+    // about the same figure. This account is the provider's own: an added
+    // account's threshold is that account's, and the reading is built by the
+    // layer that knows which account it is for.
+    let low_balance = crate::preferences::load()
+        .alerts
+        .low_balance
+        .get(ID)
+        .copied();
+    reading(detail, usage, balance, low_balance)
+}
 
-    let plan = match plan(detail, usage) {
-        Plan::Missing => return ProviderUsage::failed(ID, NAME, Reason::NoPlan.message()),
-        Plan::Unreadable => return ProviderUsage::failed(ID, NAME, Reason::Unreadable.message()),
+/// What the three bodies amount to, with the network left out of it.
+///
+/// **No plan is an answer, and money in the account is what the ring can
+/// then show.** The original's rule (`XiaomiMiMoUsageService.reading`): with no
+/// Coding Plan and a balance, the reading is live with `creditRemaining` set and
+/// no windows at all — a window with no denominator would draw a percentage
+/// nobody reported, while an empty window list plus money is how the rail draws
+/// money. Without a balance there is still nothing to draw, and the account says
+/// it has no plan.
+fn reading(
+    detail: Option<&str>,
+    usage: Option<&str>,
+    balance: Option<&str>,
+    low_balance: Option<f64>,
+) -> ProviderUsage {
+    let money_here = balance.and_then(|body| money(body).ok().flatten());
+
+    match plan(detail, usage) {
+        Plan::Missing => match money_here {
+            Some((amount, currency)) => {
+                ProviderUsage::ok(ID, NAME, Vec::new()).with_credit_remaining(amount, currency)
+            }
+            None => ProviderUsage::failed(ID, NAME, Reason::NoPlan.message()),
+        },
+        Plan::Unreadable => ProviderUsage::failed(ID, NAME, Reason::Unreadable.message()),
         Plan::Found {
             used,
             limit,
             period_end,
             code,
-        } => (used, limit, period_end, code),
-    };
+        } => {
+            let mut windows = vec![
+                UsageWindow::new("Monthly", Some(percent_from_fraction(used as f64 / limit as f64)))
+                    .with_reset(period_end),
+            ];
 
-    let mut windows = vec![
-        UsageWindow::new(
-            "Monthly",
-            Some(percent_from_fraction(plan.0 as f64 / plan.1 as f64)),
-        )
-        .with_reset(plan.2),
-    ];
+            // The prepaid balance as a line on the card: money, never a ring,
+            // because there is no allowance to compare it against. Without a
+            // plan it is the ring instead, above.
+            if let Some((amount, currency)) = money_here {
+                let mut line =
+                    super::balance_window("Balance", format!("{amount:.2} {currency}"));
+                if let Some(note) = low_balance_note(amount, low_balance) {
+                    line = line.with_detail(Some(note));
+                }
+                windows.push(line);
+            }
 
-    // The prepaid balance as a line on the card: money, never a ring, because
-    // there is no allowance to compare it against.
-    if let Some((amount, currency)) =
-        balance.as_deref().ok().and_then(|body| money(body).ok().flatten())
-    {
-        windows.push(super::balance_window(
-            "Balance",
-            format!("{amount:.2} {currency}"),
-        ));
+            ProviderUsage::ok(ID, NAME, windows).with_plan(code)
+        }
     }
+}
 
-    ProviderUsage::ok(ID, NAME, windows).with_plan(plan.3)
+/// The balance line's own note when the account is under the threshold the
+/// reader set. The alert is `alerts.rs`'s rule and reads the same preference;
+/// this is the card saying it too, in the same words' sense.
+fn low_balance_note(amount: f64, threshold: Option<f64>) -> Option<String> {
+    threshold
+        .filter(|threshold| amount < *threshold)
+        .map(|threshold| format!("below the low-balance alert of {threshold:.2}"))
 }
 
 /// One route's body, or why there is none.
@@ -503,5 +545,98 @@ mod tests {
 
         let none = json!({ "code": 0, "data": {} }).to_string();
         assert_eq!(money(&none).unwrap(), None);
+    }
+
+    /// Upstream 1.12.7: "A Xiaomi account with no Coding Plan shows its balance
+    /// in the ring". The ring *is* the money — no windows at all, because a
+    /// window with no denominator would be a percentage nobody reported.
+    #[test]
+    fn an_account_with_no_plan_and_a_balance_is_a_live_balance_reading() {
+        let usage = json!({ "code": 0, "data": { "monthUsage": { "items": [] } } }).to_string();
+        let balance =
+            json!({ "code": 0, "data": { "balance": "52.3", "currency": "CNY" } }).to_string();
+        let reading = reading(None, Some(&usage), Some(&balance), None);
+        assert!(
+            reading.error.is_none(),
+            "a balance with no plan is a reading, not a fault: {:?}",
+            reading.error
+        );
+        assert!(
+            reading.windows.is_empty(),
+            "money with nothing to compare it against is drawn by the rail, not as a percentage"
+        );
+        assert_eq!(
+            reading.credit_remaining.as_ref().map(|money| (money.amount, money.currency.as_str())),
+            Some((52.3, "CNY"))
+        );
+        assert!(reading.plan.is_none());
+    }
+
+    #[test]
+    fn an_account_with_no_plan_and_no_balance_still_says_there_is_no_plan() {
+        let usage = json!({ "code": 0, "data": { "monthUsage": { "items": [] } } }).to_string();
+        let reading = reading(None, Some(&usage), None, None);
+        assert!(reading.windows.is_empty());
+        assert!(reading.credit_remaining.is_none());
+        let expected = Reason::NoPlan.message();
+        assert_eq!(reading.error.as_deref(), Some(expected.as_str()));
+    }
+
+    /// "Beside a plan the balance stays a line on the card": the plan is the
+    /// ring, and the money is a row that has no percentage.
+    #[test]
+    fn beside_a_plan_the_balance_stays_a_line_on_the_card() {
+        let usage = json!({
+            "code": 0,
+            "data": { "monthUsage": { "items": [ { "used": 250, "limit": 1000 } ] } }
+        })
+        .to_string();
+        let balance =
+            json!({ "code": 0, "data": { "balance": "12.5", "currency": "CNY" } }).to_string();
+        let reading = reading(None, Some(&usage), Some(&balance), None);
+        assert!(reading.error.is_none());
+        assert!(
+            reading.credit_remaining.is_none(),
+            "a coding plan's balance is a line, not an API account's ring"
+        );
+        assert_eq!(reading.windows.len(), 2);
+        assert_eq!(reading.windows[0].percent_used, Some(25.0));
+        assert_eq!(reading.windows[1].kind, crate::model::WindowKind::Balance);
+        assert!(
+            !reading.windows[1]
+                .detail
+                .as_deref()
+                .unwrap_or_default()
+                .contains("low-balance"),
+            "no threshold is set, so the line carries no low-balance note"
+        );
+    }
+
+    /// The low-balance note is the reader's own threshold, read from the same
+    /// preference the alert reads, so the card and the notification agree.
+    #[test]
+    fn a_balance_under_the_readers_threshold_says_so_on_its_line() {
+        assert_eq!(
+            low_balance_note(5.0, Some(10.0)).as_deref(),
+            Some("below the low-balance alert of 10.00")
+        );
+        assert_eq!(
+            low_balance_note(10.0, Some(10.0)),
+            None,
+            "the alert fires below the threshold, not at it"
+        );
+        assert_eq!(low_balance_note(5.0, None), None);
+
+        let usage = json!({
+            "code": 0,
+            "data": { "monthUsage": { "items": [ { "used": 1, "limit": 10 } ] } }
+        })
+        .to_string();
+        let balance = json!({ "code": 0, "data": { "balance": "5", "currency": "CNY" } }).to_string();
+        let reading = reading(None, Some(&usage), Some(&balance), Some(10.0));
+        assert_eq!(
+            reading.windows[1].detail.as_deref(),
+            Some("below the low-balance alert of 10.00")
+        );
     }
 }

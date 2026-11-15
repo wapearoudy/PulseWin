@@ -14,7 +14,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{atomic::{AtomicBool, AtomicU64, Ordering}, Arc, Mutex, OnceLock};
 use std::time::{Duration, UNIX_EPOCH};
 
-const CACHE_VERSION: u32 = 3;
+// Version 4 adds the plan-vendor rates models.dev publishes for Command Code:
+// a table saved by version 3 cannot price `deepseek-v4.1-flash`, so it is only
+// reused when models.dev cannot be reached.
+const CACHE_VERSION: u32 = 4;
 const TRANSCRIPT_VERSION: u32 = 9;
 const MAX_LINE: usize = 8 * 1024 * 1024;
 const MAX_FILES: usize = 50_000;
@@ -260,6 +263,30 @@ pub fn cancel_card_reads() {
 fn card_agent(provider: &str) -> Option<&'static str> {
     match provider {"claude-code"=>Some("claude"),"codex"=>Some("codex"),"opencode-go"=>Some("opencode"),"cursor"=>Some("cursor"),"antigravity"=>Some("antigravity"),_=>None}
 }
+/// The agent stores a card's ledger is made of. Almost every card is one agent;
+/// Devin's is its own two stores plus Oh My Pi's `devin` slice, because a reply
+/// written under `omp --model devin/…` names `devin` as the provider that served
+/// it, and answers the card even where neither Devin client is installed
+/// (Pulse 1.13 `CardLedgers.provider.cardHistory`).
+fn card_sources(provider: &str) -> Option<Vec<&'static str>> {
+    match provider {
+        "devin" => Some(vec!["devin-cli", "devin-desktop", "omp"]),
+        _ => card_agent(provider).map(|agent| vec![agent]),
+    }
+}
+/// Whether a scanned record belongs to the card being read. Oh My Pi's records
+/// stay Oh My Pi's in Token Spend and keep their own price and counters; they
+/// answer Devin only when the transcript named `devin` as the provider. A record
+/// kept from a transcript that has since been deleted carries no provider and is
+/// not attributed, as the original's kept-history archive never answers a slice.
+fn card_record(provider: &str, record: &SpendRecord) -> bool {
+    if provider != "devin" { return true; }
+    match record.agent.as_str() {
+        "devin-cli" | "devin-desktop" => true,
+        "omp" => record.source_scope.as_deref() == Some("devin"),
+        _ => false,
+    }
+}
 #[derive(Serialize)] #[serde(rename_all="camelCase")]
 pub struct CardHistory {status:&'static str,snapshot:Option<SpendSnapshot>}
 /// One day of a console's own account ledger, in the shape the card uses.
@@ -285,7 +312,7 @@ pub async fn spend_card_history(provider:String) -> Result<CardHistory,String> {
     if !prefs.token_spend_enabled || !prefs.enabled_providers.contains(&provider) {
         return Ok(CardHistory{status:"disabled",snapshot:None});
     }
-    let Some(agent)=card_agent(&provider) else {return Ok(CardHistory{status:"unavailable",snapshot:None});};
+    let Some(sources)=card_sources(&provider) else {return Ok(CardHistory{status:"unavailable",snapshot:None});};
     let cancel=Arc::new(AtomicBool::new(false));
     if let Ok(mut reads)=CARD_READS.get_or_init(||Mutex::new(Vec::new())).lock() {
         reads.retain(|read|read.strong_count()>0);reads.push(Arc::downgrade(&cancel));
@@ -298,10 +325,20 @@ pub async fn spend_card_history(provider:String) -> Result<CardHistory,String> {
     let (prices,prices_at,pricing_status)=fetch_prices(&cache,&cancel).await;
     check(&cancel)?;
     let worker=cancel.clone();
+    let wanted=sources.clone();
     let mut snapshot=tokio::task::spawn_blocking(move||scan_roots(&cache,&prices,&worker,|_,_|{},|id|
-        if id==agent {roots(&home,id,|key|std::env::var(key).ok())}else{Vec::new()})).await.map_err(|_|"本机记录读取中断")??;
+        if wanted.iter().any(|agent|*agent==id) {roots(&home,id,|key|std::env::var(key).ok())}else{Vec::new()})).await.map_err(|_|"本机记录读取中断")??;
     check(&cancel)?;
-    snapshot.sources.retain(|source|source.id==agent);
+    snapshot.sources.retain(|source|sources.iter().any(|agent|*agent==source.id.as_str()));
+    snapshot.records.retain(|record|card_record(&provider,record));
+    // Each counted source reports what the card kept of it, and a source whose
+    // records all belong to another card is no longer a counted source.
+    let mut counts=BTreeMap::<String,usize>::new();
+    for record in &snapshot.records {*counts.entry(record.agent.clone()).or_insert(0)+=1;}
+    for source in &mut snapshot.sources {
+        source.records=counts.get(&source.id).copied().unwrap_or(0);
+        if source.records==0 && source.status=="counted" {source.status="no-data".into();}
+    }
     snapshot.prices_at=prices_at;snapshot.pricing_status=pricing_status;
     Ok(CardHistory{status:"ready",snapshot:Some(snapshot)})
 }
@@ -333,16 +370,30 @@ fn parse_prices(root: &Value) -> Prices {
             }
         } }
     }
-    // Plan-only models have no first-party listing. Keep reseller rates
-    // namespaced and reachable only from records of the corresponding plan.
-    for vendor in ["opencode-go", "kilo", "cline-pass"] {
-        if let Some(models) = root[vendor]["models"].as_object() { for (id, model) in models {
-            if let (Some(input), Some(output)) = (number(&model["cost"]["input"]), number(&model["cost"]["output"])) {
-                prices.insert(format!("{vendor}|{id}"), Price { input, output,
+    // Plan-only models have no first-party listing of their own, so their rates
+    // are kept namespaced and reachable only from records of that plan. Command
+    // Code is one of them: models.dev lists `deepseek-v4.1-flash` under the
+    // vendor, while its transcripts name the bare model id.
+    for vendor in ["opencode-go", "kilo", "cline-pass", "commandcode"] {
+        if let Some(models) = root[vendor]["models"].as_object() {
+            // Exact ids are read before `maker/model` ids, so a vendor's own
+            // `deepseek-v4.1-flash` outranks the bare spelling of its
+            // `deepseek/deepseek-v4.1-flash` when the two rates disagree.
+            let mut listed = models.iter().collect::<Vec<_>>();
+            listed.sort_by(|(a, _), (b, _)| (a.contains('/'), a.as_str()).cmp(&(b.contains('/'), b.as_str())));
+            for (id, model) in listed {
+                let (Some(input), Some(output)) = (number(&model["cost"]["input"]), number(&model["cost"]["output"])) else { continue };
+                let price = Price { input, output,
                     cache_read: number(&model["cost"]["cache_read"]), cache_write: number(&model["cost"]["cache_write"]),
-                    name: model["name"].as_str().map(str::to_owned), tiers:parse_tiers(&model["cost"]) });
+                    name: model["name"].as_str().map(str::to_owned), tiers: parse_tiers(&model["cost"]) };
+                for key in std::iter::once(id.as_str()).chain(id.rsplit('/').next().filter(|bare| *bare != id.as_str())) {
+                    // A vendor re-listing a model a first-party provider prices
+                    // must not shadow that provider's own rate.
+                    if prices.contains_key(key) { continue; }
+                    prices.entry(format!("{vendor}|{key}")).or_insert_with(|| price.clone());
+                }
             }
-        } }
+        }
     }
     prices
 }
@@ -395,7 +446,7 @@ fn price_for_agent<'a>(model: &str, agent: &str, prices: &'a Prices) -> Option<&
     // only the unnamed placeholder stays unpriced.
     if agent=="kimi" && model=="kimi (unnamed)" {return None;}
     price_for(model, prices).or_else(|| {
-        let vendor=match agent { "opencode"=>"opencode-go", "kilo"=>"kilo", _=>return None };
+        let vendor=match agent { "opencode"=>"opencode-go", "kilo"=>"kilo", "commandcode"=>"commandcode", _=>return None };
         price_for(&format!("{vendor}|{model}"), prices)
     })
 }
@@ -694,7 +745,8 @@ fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl
                     && (record.tally.total() > 0 || record.unclassified_tokens > 0)
                     && (*agent != "qwen" || record.deduplication_id.is_some())
                     && (*agent != "dsh" || (record.deduplication_id.is_some() && record.source_timestamp.is_some()))
-                    && (*agent != "cursor" || (record.source_timestamp.is_some() && record.source_scope.is_some()))));
+                    && (*agent != "cursor" || (record.source_timestamp.is_some() && record.source_scope.is_some()))
+                    && (*agent != "omp" || record.source_scope.is_some())));
             let records = if let Some(c) = cached { source.cached_files += 1; c.records } else {
                 let (records, notes) = match parse_file(file, agent, cancel) {
                     Ok(value) => value,
@@ -1485,5 +1537,104 @@ mod tests {
         for id in ["augment","mux","roocode"] { let source=second.sources.iter().find(|source|source.id==id).unwrap();
             assert_eq!(source.records, 1); assert_eq!(source.cached_files, 1); }
         assert_eq!(total(&second,"augment"), 12); assert_eq!(total(&second,"mux"), 150); assert_eq!(total(&second,"roocode"), 135);
+    }
+    /// The shape models.dev answers for Command Code: the plan's own ids, some
+    /// with the maker prefix that the store strips before naming a model.
+    fn command_code_catalogue() -> Value {
+        json!({
+            "deepseek": {"models": {"deepseek-v4-flash": {"cost": {"input": 0.27, "output": 1.1}}}},
+            "commandcode": {"models": {
+                "deepseek/deepseek-v4.1-flash": {"cost": {"input": 0.15, "output": 0.6, "cache_read": 0.003}},
+                "deepseek/deepseek-v4-flash": {"cost": {"input": 9.0, "output": 9.0}}
+            }}
+        })
+    }
+    #[test] fn command_code_models_take_the_rate_models_dev_lists_for_the_vendor() {
+        let prices = parse_prices(&command_code_catalogue());
+        let priced = price_for_agent("deepseek-v4.1-flash", "commandcode", &prices)
+            .unwrap_or_else(|| panic!("deepseek-v4.1-flash must be priced from models.dev"));
+        assert_eq!((priced.input, priced.output, priced.cache_read), (0.15, 0.6, Some(0.003)));
+        assert!(prices.contains_key("commandcode|deepseek-v4.1-flash"));
+        // The vendor rate answers only a Command Code record; the same id read
+        // from a store that is not that plan stays unpriced rather than borrowing it.
+        assert!(price_for("deepseek-v4.1-flash", &prices).is_none());
+        assert!(price_for_agent("deepseek-v4.1-flash", "opencode", &prices).is_none());
+        // A vendor re-listing a model a first-party provider prices cannot shadow it.
+        assert_eq!(price_for_agent("deepseek-v4-flash", "commandcode", &prices).unwrap().input, 0.27);
+    }
+    #[test] fn command_code_record_costs_the_models_dev_rate() {
+        let f = Fixture::new();
+        let file = f.dir.join("logs/.commandcode/projects/demo/s-1.jsonl");
+        fs::create_dir_all(file.parent().unwrap()).unwrap();
+        let rows = [json!({"type":"session","id":"cc-1"}),
+            json!({"type":"message","role":"assistant","id":"a1","model":"deepseek/deepseek-v4.1-flash",
+                "timestamp":"2026-10-02T12:00:00Z","usage":{"inputTokens":1000,"outputTokens":500,"cacheReadTokens":2000}})];
+        fs::write(&file, rows.iter().map(Value::to_string).collect::<Vec<_>>().join("\n")).unwrap();
+        let prices = parse_prices(&command_code_catalogue());
+        let scan = || scan_roots(&f.dir.join("cache"), &prices, &AtomicBool::new(false), |_, _| {}, |id|
+            if id == "commandcode" { vec![f.dir.join("logs/.commandcode/projects")] } else { Vec::new() }).unwrap();
+        let first = scan();
+        assert_eq!(first.records.len(), 1);
+        let record = &first.records[0];
+        assert_eq!(record.model, "deepseek-v4.1-flash");
+        let breakdown = record.cost_breakdown.unwrap();
+        assert!((breakdown[0] - 0.00015).abs() < 1e-12, "{breakdown:?}");
+        assert!((breakdown[3] - 0.000006).abs() < 1e-12, "{breakdown:?}");
+        assert!((record.cost.unwrap() - 0.000456).abs() < 1e-12);
+        // The saved transcript cache keeps the same priced record on a rescan.
+        let second = scan();
+        assert_eq!(second.records.len(), 1);
+        assert!((second.records[0].cost.unwrap() - 0.000456).abs() < 1e-12);
+    }
+    #[test] fn devin_card_slices_are_its_two_stores_plus_oh_my_pis_devin_replies() {
+        assert_eq!(card_sources("devin"), Some(vec!["devin-cli", "devin-desktop", "omp"]));
+        assert_eq!(card_sources("claude-code"), Some(vec!["claude"]));
+        assert!(card_sources("pulsewin-unlisted-fixture").is_none());
+        let made = |agent: &str, scope: Option<&str>| {
+            let mut record = super::measured_readers::record(agent, "m".into(), Utc::now(), "s".into(), Tally::default(), 0, Some(format!("{agent}:1")));
+            record.source_scope = scope.map(str::to_owned);
+            record
+        };
+        assert!(card_record("devin", &made("devin-cli", None)));
+        assert!(card_record("devin", &made("devin-desktop", None)));
+        assert!(card_record("devin", &made("omp", Some("devin"))));
+        assert!(!card_record("devin", &made("omp", Some("openai"))));
+        assert!(!card_record("devin", &made("omp", None)), "a record kept from a deleted transcript names no provider");
+        assert!(!card_record("devin", &made("pi", Some("devin"))), "only the Oh My Pi slice answers Devin");
+    }
+    #[test] fn devin_card_adds_oh_my_pi_replies_that_devin_served_once() {
+        let f = Fixture::new();
+        let sessions = f.dir.join("logs/omp/agent/sessions");
+        fs::create_dir_all(&sessions).unwrap();
+        let reply = |id: &str, provider: Option<&str>, input: u64| {
+            let mut row = json!({"type":"message","id":id,"timestamp":"2026-10-02T12:00:00Z",
+                "message":{"role":"assistant","model":"claude-sonnet-4","usage":{"input":input,"output":0}}});
+            if let Some(provider) = provider { row["message"]["provider"] = json!(provider); }
+            row
+        };
+        let rows = [json!({"type":"session","id":"omp-1"}), reply("m1", Some("devin"), 100),
+            reply("m2", Some("openai"), 500), reply("m3", None, 40)];
+        fs::write(sessions.join("2026-10-02.jsonl"), rows.iter().map(Value::to_string).collect::<Vec<_>>().join("\n")).unwrap();
+        let scan = || scan_roots(&f.dir.join("cache"), &Prices::new(), &AtomicBool::new(false), |_, _| {}, |id|
+            if id == "omp" { vec![sessions.clone()] } else { Vec::new() }).unwrap();
+        // Token Spend counts all three replies once, each keeping the provider it named.
+        let first = scan();
+        assert_eq!(first.records.len(), 3);
+        let slice = |snapshot: &SpendSnapshot, scope: &str| snapshot.records.iter()
+            .filter(|record| record.source_scope.as_deref() == Some(scope)).map(|record| record.tally.total()).sum::<u64>();
+        assert_eq!(slice(&first, "devin"), 100);
+        assert_eq!(slice(&first, "openai"), 500);
+        // A reply naming no provider is Oh My Pi's own, not Devin's.
+        assert_eq!(slice(&first, "omp"), 40);
+        let card = |snapshot: &SpendSnapshot| snapshot.records.iter()
+            .filter(|record| card_record("devin", record)).map(|record| record.tally.total()).sum::<u64>();
+        assert_eq!(card(&first), 100);
+        // A rescan reads the transcript cache and reconciles the same identities,
+        // so the reply Devin served is still counted once and only once.
+        let second = scan();
+        assert_eq!(second.records.len(), 3);
+        assert_eq!(card(&second), 100);
+        assert_eq!(slice(&second, "devin"), 100);
+        assert_eq!(second.sources.iter().find(|source| source.id == "omp").unwrap().cached_files, 1);
     }
 }

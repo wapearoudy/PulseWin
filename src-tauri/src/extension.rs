@@ -48,6 +48,13 @@ pub struct Extension {
     pub executable: PathBuf,
     /// How long a run may take before it is stopped.
     pub timeout: Duration,
+    /// The PNG the manifest names, already checked, or `None` for the default
+    /// glyph.
+    ///
+    /// **The bytes are captured here, at the scan, not read when the icon is
+    /// drawn**, so an icon replaced under the same name is a different value on
+    /// the next scan instead of one the picture never notices.
+    pub icon: Option<Vec<u8>>,
 }
 
 /// The provider name an extension's account id is built from.
@@ -151,6 +158,22 @@ impl ExtensionCatalog {
     /// how late every other ring can be.
     pub fn timeout_range() -> std::ops::RangeInclusive<f64> {
         1.0..=60.0
+    }
+
+    /// The most an icon file may be, in bytes.
+    ///
+    /// **A budget, not a preference.** The icon travels to the frontend with
+    /// every scan, so what a folder may hand over is bounded the same way the
+    /// program's own output is.
+    pub fn icon_byte_ceiling() -> u64 {
+        256 * 1024
+    }
+
+    /// The largest a drawn icon may be, in pixels on either side. An icon is
+    /// shown in a ring centre no wider than the panel, so the ceiling keeps a
+    /// photograph from being read as one.
+    pub fn icon_dimension_ceiling() -> u32 {
+        1024
     }
 
     /// Letters, digits and `.-_`, lowercase, starting with a letter or digit.
@@ -273,9 +296,10 @@ impl ExtensionCatalog {
         Ok(Extension {
             id: manifest.id,
             name: clip(name, 60),
-            directory: root,
+            directory: root.clone(),
             executable,
             timeout: timeout(manifest.timeout_seconds),
+            icon: icon_data(manifest.icon.as_ref().and_then(|icon| icon.value.as_deref()), &root),
         })
     }
 }
@@ -292,6 +316,33 @@ struct Manifest {
     executable: String,
     #[serde(default)]
     timeout_seconds: Option<f64>,
+    /// Presentation only, so it is read through [`IconPath`]: a wrong type here
+    /// must not turn away a program that runs.
+    #[serde(default)]
+    icon: Option<IconPath>,
+}
+
+/// The manifest's `icon`, whatever it turned out to be.
+///
+/// **An optional presentation field must not disable a working program when its
+/// value has the wrong type.** `"icon": 42`, `true`, an array or an object all
+/// read as "no icon", which is the answer the original's
+/// `try? …decode(String.self)` gives; only a string is a path.
+#[derive(Debug, Clone, Default, PartialEq)]
+struct IconPath {
+    value: Option<String>,
+}
+
+impl<'de> Deserialize<'de> for IconPath {
+    fn deserialize<D: serde::Deserializer<'de>>(decoder: D) -> Result<Self, D::Error> {
+        // Decoding to a `Value` first cannot fail for well-formed JSON, and the
+        // document as a whole is still held to `Manifest`'s types.
+        let value = Value::deserialize(decoder).ok().and_then(|value| match value {
+            Value::String(text) => Some(text),
+            _ => None,
+        });
+        Ok(Self { value })
+    }
 }
 
 /// What a scan found: the extensions that can be used, and why each folder that
@@ -410,6 +461,77 @@ fn lexical(path: &Path) -> PathBuf {
         }
     }
     out
+}
+
+/// Read a bounded local PNG during discovery, never during drawing. An
+/// unavailable or invalid icon leaves the program and its readings intact.
+///
+/// **The folder is the boundary.** A path that is absolute, or that `..` or a
+/// link would take outside the extension's own folder, is refused before any
+/// file is opened; what is left has to be a regular file of a sane size that
+/// really is a PNG. Anything else is `None`, which draws the default glyph —
+/// the same answer as a manifest that names no icon at all.
+fn icon_data(stated: Option<&str>, root: &Path) -> Option<Vec<u8>> {
+    let stated = stated.filter(|path| !path.is_empty())?;
+    // Absolute first, so a manifest cannot name a file outside its folder at
+    // all — `/tmp/x.png` on Windows would otherwise be joined and read as one.
+    if stated.starts_with('/') || stated.starts_with('\\') || Path::new(stated).is_absolute() {
+        return None;
+    }
+    let shown = std::fs::canonicalize(lexical(&root.join(stated))).ok()?;
+    if shown == root || !shown.starts_with(root) {
+        return None;
+    }
+    let metadata = std::fs::metadata(&shown).ok()?;
+    if !metadata.is_file() {
+        return None;
+    }
+    let ceiling = ExtensionCatalog::icon_byte_ceiling();
+    if metadata.len() == 0 || metadata.len() > ceiling {
+        return None;
+    }
+    // Read through the ceiling rather than after the fact: a file that grew
+    // between the two calls is still not read past the budget.
+    let bytes = std::fs::read(&shown).ok()?;
+    if bytes.is_empty() || bytes.len() as u64 > ceiling {
+        return None;
+    }
+    png_icon(&bytes).then_some(bytes)
+}
+
+/// The checks the original gets from `CGImageSource`: the bytes are a PNG, not
+/// an animation, small enough to draw, and they decode.
+///
+/// **The signature decides, not the file name** — `CGImageSourceGetType` asks
+/// the content the same way, so an icon named `.png` that is a JPEG is refused
+/// and one named `.dat` that is a PNG is accepted.
+fn png_icon(bytes: &[u8]) -> bool {
+    const SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+    if !bytes.starts_with(&SIGNATURE) {
+        return false;
+    }
+    let ceiling = ExtensionCatalog::icon_dimension_ceiling();
+    let mut decoder = png::Decoder::new(std::io::Cursor::new(bytes));
+    decoder.set_transformations(png::Transformations::IDENTITY);
+    // Bounded as well, so a header claiming a huge image cannot make the check
+    // itself the expensive part: the largest drawing allowed is 1024 × 1024 at
+    // 16 bits per channel and four channels, plus room for its ancillary data.
+    decoder.set_limits(png::Limits { bytes: (ceiling as usize) * (ceiling as usize) * 8 + 64 * 1024 });
+    let Ok(mut reader) = decoder.read_info() else { return false };
+    let (width, height) = {
+        let info = reader.info();
+        (info.width, info.height)
+    };
+    if width == 0 || height == 0 || width > ceiling || height > ceiling {
+        return false;
+    }
+    // `CGImageSourceGetCount` is 1: an animated PNG is more than the one image
+    // an icon slot can draw.
+    if reader.info().animation_control().is_some() {
+        return false;
+    }
+    let mut pixels = vec![0; reader.output_buffer_size()];
+    reader.next_frame(&mut pixels).is_ok()
 }
 
 fn timeout(stated: Option<f64>) -> Duration {
@@ -768,6 +890,17 @@ fn stated(text: &str) -> String {
 // Settings view
 // ---------------------------------------------------------------------------
 
+/// A PNG icon as a browser-ready data URL.
+///
+/// **Base64, not a file path.** The webview has no business opening a file in
+/// the extensions folder — the folder is a program's own, and a path there would
+/// be a second way in that Rust no longer checks. The bytes it already checked
+/// travel with the scan instead.
+fn icon_data_url(bytes: &[u8]) -> String {
+    use base64::Engine;
+    format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes))
+}
+
 /// What the Settings pane draws: the folder to look in, what was found, and why
 /// the rest was turned away.
 #[derive(Debug, Clone, Serialize)]
@@ -788,6 +921,10 @@ pub struct ExtensionView {
     pub timeout_seconds: f64,
     /// The id the rest of the app files this extension's account under.
     pub account_id: String,
+    /// Its own PNG as a data URL, drawn in its original colour; `None` means the
+    /// default glyph. Carried rather than re-read by the frontend, because only
+    /// this side can check the file is inside the folder and really is a PNG.
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -811,6 +948,7 @@ impl Scan {
                     executable: extension.executable.display().to_string(),
                     timeout_seconds: extension.timeout.as_secs_f64(),
                     account_id: extension.account_id(),
+                    icon: extension.icon.as_deref().map(icon_data_url),
                 })
                 .collect(),
             problems: self
@@ -1359,5 +1497,274 @@ mod tests {
             "u".repeat(40)
         ));
         assert_eq!(usage.metrics[0].unit.as_deref().unwrap().chars().count(), 16);
+    }
+
+    // --- icons -------------------------------------------------------------
+    //
+    // The original's `ExtensionIconCatalogTests.swift`, case for case: an icon
+    // is a presentation field, so every test here also proves the program still
+    // loads and runs when the icon is refused.
+
+    /// Bytes written where the manifest will look for them.
+    fn write_blob(directory: &Path, name: &str, bytes: &[u8]) {
+        fs::create_dir_all(directory).unwrap();
+        fs::write(directory.join(name), bytes).unwrap();
+    }
+
+    /// A manifest naming `icon` verbatim, so a test can hand in a string, a
+    /// number, or something else entirely.
+    fn manifest_naming_icon(id: &str, icon: &str) -> String {
+        format!(r#"{{"schemaVersion":1,"id":"{id}","name":"Icon","executable":"{RUN}","icon":{icon}}}"#)
+    }
+
+    fn encode_rgba(width: u32, height: u32, pixels: &[u8]) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut bytes, width, height);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            let mut writer = encoder.write_header().unwrap();
+            writer.write_image_data(pixels).unwrap();
+        }
+        bytes
+    }
+
+    /// A real PNG of one flat colour, encoded the way a drawing program would.
+    fn png(width: u32, height: u32, rgba: [u8; 4]) -> Vec<u8> {
+        let pixels: Vec<u8> = rgba.iter().copied().cycle().take(width as usize * height as usize * 4).collect();
+        encode_rgba(width, height, &pixels)
+    }
+
+    /// A PNG whose pixels repeat nowhere, so it cannot compress away.
+    fn noisy_png(width: u32, height: u32) -> Vec<u8> {
+        let mut seed: u32 = 0x9e37_79b9;
+        let mut pixels = Vec::with_capacity(width as usize * height as usize * 4);
+        for _ in 0..(width as usize * height as usize) {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            pixels.extend_from_slice(&[(seed >> 8) as u8, (seed >> 16) as u8, (seed >> 24) as u8, 255]);
+        }
+        encode_rgba(width, height, &pixels)
+    }
+
+    /// An animated PNG: one format, but two images where an icon slot draws one.
+    fn animated_png() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut bytes, 2, 2);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder.set_animated(2, 0).unwrap();
+            let mut writer = encoder.write_header().unwrap();
+            let frame = [255u8, 0, 0, 255].repeat(4);
+            writer.write_image_data(&frame).unwrap();
+            writer.write_image_data(&frame).unwrap();
+        }
+        bytes
+    }
+
+    #[test]
+    fn an_icon_named_by_the_manifest_travels_with_the_extension() {
+        let sandbox = Sandbox::new("icon-travels");
+        let bytes = png(8, 8, [255, 0, 0, 255]);
+        let directory =
+            sandbox.add("acme", Some(&manifest_naming_icon("acme", r#""icon.png""#)), Some("#!/bin/sh\n"));
+        write_blob(&directory, "icon.png", &bytes);
+
+        let scan = ExtensionCatalog::scan_in(&sandbox.root);
+        assert_eq!(scan.problems, vec![]);
+        assert_eq!(scan.extensions[0].icon.as_deref(), Some(bytes.as_slice()));
+
+        // The webview is handed the bytes it draws, never a path into a
+        // program's own folder.
+        let view = scan.view(&sandbox.root);
+        let rendered = view.extensions[0].icon.as_deref().expect("an icon the webview can draw");
+        use base64::Engine;
+        let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+        assert_eq!(rendered, format!("data:image/png;base64,{encoded}"));
+        sandbox.remove();
+    }
+
+    #[test]
+    fn an_extension_without_an_icon_draws_the_default_glyph() {
+        let sandbox = Sandbox::new("icon-absent");
+        sandbox.add("acme", Some(&manifest("acme", "Acme")), Some("#!/bin/sh\n"));
+
+        let scan = ExtensionCatalog::scan_in(&sandbox.root);
+        assert_eq!(scan.problems, vec![]);
+        assert!(scan.extensions[0].icon.is_none());
+        assert!(scan.view(&sandbox.root).extensions[0].icon.is_none());
+        sandbox.remove();
+    }
+
+    #[test]
+    fn an_icon_of_another_type_does_not_turn_the_program_away() {
+        let sandbox = Sandbox::new("icon-types");
+        // Everything a presentation field can be that is not a path.
+        let values = ["42", "true", "null", r#"["icon.png"]"#, r#"{"path":"icon.png"}"#, r#""""#, r#""   ""#];
+        for (index, value) in values.iter().enumerate() {
+            let folder = format!("t{index}");
+            let directory = sandbox.add(&folder, Some(&manifest_naming_icon(&folder, value)), Some("#!/bin/sh\n"));
+            write_blob(&directory, "icon.png", &png(4, 4, [0, 0, 255, 255]));
+        }
+
+        let scan = ExtensionCatalog::scan_in(&sandbox.root);
+        assert_eq!(scan.problems, vec![], "a presentation field never stops a program");
+        assert_eq!(scan.extensions.len(), values.len());
+        assert!(scan.extensions.iter().all(|extension| extension.icon.is_none()));
+        sandbox.remove();
+    }
+
+    #[test]
+    fn an_icon_has_to_stay_inside_its_own_folder() {
+        let sandbox = Sandbox::new("icon-escape");
+        // A real PNG beside the folders: only the path check keeps it out.
+        write_blob(&sandbox.root, "art.png", &png(4, 4, [0, 255, 0, 255]));
+        let cases = [
+            ("escape", r#""../art.png""#),
+            ("deeper", r#""../../art.png""#),
+            ("posix", r#""/art.png""#),
+            ("backslash", r#""\\art.png""#),
+            ("absent", r#""absent.png""#),
+            ("a-folder", r#""sub""#),
+        ];
+        for (folder, icon) in cases {
+            let directory = sandbox.add(folder, Some(&manifest_naming_icon(folder, icon)), Some("#!/bin/sh\n"));
+            if folder == "a-folder" {
+                fs::create_dir_all(directory.join("sub")).unwrap();
+            }
+            assert!(
+                ExtensionCatalog::load(&directory).unwrap().icon.is_none(),
+                "{folder} must draw the default glyph"
+            );
+        }
+
+        // A `..` that stays inside is folded, as the original's
+        // `standardizedFileURL` folds it, and the icon is used.
+        let dotted = sandbox.add(
+            "kept-dotted",
+            Some(&manifest_naming_icon("kept-dotted", r#""draw/../icon.png""#)),
+            Some("#!/bin/sh\n"),
+        );
+        write_blob(&dotted, "icon.png", &png(4, 4, [9, 9, 9, 255]));
+        assert!(
+            ExtensionCatalog::load(&dotted).unwrap().icon.is_some(),
+            "a `..` that stays inside the folder is not an escape"
+        );
+
+        // A subfolder of the extension's own folder is inside it.
+        let nested = sandbox.add(
+            "nested-art",
+            Some(&manifest_naming_icon("nested-art", r#""draw/icon.png""#)),
+            Some("#!/bin/sh\n"),
+        );
+        write_blob(&nested.join("draw"), "icon.png", &png(4, 4, [7, 7, 7, 255]));
+        assert!(ExtensionCatalog::load(&nested).unwrap().icon.is_some());
+        sandbox.remove();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_link_to_an_icon_outside_the_folder_is_refused() {
+        let sandbox = Sandbox::new("icon-symlink");
+        write_blob(&sandbox.root, "art.png", &png(4, 4, [1, 2, 3, 255]));
+        let directory =
+            sandbox.add("linked", Some(&manifest_naming_icon("linked", r#""icon.png""#)), Some("#!/bin/sh\n"));
+        std::os::unix::fs::symlink(sandbox.root.join("art.png"), directory.join("icon.png")).unwrap();
+
+        assert!(ExtensionCatalog::load(&directory).unwrap().icon.is_none());
+        sandbox.remove();
+    }
+
+    #[test]
+    fn a_file_that_is_not_a_png_is_no_icon() {
+        let sandbox = Sandbox::new("icon-not-png");
+        let good = png(6, 6, [10, 20, 30, 255]);
+        let mut smashed = good.clone();
+        for index in 33..smashed.len().saturating_sub(12) {
+            smashed[index] ^= 0xff;
+        }
+        let cases: [(&str, Vec<u8>); 7] = [
+            ("svg", br#"<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>"#.to_vec()),
+            ("jpeg", vec![0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, b'J', b'F', b'I', b'F', 0x00]),
+            ("signature", good[..8].to_vec()),
+            ("half", good[..good.len() / 2].to_vec()),
+            ("smashed", smashed),
+            ("empty", Vec::new()),
+            ("apng", animated_png()),
+        ];
+        for (folder, bytes) in cases {
+            let directory =
+                sandbox.add(folder, Some(&manifest_naming_icon(folder, r#""icon.png""#)), Some("#!/bin/sh\n"));
+            write_blob(&directory, "icon.png", &bytes);
+            assert!(
+                ExtensionCatalog::load(&directory).unwrap().icon.is_none(),
+                "{folder} must draw the default glyph"
+            );
+        }
+
+        // Content decides, not the file name: PNG bytes under any name are an
+        // icon, as `CGImageSourceGetType` asks the content.
+        let directory = sandbox.add(
+            "named-dat",
+            Some(&manifest_naming_icon("named-dat", r#""art.dat""#)),
+            Some("#!/bin/sh\n"),
+        );
+        write_blob(&directory, "art.dat", &good);
+        assert_eq!(ExtensionCatalog::load(&directory).unwrap().icon.as_deref(), Some(good.as_slice()));
+        sandbox.remove();
+    }
+
+    #[test]
+    fn a_png_past_a_ceiling_is_no_icon() {
+        let sandbox = Sandbox::new("icon-ceilings");
+        assert_eq!(ExtensionCatalog::icon_byte_ceiling(), 256 * 1024);
+        assert_eq!(ExtensionCatalog::icon_dimension_ceiling(), 1024);
+
+        let heavy = noisy_png(512, 512);
+        assert!(
+            heavy.len() as u64 > ExtensionCatalog::icon_byte_ceiling(),
+            "the fixture has to be past the byte ceiling"
+        );
+        let directory = sandbox.add("heavy", Some(&manifest_naming_icon("heavy", r#""icon.png""#)), Some("#!/bin/sh\n"));
+        write_blob(&directory, "icon.png", &heavy);
+        assert!(ExtensionCatalog::load(&directory).unwrap().icon.is_none());
+
+        // A tiny file, but a drawing wider than the one image slot: the width
+        // alone has to be what turns it away.
+        let wide = png(1025, 1, [1, 2, 3, 255]);
+        assert!(wide.len() as u64 <= ExtensionCatalog::icon_byte_ceiling());
+        let directory = sandbox.add("wide", Some(&manifest_naming_icon("wide", r#""icon.png""#)), Some("#!/bin/sh\n"));
+        write_blob(&directory, "icon.png", &wide);
+        assert!(ExtensionCatalog::load(&directory).unwrap().icon.is_none());
+
+        // The ceiling is inclusive: the largest drawing allowed is still drawn.
+        let largest = png(1024, 1024, [0, 0, 0, 255]);
+        let directory =
+            sandbox.add("largest", Some(&manifest_naming_icon("largest", r#""icon.png""#)), Some("#!/bin/sh\n"));
+        write_blob(&directory, "icon.png", &largest);
+        assert!(ExtensionCatalog::load(&directory).unwrap().icon.is_some());
+        sandbox.remove();
+    }
+
+    #[test]
+    fn an_icon_replaced_in_place_is_a_new_value_on_the_next_scan() {
+        let sandbox = Sandbox::new("icon-replaced");
+        let directory =
+            sandbox.add("acme", Some(&manifest_naming_icon("acme", r#""icon.png""#)), Some("#!/bin/sh\n"));
+        let red = png(8, 8, [255, 0, 0, 255]);
+        write_blob(&directory, "icon.png", &red);
+        let first = ExtensionCatalog::scan_in(&sandbox.root).extensions[0].icon.clone();
+        assert_eq!(first.as_deref(), Some(red.as_slice()));
+
+        let blue = png(8, 8, [0, 0, 255, 255]);
+        write_blob(&directory, "icon.png", &blue);
+        let second = ExtensionCatalog::scan_in(&sandbox.root).extensions[0].icon.clone();
+        // Captured bytes, not a path: the same name now carries other artwork,
+        // so a drawing layer holding the old bytes can tell that it changed.
+        assert_eq!(second.as_deref(), Some(blue.as_slice()));
+        assert_ne!(first, second);
+        sandbox.remove();
     }
 }

@@ -30,8 +30,7 @@ html.settings-view,html.settings-view body {background:#f5f5f7;color:#242428;ove
 @media(max-width:800px){.settings-shell{grid-template-columns:190px minmax(0,1fr)}.settings-content{padding:24px 20px}.setting-row{gap:12px}}
 @media(prefers-color-scheme:dark){html.settings-view,html.settings-view body{color-scheme:dark;background:#252527;color:#eeeef0}.settings-sidebar{background:#202022;border-color:#3b3b40}.settings-content{background:#29292c}.settings-group{background:#343437;border-color:#424247}.settings-shell button,.setting-control select,.setting-control input:not([type=checkbox]),.settings-sidebar input{background:#424247;color:#eeeef0;border-color:#55555b}.setting-row+.setting-row,.group-actions,.settings-group details{border-color:#45454a}.setting-row small,.page-description,.group-wrap h2,.group-copy,.group-actions,.settings-group details{color:#a7a7b0}.chooser-actions{background:#29292cf5}.empty-banner{background:#203450}.settings-alert{background:#493127;color:#ffd0b5}.connection-error{color:#ffbe9b}}
 
-.bot-preview { display:flex; align-items:center; gap:18px; padding:20px; color:var(--muted); font-size:12px }
-.bot-preview .botmark { width:76px; height:76px; flex:none }
+.bot-preview { display:flex; align-items:center; gap:18px; padding:20px; color:var(--muted); font-size:12px }.bot-preview .botmark { width:76px; height:76px; flex:none }
 .setting-control input[type=color] { width:36px; height:28px; padding:2px; border-radius:7px; cursor:pointer }
 .balance-input { display:flex; align-items:center; gap:8px; min-width:0 }
 .balance-input input[type=number] { width:115px }
@@ -49,3 +48,16 @@ html.settings-view,html.settings-view body {background:#f5f5f7;color:#242428;ove
 .settings-page-title{font-size:13px;font-weight:600;letter-spacing:0;margin:0}
 .settings-content>h1{display:none}
 @media(prefers-color-scheme:dark){.settings-titlebar{background:#262628f2;border-bottom-color:#3a3a3e}.settings-history button{color:#c7c7cc}.settings-history button:hover:not(:disabled){background:#ffffff14}}
+
+/* The one request for a star: a banner, never a window or a notification. */
+.star-banner{display:flex;align-items:center;gap:12px;background:#fdf3d7;border:1px solid #e8d9a8;color:#6b5416;padding:12px 15px;border-radius:8px;margin-bottom:18px}
+.star-banner div{display:flex;flex-direction:column;gap:2px;flex:1 1 auto;min-width:0}
+.star-banner small{color:#8a7430}
+.star-banner button{border:1px solid #d8c58d;background:#fffdf4;color:#6b5416;border-radius:6px;padding:5px 11px;cursor:pointer;font:inherit;font-size:12px}
+.star-banner button:last-child{border:0;background:transparent;font-size:15px;line-height:1;padding:4px 6px;color:#8a7430}
+@media(prefers-color-scheme:dark){.star-banner{background:#3b3320;border-color:#55492a;color:#f0dfae}.star-banner small{color:#c9b478}.star-banner button{border-color:#6a5a33;background:#4a4026;color:#f0dfae}.star-banner button:last-child{color:#c9b478}}
+/* A small symbol in front of a settings group title, as the original has. */
+.group-wrap h2{display:flex;align-items:center;gap:7px}
+.group-symbol{display:inline-flex;align-items:center;color:#8a8a90}
+.group-symbol svg{width:14px;height:14px}
+@media(prefers-color-scheme:dark){.group-symbol{color:#9a9aa2}}

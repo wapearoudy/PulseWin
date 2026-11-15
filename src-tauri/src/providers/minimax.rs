@@ -42,47 +42,55 @@ const PATHS: &[&str] = &[
     "/v1/api/openplatform/coding_plan/remains",
 ];
 
-pub struct MiniMax;
+/// The live provider id, and the id the mainland storefront used to have.
+///
+/// They are one service with two sites now: `minimax-cn` is folded into a site
+/// setting, so `RETIRED_ID` survives only to find a key saved under the old
+/// name and the settings that went with it.
+pub const ID: &str = "minimax";
+pub const RETIRED_ID: &str = "minimax-cn";
+pub const NAME: &str = "MiniMax";
 
-pub struct MiniMaxCn;
+pub struct MiniMax;
 
 impl Provider for MiniMax {
     fn id(&self) -> &'static str {
-        "minimax"
+        ID
     }
 
     fn name(&self) -> &'static str {
-        "MiniMax"
+        NAME
     }
 
-    /// The key the fetch reads, and nothing else.
+    /// The key the fetch reads — under either name, because a key saved before
+    /// the fold is still a key this provider owns.
     fn is_configured(&self) -> bool {
-        super::provider_key(self.id()).is_some()
+        super::provider_key(ID).is_some() || super::provider_key(RETIRED_ID).is_some()
     }
 
     fn fetch(&self, ctx: Arc<Ctx>) -> FetchFuture {
-        Box::pin(async move { fetch_inner(ctx, "minimax", "MiniMax", INTERNATIONAL_HOST).await })
+        Box::pin(async move {
+            let site = crate::preferences::load().minimax_site;
+            let Some((key, host)) = credential(&site) else {
+                return ProviderUsage::failed(ID, NAME, super::missing_key(ID, ""));
+            };
+            fetch_inner(ctx, key, host).await
+        })
     }
 }
 
-impl Provider for MiniMaxCn {
-    fn id(&self) -> &'static str {
-        "minimax-cn"
+/// The key to ask with, and the storefront it belongs to.
+///
+/// **The site is the setting; the key is evidence.** A preference saying
+/// "international" while the only key on disk lives in the mainland file is an
+/// account that never picked a site — the key decides which storefront can
+/// answer, and asking the other one would report a refusal as a broken account.
+fn credential(site: &str) -> Option<(String, &'static str)> {
+    if let Some(key) = super::provider_key(ID) {
+        let host = if site == "china" { MAINLAND_HOST } else { INTERNATIONAL_HOST };
+        return Some((key, host));
     }
-
-    fn name(&self) -> &'static str {
-        "MiniMax CN"
-    }
-
-    /// The key the fetch reads. A key for one platform is refused by the other,
-    /// so the two are separate credentials and each is asked about separately.
-    fn is_configured(&self) -> bool {
-        super::provider_key(self.id()).is_some()
-    }
-
-    fn fetch(&self, ctx: Arc<Ctx>) -> FetchFuture {
-        Box::pin(async move { fetch_inner(ctx, "minimax-cn", "MiniMax CN", MAINLAND_HOST).await })
-    }
+    super::provider_key(RETIRED_ID).map(|key| (key, MAINLAND_HOST))
 }
 
 enum Attempt {
@@ -91,11 +99,9 @@ enum Attempt {
     Failed(String),
 }
 
-async fn fetch_inner(ctx: Arc<Ctx>, id: &'static str, name: &'static str, host: &str) -> ProviderUsage {
-    let key = match super::provider_key(id) {
-        Some(key) => key,
-        None => return ProviderUsage::failed(id, name, super::missing_key(id, "")),
-    };
+async fn fetch_inner(ctx: Arc<Ctx>, key: String, host: &str) -> ProviderUsage {
+    let id = ID;
+    let name = NAME;
 
     // **Both paths are tried on any failure**, which is what the reference
     // does — an account on the older plan answers 401 on the current path, not

@@ -16,6 +16,10 @@ export type PanelEdgeName = 'left' | 'right' | 'top' | 'bottom'
 
 /** Settings' "Send test notification" button; mirrors `send_test_notification`. */
 export const sendTestNotification = () => invoke<void>('send_test_notification')
+// The one request for a star: a launch counts a day of use, and the settings
+// window asks once when the fortnight has passed.
+export const noteStarActivity = () => invoke<void>('note_star_activity')
+export const claimStarRequest = () => invoke<boolean>('claim_star_request')
 
 /** One local day of Qoder's own credit records. Mirrors `CreditDay` in qoder.rs. */
 export interface QoderCreditDay { date: string; used: number; charged: number }

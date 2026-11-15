@@ -4,13 +4,25 @@
 use std::{collections::BTreeSet, fs, path::{Path, PathBuf}};
 const MAX_FILE: u64 = 32 * 1024 * 1024;
 const MAX_TOKEN: usize = 4096;
-fn roots() -> Vec<(String, PathBuf)> {
-    let Some(base) = std::env::var_os("LOCALAPPDATA").map(PathBuf::from) else { return vec![] };
+/// Where each Chromium-based browser keeps its profiles, under one base folder.
+///
+/// **ego lite is here for the same reason the others are: it is Chromium
+/// underneath.** The original reads it from `Citro Labs/ego lite` inside the
+/// platform's application-support folder (1.13.0), and a Chromium app on Windows
+/// keeps its profiles one step further down, in `User Data` — the shape every
+/// other entry here already has. The folder without `User Data` is listed too,
+/// because the profile rule below (`Default` or `Profile N`) is what decides
+/// whether there is anything to read, and an ego lite build that keeps its
+/// profiles where its macOS one does must not be missed. A folder that is not
+/// there is dropped, so a browser the reader does not have costs nothing.
+fn roots_in(base: &Path) -> Vec<(String, PathBuf)> {
     [
         ("Chrome", base.join("Google/Chrome/User Data")),
         ("Edge", base.join("Microsoft/Edge/User Data")),
         ("Brave", base.join("BraveSoftware/Brave-Browser/User Data")),
         ("Chromium", base.join("Chromium/User Data")),
+        ("ego lite", base.join("Citro Labs/ego lite/User Data")),
+        ("ego lite", base.join("Citro Labs/ego lite")),
     ]
     .into_iter()
     .filter(|(_, path)| path.is_dir())
@@ -76,13 +88,30 @@ fn token_near(bytes: &[u8]) -> Option<String> {
     }
     seen.into_iter().next()
 }
+/// Every console sign-in this machine's browsers still hold, with the browser
+/// it came from. The caller verifies each one against the console before it
+/// saves any of them, so an expired token costs one request, not a wrong answer.
 pub fn deepseek_tokens() -> Vec<(String, String)> {
-    let mut found = vec![];
-    for (browser, root) in roots() {
+    match std::env::var_os("LOCALAPPDATA").map(PathBuf::from) {
+        Some(base) => tokens_in(&base),
+        None => vec![],
+    }
+}
+
+/// The same list read from one base folder, so a fixture can stand in for a
+/// machine's browsers without a real profile.
+fn tokens_in(base: &Path) -> Vec<(String, String)> {
+    let mut found: Vec<(String, String)> = vec![];
+    for (browser, root) in roots_in(base) {
         for profile in profiles(&root) {
             for file in leveldb_files(&profile) {
                 let Ok(bytes) = fs::read(&file) else { continue };
                 if let Some(token) = token_near(&bytes) {
+                    // ego lite can be found in both places it keeps its profiles,
+                    // and one sign-in verified twice is still one sign-in.
+                    if found.iter().any(|(_, seen)| *seen == token) {
+                        continue;
+                    }
                     found.push((browser.clone(), token));
                 }
             }
@@ -107,5 +136,95 @@ mod tests {
     #[test]
     fn ignores_files_without_a_console_key() {
         assert!(token_near(b"eyJhbGciOiJIUzI1NiJ9.only-two-parts").is_none());
+    }
+
+    // --- which folders are read --------------------------------------------
+
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+    /// A base folder that stands in for `%LOCALAPPDATA%`.
+    fn sandbox(label: &str) -> PathBuf {
+        let suffix = format!("{label}-{}-{}", std::process::id(), NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
+        let candidate = std::env::temp_dir().join(format!("pulsewin-browser-{suffix}"));
+        if fs::create_dir_all(&candidate).is_ok() {
+            return candidate;
+        }
+        // Sandboxed test binaries can be denied writes outside the workspace.
+        let fallback = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join("test-scratch")
+            .join(format!("pulsewin-browser-{suffix}"));
+        fs::create_dir_all(&fallback).unwrap_or_else(|error| panic!("create_dir_all {}: {error:?}", fallback.display()));
+        fallback
+    }
+
+    /// One LevelDB log in one profile, holding a console sign-in the way the
+    /// browser writes it: the site, then the token.
+    fn session(base: &Path, browser: &str, profile: &str, name: &str, token: &str) {
+        let directory = base.join(browser).join(profile).join("Local Storage").join("leveldb");
+        fs::create_dir_all(&directory).unwrap();
+        let contents = format!("_https://platform.deepseek.com\u{1}userToken{{\"value\":\"{token}\"}}");
+        fs::write(directory.join(name), contents).unwrap();
+    }
+
+    /// A JWT-shaped token; `seed` makes each browser's sign-in its own.
+    fn token(seed: u8) -> String {
+        format!("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJpZA{seed}e30.c2lnbmF0dXJlLXRlc3Q")
+    }
+
+    #[test]
+    fn reads_the_session_ego_lite_keeps() {
+        // ego lite's folders are `Profile N`: there is no `Default` to fall back on.
+        let base = sandbox("ego");
+        session(&base, "Citro Labs/ego lite/User Data", "Profile 3", "000003.log", &token(9));
+        assert_eq!(tokens_in(&base), vec![("ego lite".to_string(), token(9))]);
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn reads_the_ego_lite_session_wherever_it_keeps_its_profiles() {
+        let base = sandbox("ego-flat");
+        session(&base, "Citro Labs/ego lite", "Default", "000003.ldb", &token(7));
+        assert_eq!(tokens_in(&base), vec![("ego lite".to_string(), token(7))]);
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn still_reads_the_browsers_it_read_before() {
+        let base = sandbox("four");
+        for (index, browser) in [
+            "Google/Chrome/User Data",
+            "Microsoft/Edge/User Data",
+            "BraveSoftware/Brave-Browser/User Data",
+            "Chromium/User Data",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            session(&base, browser, "Default", "000003.log", &token(index as u8));
+        }
+        let found: Vec<String> = tokens_in(&base).into_iter().map(|(browser, _)| browser).collect();
+        assert_eq!(found, vec!["Chrome", "Edge", "Brave", "Chromium"]);
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn one_sign_in_kept_in_two_places_is_reported_once() {
+        let base = sandbox("ego-twice");
+        session(&base, "Citro Labs/ego lite/User Data", "Profile 1", "000003.log", &token(5));
+        session(&base, "Citro Labs/ego lite", "Profile 1", "000003.log", &token(5));
+        assert_eq!(tokens_in(&base), vec![("ego lite".to_string(), token(5))]);
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_folder_with_nothing_signed_in_reads_as_nothing() {
+        let base = sandbox("ego-empty");
+        // The browser is installed and has a profile, but no console sign-in.
+        fs::create_dir_all(base.join("Citro Labs/ego lite/User Data/Profile 2")).unwrap();
+        assert!(tokens_in(&base).is_empty());
+        // A base folder holding no browser at all answers the same way.
+        assert!(tokens_in(&base.join("Citro Labs")).is_empty());
+        let _ = fs::remove_dir_all(&base);
     }
 }

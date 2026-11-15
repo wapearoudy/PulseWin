@@ -85,6 +85,34 @@ pub struct Preferences {
     /// Rates the reader typed, per currency code, which win over the fetched
     /// ones. Empty by default: an unasked-for rate is somebody else's guess.
     pub manual_exchange_rates: std::collections::HashMap<String, f64>,
+    /// Which route Antigravity's figures are read by: `"auto"`, `"cli"` or
+    /// `"desktop"`. A route, not a credential: both routes are the same login,
+    /// and the choice is which one to ask.
+    pub antigravity_usage_source: String,
+    /// Accounts drawn as one ring per model group. Off by default, and only
+    /// meaningful for a provider that reports more than one group — today only
+    /// Antigravity. An account not named here is drawn whole.
+    pub split_accounts: Vec<String>,
+    /// The groups that keep a ring, per split account. **A missing entry is
+    /// every group.** A choice rather than something read off a reading, so the
+    /// rail's budget moves when a setting does and not when a reply arrives.
+    pub shown_model_groups: std::collections::HashMap<String, Vec<String>>,
+    /// Which MiniMax storefront the account buys from: `"international"` or
+    /// `"china"`. The two are one service with two sites and two keys, so a site
+    /// is a setting on one provider rather than a provider of its own — which is
+    /// what `minimax-cn` used to be, and what [`Preferences::migrate_minimax_cn`]
+    /// folds away.
+    pub minimax_site: String,
+    /// The one request for a GitHub star. It is due when the first day PulseWin
+    /// was counted is at least [`STAR_MINIMUM_AGE_MS`] behind and the app has
+    /// run on at least [`STAR_MINIMUM_DAYS`] separate days since; it is spent
+    /// when the banner is shown, not when it is answered. Kept here rather than
+    /// in its own file because these are settings, and because a copy installed
+    /// and forgotten must never be asked.
+    pub star_request_since: String,
+    pub star_request_days: i64,
+    pub star_request_last_day: String,
+    pub star_request_shown: bool,
 }
 
 impl Default for Preferences {
@@ -96,12 +124,54 @@ impl Default for Preferences {
             clock_remaining: false, show_second_ring: false, top_show_percentages: false, animate_activity: true, dock_alert_colour: true, show_forecast: false, hide_in_fullscreen: true, follow_active_display: false, hide_from_capture: false, account_appearance: Default::default(), pinned_windows: Default::default(),
             primed_providers: Vec::new(), primer_hours: Default::default(),
             primer_run_times: Default::default(), primer_run_outcomes: Default::default(),
-            display_currency: "usd".into(), manual_exchange_rates: Default::default() }
+            display_currency: "usd".into(), manual_exchange_rates: Default::default(),
+            antigravity_usage_source: "auto".into(), split_accounts: Vec::new(), shown_model_groups: Default::default(),
+            minimax_site: "international".into(),
+            star_request_since: String::new(), star_request_days: 0, star_request_last_day: String::new(), star_request_shown: false }
     }
 }
 
 impl Preferences {
+    /// Fold the retired `minimax-cn` provider into `minimax`'s site setting.
+    ///
+    /// The mainland and international storefronts used to be two providers. They
+    /// are one service with two keys, so they are now one provider and a site —
+    /// but an account that only ever had the mainland one must keep its key, its
+    /// label, its place in the rail and its card settings. `cnWins` is the only
+    /// record of where that key came from once the ids are one, so the site is
+    /// set from it and the rest is folded over.
+    ///
+    /// Pure, and idempotent: the credential file move is [`move_minimax_credential`],
+    /// which runs once at startup where a failure can only mean "nothing to do".
+    pub fn migrate_minimax_cn(&mut self) {
+        let retired = crate::providers::minimax::RETIRED_ID;
+        let live = crate::providers::minimax::ID;
+        let present = |ids: &[String]| ids.iter().any(|id| id == retired);
+        let cn_wins = present(&self.enabled_providers)
+            && !self.enabled_providers.iter().any(|id| id == live);
+        // Already migrated lists stay as they are; a stale entry is only ever
+        // folded, never removed, so nothing the user set is lost.
+        if !cn_wins && !present(&self.enabled_providers) && !present(&self.provider_order) {
+            return;
+        }
+        if cn_wins {
+            self.minimax_site = "china".into();
+        }
+        fold_ids(&mut self.enabled_providers, retired, live);
+        fold_ids(&mut self.provider_order, retired, live);
+        fold_ids(&mut self.split_accounts, retired, live);
+        fold_map(&mut self.account_labels, retired, live);
+        fold_map(&mut self.account_appearance, retired, live);
+        fold_map(&mut self.pinned_windows, retired, live);
+        fold_map(&mut self.shown_model_groups, retired, live);
+        fold_map(&mut self.alerts.low_balance, retired, live);
+        if self.tray_account.as_deref() == Some(retired) {
+            self.tray_account = Some(live.to_owned());
+        }
+    }
+
     pub fn normalize(&mut self, known: &[String]) {
+        self.migrate_minimax_cn();
         self.network_proxy.normalize();
         if !["black","light"].contains(&self.panel_colour.as_str()) {self.panel_colour="black".into();}
         if !["continuous","segmented"].contains(&self.usage_bar_style.as_str()) {self.usage_bar_style="continuous".into();}
@@ -141,6 +211,21 @@ impl Preferences {
         self.account_appearance.retain(|id, _| known.contains(id));
         for value in self.account_appearance.values_mut() { value.normalize(); }
         self.pinned_windows.retain(|id, label| known.contains(id) && !label.is_empty());
+        // A route from a build that knew a longer list is `auto`, which is the
+        // route that asks the app and falls back to `agy` rather than refusing
+        // to read at all.
+        if !["auto","cli","desktop"].contains(&self.antigravity_usage_source.as_str()) {self.antigravity_usage_source="auto".into();}
+        if !["international","china"].contains(&self.minimax_site.as_str()) {self.minimax_site = "international".into();}
+        let mut split = std::collections::HashSet::new();
+        self.split_accounts.retain(|id| known.contains(id) && split.insert(id.clone()));
+        // "No groups chosen" is a choice to keep the account whole, so an empty
+        // list is dropped rather than stored as a choice that matches nothing.
+        self.shown_model_groups.retain(|id, groups| {
+            groups.retain(|group| !group.trim().is_empty());
+            let mut chosen = std::collections::HashSet::new();
+            groups.retain(|group| chosen.insert(group.clone()));
+            known.contains(id) && !groups.is_empty()
+        });
         self.enabled_providers.retain(|id| known.contains(id));
         if !["figure","ring","split"].contains(&self.tray_style.as_str()){self.tray_style="figure".into();}
         if self.tray_account.as_ref().is_some_and(|id|!self.enabled_providers.contains(id)){self.tray_account=None;}
@@ -174,6 +259,11 @@ impl Preferences {
         self.primed_providers.retain(|id| primed.insert(id.clone()));
         self.primer_hours.start = self.primer_hours.start.min(23);
         self.primer_hours.end = self.primer_hours.end.min(23);
+        // The star request is a record of days, not a user choice: it is only
+        // trimmed here, so a hand-edited file cannot make its count negative.
+        self.star_request_since = self.star_request_since.trim().to_string();
+        self.star_request_last_day = self.star_request_last_day.trim().to_string();
+        self.star_request_days = self.star_request_days.clamp(0, 1_000_000);
     }
 }
 
@@ -186,6 +276,103 @@ fn day(text: &str) -> Option<chrono::NaiveDate> {
 
 fn finite_clamp(value: f64, min: f64, max: f64, fallback: f64) -> f64 {
     if value.is_finite() { value.clamp(min, max) } else { fallback }
+}
+
+/// Rename a retired provider id inside a list, keeping the first occurrence so
+/// the rail's order survives the fold.
+fn fold_ids(values: &mut Vec<String>, retired: &str, live: &str) {
+    if !values.iter().any(|id| id == retired) {
+        return;
+    }
+    for value in values.iter_mut() {
+        if value == retired {
+            *value = live.to_owned();
+        }
+    }
+    let mut seen = std::collections::HashSet::new();
+    values.retain(|id| seen.insert(id.clone()));
+}
+
+/// Move a retired provider's per-account settings onto the live id. An entry the
+/// live id already has is the newer one and wins.
+fn fold_map<V>(map: &mut std::collections::HashMap<String, V>, retired: &str, live: &str) {
+    if let Some(value) = map.remove(retired) {
+        map.entry(live.to_owned()).or_insert(value);
+    }
+}
+
+/// Give a mainland key the live provider's file name, once, at startup.
+///
+/// The key store is one file per provider id, so a key saved under `minimax-cn`
+/// would never be read again after the fold unless its file is renamed. A file
+/// already sitting under the live id is newer and is left alone.
+pub fn move_minimax_credential() {
+    let retired = crate::providers::minimax::RETIRED_ID;
+    let live = crate::providers::minimax::ID;
+    let Some(from) = crate::settings::credential_file(retired) else { return };
+    if !from.exists() {
+        return;
+    }
+    let Some(to) = crate::settings::credential_file(live) else { return };
+    if to.exists() {
+        return;
+    }
+    let _ = std::fs::rename(&from, &to);
+}
+
+/// A fortnight of use and a week of separate days before the one request for a
+/// star, and never for a copy that was installed and forgotten.
+pub const STAR_MINIMUM_AGE_MS: i64 = 14 * 24 * 60 * 60 * 1000;
+pub const STAR_MINIMUM_DAYS: i64 = 7;
+
+/// The record after PulseWin is seen running at `now_ms`: the first sighting
+/// starts the count, and each new calendar day adds one.
+pub fn note_star_activity(now_ms: i64) -> Result<(), String> {
+    let mut prefs = load();
+    if prefs.star_request_since.is_empty() {
+        prefs.star_request_since = stamp_of(now_ms);
+    }
+    let day = day_of(now_ms);
+    if !day.is_empty() && prefs.star_request_last_day != day {
+        prefs.star_request_last_day = day;
+        prefs.star_request_days += 1;
+    }
+    save(&prefs)
+}
+
+/// Whether the banner is due as the settings window opens, spending the request
+/// if so. It is spent when shown, not when answered: PulseWin cannot tell
+/// whether the star was given and does not try; the About pane keeps a link.
+pub fn claim_star_request(now_ms: i64) -> Result<bool, String> {
+    let mut prefs = load();
+    let due = star_due(
+        (!prefs.star_request_since.is_empty()).then(|| epoch_ms(&prefs.star_request_since)).flatten(),
+        prefs.star_request_days,
+        prefs.star_request_shown,
+        now_ms,
+    );
+    if due {
+        prefs.star_request_shown = true;
+        save(&prefs)?;
+    }
+    Ok(due)
+}
+
+fn star_due(since_ms: Option<i64>, days: i64, shown: bool, now_ms: i64) -> bool {
+    let Some(since) = since_ms else { return false };
+    !shown && now_ms.saturating_sub(since) >= STAR_MINIMUM_AGE_MS && days >= STAR_MINIMUM_DAYS
+}
+
+fn stamp_of(now_ms: i64) -> String {
+    chrono::DateTime::from_timestamp_millis(now_ms).map(|d| d.to_rfc3339()).unwrap_or_default()
+}
+
+fn epoch_ms(text: &str) -> Option<i64> {
+    chrono::DateTime::parse_from_rfc3339(text).ok().map(|d| d.timestamp_millis())
+}
+
+fn day_of(now_ms: i64) -> String {
+    chrono::DateTime::from_timestamp_millis(now_ms).map(|d| d.with_timezone(&chrono::Local).format("%Y-%m-%d").to_string()).unwrap_or_default()
 }
 
 pub fn load() -> Preferences {
@@ -202,6 +389,29 @@ pub fn save(value: &Preferences) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test] fn a_star_is_requested_once_after_a_fortnight_of_real_use(){
+        let day=24*60*60*1000;
+        let since=1_700_000_000_000i64;
+        // A fortnight old but only three days of use is not due: an install
+        // that was opened twice must never be asked.
+        assert!(!star_due(Some(since),3,false,since+14*day));
+        // Seven separate days but not yet a fortnight is not due either.
+        assert!(!star_due(Some(since),7,false,since+13*day));
+        assert!(star_due(Some(since),7,false,since+14*day));
+        // Spent when shown, not when answered: it never comes back.
+        assert!(!star_due(Some(since),7,true,since+60*day));
+        // Nothing is counted before the first sighting.
+        assert!(!star_due(None,0,false,since+60*day));
+    }
+    #[test] fn star_activity_counts_calendar_days_once(){
+        let mut p=Preferences::default();
+        assert!(p.star_request_since.is_empty()&&p.star_request_days==0);
+        p.normalize(&[]);
+        assert_eq!(p.star_request_days,0);
+        // A hand-edited count below zero is not a way to skip the wait.
+        p.star_request_days=-5;p.normalize(&[]);assert_eq!(p.star_request_days,0);
+        assert!(epoch_ms(&stamp_of(1_700_000_000_000))==Some(1_700_000_000_000));
+    }
     #[test] fn panel_colour_is_backward_compatible_and_round_trips(){
         let mut p:Preferences=serde_json::from_str("{}").unwrap();
         assert_eq!(p.panel_colour,"black");
@@ -246,6 +456,30 @@ mod tests {
         p.normalize(&["claude".into(), "codex".into()]);
         assert_eq!(p.enabled_providers, vec!["codex"]);
         assert_eq!(p.provider_order, vec!["codex", "claude"]);
+    }
+    #[test] fn the_antigravity_route_is_one_of_three_and_defaults_to_auto(){
+        let mut p:Preferences=serde_json::from_str("{}").unwrap();
+        assert_eq!(p.antigravity_usage_source,"auto");
+        p.antigravity_usage_source="cli".into();p.normalize(&[]);assert_eq!(p.antigravity_usage_source,"cli");
+        p.antigravity_usage_source="desktop".into();p.normalize(&[]);assert_eq!(p.antigravity_usage_source,"desktop");
+        // A route this build does not know reads through the app and falls back
+        // to the CLI, rather than refusing to read anything at all.
+        p.antigravity_usage_source="endpoint".into();p.normalize(&[]);assert_eq!(p.antigravity_usage_source,"auto");
+        let roundtrip:Preferences=serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+        assert_eq!(roundtrip.antigravity_usage_source,"auto");
+    }
+    #[test] fn group_ring_choices_keep_known_accounts_and_drop_an_empty_choice(){
+        let mut p:Preferences=serde_json::from_str(r#"{"splitAccounts":["antigravity","gone","antigravity"],"shownModelGroups":{"antigravity":["Gemini","","Gemini","Gemini 4 Argon"],"gone":["Gemini"],"antigravity--account-ab":["","  "]}}"#).unwrap();
+        p.normalize(&["antigravity".into()]);
+        assert_eq!(p.split_accounts,vec!["antigravity"]);
+        assert_eq!(p.shown_model_groups["antigravity"],vec!["Gemini","Gemini 4 Argon"]);
+        assert!(!p.shown_model_groups.contains_key("gone"));
+        // A list with nothing in it is a choice to keep the account whole, so it
+        // is stored as no choice at all — the missing entry that means every
+        // group — rather than as a choice matching nothing.
+        assert!(!p.shown_model_groups.contains_key("antigravity--account-ab"));
+        let roundtrip:Preferences=serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+        assert_eq!(roundtrip.shown_model_groups,p.shown_model_groups);
     }
     #[test] fn malformed_settings_do_not_enable_everything() {
         let p: Preferences = serde_json::from_str("{}").unwrap();

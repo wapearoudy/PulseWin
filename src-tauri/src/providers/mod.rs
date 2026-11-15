@@ -25,6 +25,7 @@ pub mod deepinfra;
 pub mod deepseek;
 pub mod dev_pass;
 pub mod devin;
+pub mod dimagent;
 pub mod elevenlabs;
 pub mod factory;
 pub mod gemini;
@@ -203,7 +204,6 @@ pub fn registry() -> Vec<Arc<dyn Provider>> {
         Arc::new(zai::Zai),
         Arc::new(zai::Zhipu),
         Arc::new(minimax::MiniMax),
-        Arc::new(minimax::MiniMaxCn),
         Arc::new(copilot::Copilot),
         Arc::new(grok::Grok),
         Arc::new(grok_bot::GrokBot),
@@ -218,6 +218,9 @@ pub fn registry() -> Vec<Arc<dyn Provider>> {
         Arc::new(qoder::Qoder),
         Arc::new(step_fun::StepFun),
         Arc::new(cline_pass::ClinePass),
+        // Described by a `ProviderProfile` upstream (`Providers/Profiled/`), and
+        // read from a CLI's own login rather than a key.
+        Arc::new(dimagent::DimAgent),
         // qoder and stepFun sit between the two in the original's order and are
         // still to be ported; they leave their slots empty here, as every
         // unported provider does.

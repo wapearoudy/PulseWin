@@ -114,6 +114,15 @@ pub(super) fn parse(
             notes.push(format!("{id}：用量缺少模型，未猜测费用。"));
             return Ok(());
         };
+        // A reply names the provider that served it (`omp --model devin/…` writes
+        // `devin`). It is kept on the record because Devin's card answers exactly
+        // for those replies; an assistant reply that names none falls back to the
+        // agent itself, as the original's Pi-family reader does.
+        let provider = text(&m["provider"]).unwrap_or_else(|| if id == "omp" {
+            "omp".into()
+        } else {
+            String::new()
+        });
         let session = header.clone().unwrap();
         let identity = if id == "kimchi" {
             text(&row["id"]).map(|mid| format!("{id}:{session}:{mid}"))
@@ -125,11 +134,7 @@ pub(super) fn parse(
                     "{id}:message:{}:{}:{}:{}:{}:{}:{}:{}",
                     text(&row["id"]).unwrap_or_default(),
                     at.timestamp_millis(),
-                    text(&m["provider"]).unwrap_or_else(|| if id == "omp" {
-                        "omp".into()
-                    } else {
-                        String::new()
-                    }),
+                    provider,
                     model,
                     tally.input,
                     tally.output,
@@ -140,6 +145,9 @@ pub(super) fn parse(
         };
         let mut r = record(id, model, at, session, tally, bare, identity);
         r.project = cwd.clone();
+        if id == "omp" {
+            r.source_scope = Some(provider.clone());
+        }
         out.push(r);
         if out.len() >= MAX_RECORDS {
             return Err("会话超过记录上限。".into());

@@ -8,7 +8,11 @@
 > All 77 provider adapters are registered; registration is not real-account validation.
 > Token Spend now registers all 54 sources (Crush is cost-only), notifications have
 > evidence-based alert rules and a Settings test button, model prices follow the original's
-> spellings, the original bot animation engine/effects are ported, and Settings uses the system-settings layout with liquid docking and connection diagnostics. Multi-account
+> spellings, the original bot animation engine/effects are ported, and Settings uses the system-settings layout with liquid docking and connection diagnostics. The 0.1.20 tree also
+> ports the upstream 1.12.5-1.13.0 features: DimAgent, one MiniMax with a site setting,
+> Antigravity group rings with the Gemini.app `agy` route, the Xiaomi balance ring, extension
+> PNG icons, ego lite browser reads, renewal-failure classification, a scrollable detail card
+> and the one-time Star request. Multi-account
 > authentication, localization and full native/multiple-display acceptance remain open.
 > Existing installations explicitly select the services to monitor; stored credentials are retained.
 

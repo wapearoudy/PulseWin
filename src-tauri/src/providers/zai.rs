@@ -19,11 +19,15 @@
 //! VERIFY ON A REAL MACHINE: both hosts are live services PulseWin cannot test
 //! from here. Set `PULSEWIN_DEBUG=1` to dump a payload that fails to parse.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
+use serde::Serialize;
 use serde_json::Value;
 
 use super::{describe_reqwest_error, percent_from_fraction, by_window_length, Ctx, FetchFuture, Provider};
+use crate::console_reads::Failure;
 use crate::credentials;
 use crate::model::{parse_reset, ProviderUsage, UsageWindow};
 
@@ -123,6 +127,23 @@ fn stored_mainland_key() -> Option<String> {
     None
 }
 
+/// The storefront a provider id reads: the international host, or the mainland
+/// one. The two are separate accounts, so the host is part of what an answer is
+/// *about* — never a default.
+fn host_for(id: &str) -> Option<(&'static str, bool)> {
+    match id {
+        "zai" => Some((INTERNATIONAL_HOST, false)),
+        "glm-coding" => Some((MAINLAND_HOST, true)),
+        _ => None,
+    }
+}
+
+/// The key this route uses: what the user entered wins, and only the mainland
+/// route falls back to a key a mainland tool already wrote to this machine.
+fn resolve_key(id: &str, mainland: bool) -> Option<String> {
+    super::provider_key(id).or_else(|| mainland.then(stored_mainland_key).flatten())
+}
+
 async fn fetch_inner(
     ctx: Arc<Ctx>,
     id: &'static str,
@@ -132,22 +153,13 @@ async fn fetch_inner(
 ) -> ProviderUsage {
     // What the user entered wins, so a stale file cannot quietly override a
     // deliberate choice — the same order OpenCode Go's two sources take.
-    let key = match super::provider_key(id) {
-        Some(key) => key,
-        None if mainland => match stored_mainland_key() {
-            Some(key) => key,
-            None => {
-                return ProviderUsage::failed(
-                    id,
-                    name,
-                    super::missing_key(
-                        id,
-                        ", or sign in with a mainland tool that writes ~/.coding-relay/glm-api-key",
-                    ),
-                )
-            }
-        },
-        None => return ProviderUsage::failed(id, name, super::missing_key(id, "")),
+    let Some(key) = resolve_key(id, mainland) else {
+        let extra = if mainland {
+            ", or sign in with a mainland tool that writes ~/.coding-relay/glm-api-key"
+        } else {
+            ""
+        };
+        return ProviderUsage::failed(id, name, super::missing_key(id, extra));
     };
 
     let url = format!("{host}{QUOTA_PATH}");
@@ -432,10 +444,409 @@ fn used_percent(limit: &Value) -> Option<f64> {
     Some(percentage.clamp(0.0, 100.0))
 }
 
+// ---------------------------------------------------------------- history
+//
+// The pane's usage history comes from the same storefront as the quota above.
+// Two things about it are load-bearing, both learned by the original:
+//
+// **The host has no default.** It once had one, and a z.ai bearer key then went
+// to `open.bigmodel.cn`, whose refusal the pane showed as an account that had
+// never been used — the wrong answer about the wrong site. The request names its
+// site, and the site is part of the identity of the answer too: switching between
+// the international and the mainland storefront must never be served the other
+// one's series.
+//
+// **A changed key is a different account.** Replacing a key re-reads the series;
+// it does not continue the previous account's chart. Here that is the cache key
+// as well: it carries a fingerprint of the key, so a new key can never reuse the
+// old one's figures.
+
+/// How many days the pane asks for. Asking for 90 gets a 500.
+pub const HISTORY_DAYS: i64 = 30;
+const STATISTICS_PATH: &str = "/api/monitor/usage/model-usage";
+
+/// One day of the account's token use, as the service reports it.
+///
+/// The route prices nothing — no input/output/cache split either — so no cost is
+/// inferred here. Every caller gets the day's token count and the models that
+/// spent them, which is what the original's `.providerStatistics` ledger holds.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryDay {
+    pub date: String,
+    pub tokens: u64,
+    pub models: BTreeMap<String, u64>,
+}
+
+/// What a cached series is a series *of*: the site, the account's key, and the
+/// day the reading belongs to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct HistoryKey {
+    site: String,
+    key: u64,
+    day: String,
+}
+
+struct CachedHistory {
+    key: HistoryKey,
+    saved: Instant,
+    days: Vec<HistoryDay>,
+}
+
+static HISTORY: tokio::sync::Mutex<Option<CachedHistory>> = tokio::sync::Mutex::const_new(None);
+
+/// A fingerprint of the key, never the key: the cache key must not hold a
+/// credential, and the same key must always read the same way within a run.
+fn fingerprint(api_key: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    api_key.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn history_key(host: &str, api_key: &str, day: &str) -> HistoryKey {
+    HistoryKey {
+        site: host.trim().trim_end_matches('/').to_ascii_lowercase(),
+        key: fingerprint(api_key),
+        day: day.to_string(),
+    }
+}
+
+/// The series already held — only when it is this site, this key and this day.
+fn cached_days(
+    cached: Option<&CachedHistory>,
+    key: &HistoryKey,
+    now: Instant,
+) -> Option<Vec<HistoryDay>> {
+    let cached = cached?;
+    if &cached.key != key {
+        return None;
+    }
+    let age = now.checked_duration_since(cached.saved)?;
+    (age < Duration::from_secs(60)).then(|| cached.days.clone())
+}
+
+/// The statistics address, and the window it asks for.
+///
+/// The labels the service returns are `yyyy-MM-dd HH:mm` for hourly buckets and
+/// `yyyy-MM-dd` for daily ones; the timestamps sent are `yyyy-MM-dd HH:mm:ss`
+/// with no zone offset and no `T`, which is what the original sends.
+fn statistics_request(
+    host: &str,
+    now: chrono::DateTime<chrono::Local>,
+    days: i64,
+) -> (String, Vec<(&'static str, String)>) {
+    let start = now.date_naive() - chrono::Duration::days(days);
+    let end = now.naive_local();
+    (
+        format!("{host}{STATISTICS_PATH}"),
+        vec![
+            ("endTime", end.format("%Y-%m-%d %H:%M:%S").to_string()),
+            ("startTime", start.format("%Y-%m-%d 00:00:00").to_string()),
+        ],
+    )
+}
+
+/// The day a bucket label belongs to.
+fn day_of(label: &str) -> Option<chrono::NaiveDate> {
+    let date: String = label.chars().take(10).collect();
+    chrono::NaiveDate::parse_from_str(&date, "%Y-%m-%d").ok()
+}
+
+/// The days a statistics payload holds, or nothing when it holds no use.
+///
+/// Every calendar day between the first and the last is filled in, zeros
+/// included: the chart draws equal-width bars with no date axis, so a missing
+/// day would otherwise be drawn as a missing bar. An empty payload and an
+/// all-zero one are both "nothing" — a chart of nothing is worse than no chart.
+fn ledger(payload: &Value) -> Option<Vec<HistoryDay>> {
+    let data = payload.get("data").unwrap_or(payload);
+    let labels = data
+        .get("xTime")
+        .or_else(|| data.get("x_time"))
+        .and_then(Value::as_array)?;
+    if labels.is_empty() {
+        return None;
+    }
+    let totals: Vec<f64> = data
+        .get("tokensUsage")
+        .and_then(Value::as_array)
+        .map(|counts| counts.iter().map(|n| n.as_f64().unwrap_or(0.0)).collect())
+        .unwrap_or_default();
+    let series = data
+        .get("modelDataList")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut days: BTreeMap<chrono::NaiveDate, (u64, BTreeMap<String, u64>)> = BTreeMap::new();
+    for (index, label) in labels.iter().enumerate() {
+        let Some(date) = label.as_str().and_then(day_of) else {
+            continue;
+        };
+        let mut models: BTreeMap<String, u64> = BTreeMap::new();
+        for one in &series {
+            let name = one
+                .get("modelName")
+                .and_then(Value::as_str)
+                .filter(|name| !name.is_empty())
+                .unwrap_or("未命名模型");
+            let count = one
+                .get("tokensUsage")
+                .and_then(Value::as_array)
+                .and_then(|counts| counts.get(index))
+                .and_then(Value::as_f64)
+                .map(|count| count.round().max(0.0) as u64)
+                .unwrap_or(0);
+            *models.entry(name.to_string()).or_insert(0) += count;
+        }
+        let from_models: u64 = models.values().sum();
+        // The totals array may be absent or short; a bucket whose total was never
+        // counted still shows what its models counted.
+        let total = totals
+            .get(index)
+            .map(|count| count.round().max(0.0) as u64)
+            .unwrap_or(from_models);
+        if total == 0 {
+            continue;
+        }
+        let slot = days.entry(date).or_default();
+        slot.0 += total;
+        for (name, count) in models {
+            *slot.1.entry(name).or_insert(0) += count;
+        }
+    }
+    let first = *days.keys().next()?;
+    let last = *days.keys().next_back()?;
+    let mut out = vec![];
+    let mut cursor = first;
+    while cursor <= last {
+        let (tokens, models) = days.remove(&cursor).unwrap_or_default();
+        out.push(HistoryDay {
+            date: cursor.format("%Y-%m-%d").to_string(),
+            tokens,
+            models,
+        });
+        cursor = cursor.succ_opt()?;
+    }
+    Some(out)
+}
+
+/// The account's usage history for a provider id, as its card reads it.
+///
+/// The cache is keyed on the site, the key and the day, so the two things the
+/// original fixed here cannot come back: a site switch cannot be answered with
+/// the other storefront's series, and a replaced key cannot be answered with the
+/// previous account's.
+pub async fn history(ctx: &Ctx, id: &str) -> Result<Vec<HistoryDay>, String> {
+    let (host, mainland) = host_for(id).ok_or_else(|| format!("unknown provider: {id}"))?;
+    let key_text = resolve_key(id, mainland).ok_or_else(|| super::missing_key(id, ""))?;
+    let now = chrono::Local::now();
+    let key = history_key(host, &key_text, &now.date_naive().to_string());
+    let mut cache = HISTORY.lock().await;
+    if let Some(days) = cached_days(cache.as_ref(), &key, Instant::now()) {
+        return Ok(days);
+    }
+    let (url, query) = statistics_request(host, now, HISTORY_DAYS);
+    let response = ctx
+        .gateway_client
+        .get(&url)
+        .query(&query)
+        .bearer_auth(&key_text)
+        .header("Accept", "application/json")
+        .timeout(Duration::from_secs(20))
+        .send()
+        .await
+        .map_err(|_| Failure::Network.text())?;
+    // A key set by hand must not ride a redirect to a host it was not checked
+    // against, so a redirect is a stop — and so is any final address off-site.
+    if response.status().is_redirection()
+        || crate::console_reads::foreign_site(response.url().as_str(), host)
+    {
+        return Err(Failure::Redirected.text());
+    }
+    if !response.status().is_success() {
+        return Err(Failure::of_status(response.status().as_u16()).text());
+    }
+    let body = response.text().await.map_err(|_| Failure::Network.text())?;
+    let payload: Value = serde_json::from_str(&body).map_err(|_| Failure::UnreadableReply.text())?;
+    super::claude_code::debug_dump(id, &payload);
+    // The envelope's own verdict, exactly as the quota route above reads it.
+    let success = payload.get("success").and_then(Value::as_bool);
+    let code = payload.get("code").and_then(Value::as_i64);
+    if success != Some(true) || code != Some(200) {
+        return Err(Failure::UnreadableReply.text());
+    }
+    let days = ledger(&payload).unwrap_or_default();
+    *cache = Some(CachedHistory {
+        key,
+        saved: Instant::now(),
+        days: days.clone(),
+    });
+    Ok(days)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::TimeZone as _;
     use serde_json::json;
+
+    /// A captured statistics reply: hourly labels (the service switches to
+    /// `yyyy-MM-dd` when it buckets by day), one model split, and one bucket
+    /// whose label is not a date at all.
+    fn statistics_fixture() -> Value {
+        json!({
+            "success": true,
+            "code": 200,
+            "msg": "ok",
+            "data": {
+                "xTime": ["2026-09-05 10:00", "2026-09-05 11:00", "2026-09-06 09:00", "nonsense"],
+                "tokensUsage": [1600.0, 200.0, 5000.0, 1.0],
+                "modelDataList": [
+                    { "modelName": "glm-4.6", "tokensUsage": [1400.0, 200.0, 5000.0, 0.0] },
+                    { "modelName": "glm-4-flash", "tokensUsage": [200.0, 0.0, 0.0, 0.0] }
+                ]
+            }
+        })
+    }
+
+    /// The mainland storefront's own series, with a gap in the middle of it.
+    fn mainland_fixture() -> Value {
+        json!({
+            "success": true,
+            "code": 200,
+            "data": {
+                "xTime": ["2026-09-07", "2026-09-09"],
+                "tokensUsage": [900.0, 200.0],
+                "modelDataList": []
+            }
+        })
+    }
+
+    /// Switching storefronts must never be answered with the other site's
+    /// series — the cache key is the site, not just the provider.
+    #[test]
+    fn a_site_switch_is_a_different_series() {
+        let now = Instant::now();
+        let international = ledger(&statistics_fixture()).expect("the international series");
+        let mainland = ledger(&mainland_fixture()).expect("the mainland series");
+        assert_ne!(international, mainland);
+        let key = history_key(INTERNATIONAL_HOST, "zai-key", "2026-09-10");
+        let cached = CachedHistory {
+            key: key.clone(),
+            saved: now,
+            days: international.clone(),
+        };
+        assert_eq!(cached_days(Some(&cached), &key, now), Some(international));
+        let other_site = history_key(MAINLAND_HOST, "zai-key", "2026-09-10");
+        assert_ne!(key, other_site);
+        assert_eq!(cached_days(Some(&cached), &other_site, now), None);
+        // A moved base URL is a different site too, not the same answer.
+        let moved = history_key("https://api.z.ai.example/mirror", "zai-key", "2026-09-10");
+        assert_eq!(cached_days(Some(&cached), &moved, now), None);
+        // And the next day's reading is read again rather than aged over.
+        let tomorrow = history_key(INTERNATIONAL_HOST, "zai-key", "2026-09-11");
+        assert_eq!(cached_days(Some(&cached), &tomorrow, now), None);
+    }
+
+    /// Replacing the key must re-read the history: same site, a different key,
+    /// and the old account's series is not reused.
+    #[test]
+    fn a_changed_key_rereads_the_history() {
+        let now = Instant::now();
+        let day = "2026-09-10";
+        let first = history_key(INTERNATIONAL_HOST, "first-key", day);
+        let second = history_key(INTERNATIONAL_HOST, "second-key", day);
+        assert_ne!(first, second);
+        let series = ledger(&statistics_fixture()).expect("the first account's series");
+        let cached = CachedHistory {
+            key: first.clone(),
+            saved: now,
+            days: series.clone(),
+        };
+        assert_eq!(cached_days(Some(&cached), &first, now), Some(series));
+        assert_eq!(cached_days(Some(&cached), &second, now), None);
+        // The key itself never reaches the cache key, only its fingerprint.
+        assert!(!format!("{second:?}").contains("second-key"));
+        assert!(!format!("{second:?}").contains("first-key"));
+        // The same key read twice is the same identity.
+        assert_eq!(first, history_key(INTERNATIONAL_HOST, "first-key", day));
+    }
+
+    /// The statistics route names its own site and window, and the window is
+    /// the original's: thirty days back to midnight, no zone offset, no `T`.
+    #[test]
+    fn the_statistics_request_names_its_site_and_window() {
+        let now = chrono::Local
+            .with_ymd_and_hms(2026, 9, 10, 12, 30, 0)
+            .single()
+            .expect("a real local time");
+        let (url, query) = statistics_request(INTERNATIONAL_HOST, now, HISTORY_DAYS);
+        assert_eq!(url, "https://api.z.ai/api/monitor/usage/model-usage");
+        assert!(!url.contains("bigmodel"));
+        let names: Vec<&str> = query.iter().map(|(name, _)| *name).collect();
+        assert_eq!(names, vec!["endTime", "startTime"]);
+        let value = |name: &str| {
+            query
+                .iter()
+                .find(|(key, _)| *key == name)
+                .map(|(_, value)| value.clone())
+                .expect("the window bound")
+        };
+        assert_eq!(value("startTime"), "2026-08-11 00:00:00");
+        assert_eq!(value("endTime"), "2026-09-10 12:30:00");
+        let (mainland, _) = statistics_request(MAINLAND_HOST, now, HISTORY_DAYS);
+        assert_eq!(mainland, "https://open.bigmodel.cn/api/monitor/usage/model-usage");
+    }
+
+    /// Hourly buckets are folded into their day, the labels that are not dates
+    /// are skipped, and every day between the first and the last is drawn.
+    #[test]
+    fn the_ledger_folds_hours_into_days_and_fills_the_gaps() {
+        let days = ledger(&statistics_fixture()).expect("two days of use");
+        let dates: Vec<&str> = days.iter().map(|day| day.date.as_str()).collect();
+        assert_eq!(dates, vec!["2026-09-05", "2026-09-06"]);
+        assert_eq!(days[0].tokens, 1800);
+        assert_eq!(days[1].tokens, 5000);
+        assert_eq!(days[0].models.get("glm-4.6"), Some(&1600));
+        assert_eq!(days[0].models.get("glm-4-flash"), Some(&200));
+        let sparse = ledger(&mainland_fixture()).expect("three days across a gap");
+        let tokens: Vec<u64> = sparse.iter().map(|day| day.tokens).collect();
+        assert_eq!(tokens, vec![900, 0, 200]);
+        assert_eq!(sparse[1].date, "2026-09-08");
+    }
+
+    /// Totals that were not counted fall back to the models, fractional counts
+    /// are rounded rather than truncated, and a payload with no use at all is
+    /// nothing rather than a chart of zeros.
+    #[test]
+    fn missing_totals_fall_back_to_the_models_and_an_empty_payload_is_nothing() {
+        let payload = json!({
+            "success": true,
+            "code": 200,
+            "data": {
+                "xTime": ["2026-09-05", "2026-09-06"],
+                "modelDataList": [{ "modelName": "glm-4.6", "tokensUsage": [12.5, 500.0] }]
+            }
+        });
+        let days = ledger(&payload).expect("two days of use");
+        assert_eq!(days.len(), 2);
+        assert_eq!(days[0].tokens, 13);
+        assert_eq!(days[0].models.get("glm-4.6"), Some(&13));
+        assert_eq!(days[1].tokens, 500);
+        assert!(ledger(&json!({
+            "success": true,
+            "code": 200,
+            "data": { "xTime": [], "tokensUsage": [] }
+        }))
+        .is_none());
+        assert!(ledger(&json!({
+            "success": true,
+            "code": 200,
+            "data": { "xTime": ["2026-09-05"], "tokensUsage": [0.0] }
+        }))
+        .is_none());
+    }
 
     /// A captured reply's shape: the envelope, and the three limit kinds the
     /// service actually sends. The unit codes are the vendor's — 3 is hours,

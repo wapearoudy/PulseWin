@@ -20,7 +20,7 @@ pub struct Activity {
 }
 #[derive(Debug, Clone, Default)]
 pub struct Reading { pub working: bool, pub last_write: Option<i64>, pub finished: bool }
-pub fn supported(id: &str) -> bool { matches!(id, "claude-code" | "codex" | "kiro" | "zai" | "glm-coding") }
+pub fn supported(id: &str) -> bool { matches!(id, "claude-code" | "codex" | "kiro" | "zai" | "glm-coding" | "command-code") }
 fn stamp(v: &Value) -> Option<i64> { chrono::DateTime::parse_from_rfc3339(v["timestamp"].as_str()?).ok().map(|d| d.timestamp_millis()) }
 
 pub fn verdict(text: &str, provider: &str) -> Verdict {
@@ -65,6 +65,21 @@ pub fn verdict(text: &str, provider: &str) -> Verdict {
                     Some("tool.call.completed"|"tool.call.failed"|"model.request.started"|"model.request.completed"|"model.request.failed") if !completed.contains(turn) => { active.entry(turn.to_owned()).or_insert((Wait::Model,at)); },
                     Some("turn.started") if !completed.contains(turn) => { let (wait,at)=active.get(turn).copied().unwrap_or((Wait::Model,at));return Verdict::Working(wait,at); }, _ => {}
                 }
+            },
+            "command-code" => {
+                // The CLI and the desktop app append one record per message. A
+                // message's own `createdAt` is the honest clock: a tool's
+                // result carries none, and its `timestamp` is when the tool was
+                // called, minutes before a long one returns — so such a record
+                // falls back to the file's mtime in `is_working`.
+                if v["type"].as_str()!=Some("message") {continue}
+                let message=&v["message"];
+                let at=message["meta"]["createdAt"].as_f64().map(|ms|ms as i64);
+                match message["role"].as_str() {
+                    Some("user") => return Verdict::Working(Wait::Model,at),
+                    Some("assistant") => return if message["content"].as_array().is_some_and(|a|a.iter().any(|b|b["type"]=="tool_use")) { Verdict::Working(Wait::Tool,at) } else { Verdict::Finished },
+                    _ => {}
+                }
             }, _ => return Verdict::Unknown
         }
     }
@@ -88,6 +103,7 @@ fn root(home: &Path, id: &str) -> Option<PathBuf> {
         "claude-code" => Some(std::env::var_os("CLAUDE_CONFIG_DIR").map(PathBuf::from).unwrap_or_else(||home.join(".claude")).join("projects")),
         "codex" => Some(std::env::var_os("CODEX_HOME").map(PathBuf::from).unwrap_or_else(||home.join(".codex")).join("sessions")),
         "kiro" => Some(home.join(".kiro/sessions")),
+        "command-code" => Some(home.join(".commandcode/projects")),
         "zai" | "glm-coding" => {
             let v:Value=serde_json::from_slice(&fs::read(home.join(".zcode/cli/config.json")).ok()?).ok()?;
             let provider=v["model"]["main"].as_str()?.split('/').next()?;
@@ -111,6 +127,7 @@ fn files(root:PathBuf,id:&str,cancelled:&impl Fn()->bool)->Vec<(PathBuf,i64)> {
             if kind.is_dir(){dirs.push(path);continue}
             if path.extension().and_then(|s|s.to_str())!=Some("jsonl"){continue}
             if id=="kiro" && path.file_name().and_then(|s|s.to_str())!=Some("messages.jsonl") && path.parent().and_then(|p|p.file_name()).and_then(|s|s.to_str())!=Some("cli"){continue}
+            if id=="command-code" && path.file_name().and_then(|s|s.to_str()).is_some_and(|s|s.ends_with(".checkpoints.jsonl")){continue}
             if let Ok(m)=entry.metadata(){if m.len()>0 {if let Ok(time)=m.modified(){if let Ok(time)=time.duration_since(std::time::UNIX_EPOCH){found.push((path,time.as_millis() as i64))}}}}
         }
     }
@@ -186,6 +203,18 @@ impl Activity {
         assert_eq!(verdict(r#"{"type":"assistant","message":{"stop_reason":"end_turn"}}"#,"claude-code"),Verdict::Finished);
     }
     #[test] fn kiro_waiting_for_person_is_idle(){assert_eq!(verdict(r#"{"payload":{"type":"pending_interaction"}}"#,"kiro"),Verdict::Finished);}
+    #[test] fn command_code_counts_messages_and_their_own_clock(){
+        assert!(supported("command-code"));
+        assert_eq!(verdict(r#"{"type":"message","message":{"role":"user","meta":{"createdAt":1700000000000}}}"#,"command-code"),Verdict::Working(Wait::Model,Some(1_700_000_000_000)));
+        assert_eq!(verdict(r#"{"type":"message","message":{"role":"assistant","content":[{"type":"text","text":"done"}],"meta":{"createdAt":1700000000000}}}"#,"command-code"),Verdict::Finished);
+        assert_eq!(verdict(r#"{"type":"message","message":{"role":"assistant","content":[{"type":"tool_use","name":"shell"}],"meta":{"createdAt":1700000000000}}}"#,"command-code"),Verdict::Working(Wait::Tool,Some(1_700_000_000_000)));
+        // A tool's result has no `createdAt`: the file's mtime paces it instead.
+        assert_eq!(verdict(r#"{"type":"message","message":{"role":"assistant","content":[{"type":"tool_use"}],"timestamp":"2026-01-01T00:00:00Z"}}"#,"command-code"),Verdict::Working(Wait::Tool,None));
+        assert_eq!(verdict(r#"{"type":"session","timestamp":"2026-01-01T00:00:00Z"}"#,"command-code"),Verdict::Unknown);
+    }
+    #[test] fn command_code_takes_its_projects_folder(){
+        assert_eq!(root(Path::new("C:/u"),"command-code"),Some(PathBuf::from("C:/u/.commandcode/projects")));
+    }
     #[test] fn zcode_overlapping_turns_and_heartbeats(){
         let text="{\"event\":\"turn.started\",\"turnId\":\"a\"}\n{\"event\":\"tool.call.started\",\"turnId\":\"a\"}\n{\"event\":\"turn.completed\",\"turnId\":\"b\"}\n{\"event\":\"heartbeat\"}";
         assert_eq!(verdict(text,"zai"),Verdict::Working(Wait::Tool,None));

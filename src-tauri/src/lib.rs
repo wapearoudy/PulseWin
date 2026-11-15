@@ -194,6 +194,9 @@ impl AppState {
             menu_open: std::sync::atomic::AtomicBool::new(false),
             generation: std::sync::atomic::AtomicU64::new(0),
             preferences: std::sync::Mutex::new({
+                // A key saved under the retired `minimax-cn` name has to reach
+                // the live file before anything reads it.
+                preferences::move_minimax_credential();
                 let mut prefs = preferences::load();
                 prefs.normalize(&providers::registry().iter().map(|p| p.id().to_string()).collect::<Vec<_>>());
                 prefs
@@ -406,6 +409,19 @@ fn update_tray(app: &AppHandle, snapshot: &Snapshot) {
 fn send_test_notification(app: AppHandle) -> Result<(), String> {
     use tauri_plugin_notification::NotificationExt;
     app.notification().builder().title("PulseWin 测试通知").body("通知已启用；额度告警与回顾提醒会以同样的方式送达。").show().map_err(|error| format!("发送测试通知失败：{error}"))
+}
+
+/// Count this launch as a day of use, for the one request for a star.
+#[tauri::command]
+fn note_star_activity() -> Result<(), String> {
+    preferences::note_star_activity(chrono::Utc::now().timestamp_millis())
+}
+
+/// Whether the settings window should show the one request for a star, which
+/// spends it: it is spent when shown, not when answered.
+#[tauri::command]
+fn claim_star_request() -> Result<bool, String> {
+    preferences::claim_star_request(chrono::Utc::now().timestamp_millis())
 }
 
 /// The account's own credit records for the last 31 days, for the settings pane.
@@ -1822,6 +1838,8 @@ pub fn run() {
             get_network_status,
             save_network_settings,
             send_test_notification,
+            note_star_activity,
+            claim_star_request,
         deepseek_console::deepseek_card_history,
         opencode_console::opencode_card_history,
             qoder_credit_history,

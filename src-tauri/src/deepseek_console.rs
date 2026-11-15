@@ -9,6 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::{Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use crate::console_reads::Failure;
 const ORIGIN: &str = "https://platform.deepseek.com";
 const SLOT: &str = "deepseek-console";
 const LABEL: &str = "deepseek-console-login";
@@ -128,6 +129,68 @@ pub async fn deepseek_card_history(state: State<'_, crate::AppState>) -> Result<
     Ok(crate::token_spend::card_history("ready", Some(crate::token_spend::console_snapshot(
         "deepseek", "DeepSeek console", history.card_days(), history.card_notes(), history.checked_at().to_string()))))
 }
+/// The Chromium browsers whose stored profile Windows will not let this
+/// process read.
+///
+/// The shared browser reader skips a file it cannot open, so an empty candidate
+/// list means either "nothing is signed in" or "not allowed to look". Saying the
+/// first when it is the second sends somebody back to a login page they are
+/// already past (upstream issue #101), so the two are told apart before the
+/// message is chosen. A missing folder is not a refusal — only being denied is.
+fn browsers_without_permission() -> Vec<&'static str> {
+    // ego lite keeps its profile in the same place as the others but under its
+    // vendor folder, so it is checked with them: a refusal there is the same
+    // refusal, and naming only the big three would send its user back to a
+    // login page they are already past.
+    const BROWSERS: [(&str, &str); 5] = [
+        ("Chrome", "Google\\Chrome"),
+        ("Edge", "Microsoft\\Edge"),
+        ("Brave", "BraveSoftware\\Brave-Browser"),
+        ("Chromium", "Chromium"),
+        ("ego lite", "Citro Labs\\ego lite"),
+    ];
+    let Some(base) = std::env::var_os("LOCALAPPDATA") else {
+        return vec![];
+    };
+    BROWSERS
+        .iter()
+        .filter(|(_, relative)| {
+            read_refused(&std::path::PathBuf::from(&base).join(relative).join("User Data"))
+        })
+        .map(|(name, _)| *name)
+        .collect()
+}
+fn read_refused(dir: &std::path::Path) -> bool {
+    match std::fs::read_dir(dir) {
+        Ok(entries) => entries.flatten().take(16).any(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy().into_owned();
+            if name == "Default" || name.starts_with("Profile ") {
+                read_refused(&dir.join(&name).join("Local Storage").join("leveldb"))
+            } else {
+                false
+            }
+        }),
+        Err(error) => error.kind() == std::io::ErrorKind::PermissionDenied,
+    }
+}
+/// What Settings says when the cookies could not be read at all, phrased for
+/// Windows: there is no Full Disk Access here, the browser profile was
+/// unreadable.
+fn refusal_message(browsers: &[&str]) -> String {
+    format!(
+        "Windows 不允许 PulseWin 读取 {} 的浏览器配置文件（权限被拒绝），因此没有取得控制台登录。请让 PulseWin 与浏览器运行在同一个 Windows 账户下，并在「受控文件夹访问」或安全软件中允许读取浏览器配置目录，然后重试。",
+        browsers.join("、")
+    )
+}
+fn missing_login() -> String {
+    let refused = browsers_without_permission();
+    if refused.is_empty() {
+        "请先连接 DeepSeek 控制台。".into()
+    } else {
+        refusal_message(&refused)
+    }
+}
 #[tauri::command]
 pub async fn import_deepseek_console_browser(
     state: State<'_, crate::AppState>,
@@ -135,7 +198,11 @@ pub async fn import_deepseek_console_browser(
     let ctx = state.ctx.read().unwrap().clone();
     let candidates = crate::browser_session::deepseek_tokens();
     if candidates.is_empty() {
-        return Err("没有找到 Chromium 浏览器中的 DeepSeek 控制台登录。请先在 Chrome、Edge 或 Brave 中登录 platform.deepseek.com。".into());
+        let refused = browsers_without_permission();
+        if !refused.is_empty() {
+            return Err(refusal_message(&refused));
+        }
+        return Err("没有找到 Chromium 浏览器中的 DeepSeek 控制台登录。请先在 Chrome、Edge、Brave、Chromium 或 ego lite 中登录 platform.deepseek.com。".into());
     }
     for (_browser, token) in candidates {
         if get(&ctx, "/api/v0/users/get_user_summary", &[], &token)
@@ -155,19 +222,18 @@ fn figure(v: &Value) -> Option<f64> {
     let n = v.as_f64().or_else(|| v.as_str()?.trim().parse().ok())?;
     (n.is_finite() && n.abs() < 1e15).then_some(n)
 }
-fn envelope(value: Value) -> Result<Value, String> {
+fn envelope(value: Value) -> Result<Value, Failure> {
     if let Some(code) = value["code"].as_i64().filter(|n| *n != 0) {
         return Err(if (40000..40100).contains(&code) {
-            "控制台登录已失效，请重新登录。"
+            Failure::CredentialRejected
         } else {
-            "控制台未能返回数据。"
-        }
-        .into());
+            Failure::UnreadableReply
+        });
     }
     if value["data"]["biz_code"].as_i64().unwrap_or(0) != 0
         || value["data"].get("biz_data").is_none()
     {
-        return Err("控制台返回格式无法识别。".into());
+        return Err(Failure::UnreadableReply);
     }
     Ok(value["data"]["biz_data"].clone())
 }
@@ -176,7 +242,7 @@ async fn get(
     route: &str,
     query: &[(String, String)],
     token: &str,
-) -> Result<Value, String> {
+) -> Result<Value, Failure> {
     let future = async {
         let mut response = ctx
             .gateway_client
@@ -186,39 +252,41 @@ async fn get(
             .header("Accept", "application/json")
             .send()
             .await
-            .map_err(|_| "控制台请求失败，请检查网络或代理。")?;
-        if response.status() == 401 {
-            return Err("控制台登录已失效，请重新登录。".into());
+            .map_err(|_| Failure::Network)?;
+        // The client this uses does not follow redirects, so a 3xx arrives as
+        // itself; a bearer token set by hand must not ride one to another site.
+        // The final address is checked too, for the day that changes.
+        if response.status().is_redirection()
+            || crate::console_reads::foreign_site(response.url().as_str(), ORIGIN)
+        {
+            return Err(Failure::Redirected);
         }
         if !response.status().is_success() {
-            return Err(format!(
-                "控制台请求失败（HTTP {}）。",
-                response.status().as_u16()
-            ));
+            return Err(Failure::of_status(response.status().as_u16()));
         }
         if response
             .content_length()
             .is_some_and(|n| n > 8 * 1024 * 1024)
         {
-            return Err("控制台数据超过读取上限。".into());
+            return Err(Failure::TooLarge);
         }
         let mut bytes = vec![];
-        while let Some(chunk) = response.chunk().await.map_err(|_| "控制台数据读取失败。")?
-        {
+        while let Some(chunk) = response.chunk().await.map_err(|_| Failure::Network)? {
             if bytes.len() + chunk.len() > 8 * 1024 * 1024 {
-                return Err("控制台数据超过读取上限。".into());
+                return Err(Failure::TooLarge);
             }
             bytes.extend_from_slice(&chunk)
         }
-        envelope(serde_json::from_slice(&bytes).map_err(|_| "控制台数据格式无法读取。")?)
+        envelope(serde_json::from_slice(&bytes).map_err(|_| Failure::UnreadableReply)?)
     };
-    tokio::select! {result=future=>result,_=ctx.cancelled.cancelled()=>Err("控制台读取已取消。".into())}
+    tokio::select! {result=future=>result,_=ctx.cancelled.cancelled()=>Err(Failure::Network)}
 }
 pub async fn balance(ctx: &crate::providers::Ctx) -> Result<Value, String> {
     let token = token().ok_or("请在设置中连接 DeepSeek 控制台。")?;
-    Ok(wallets(
-        &get(ctx, "/api/v0/users/get_user_summary", &[], &token).await?,
-    ))
+    let summary = get(ctx, "/api/v0/users/get_user_summary", &[], &token)
+        .await
+        .map_err(|failure| failure.text())?;
+    Ok(wallets(&summary))
 }
 fn wallets(summary: &Value) -> Value {
     let mut order = vec![];
@@ -275,6 +343,9 @@ pub struct History {
     currency: Option<String>,
     checked_at: String,
     notes: Vec<String>,
+    /// Why this reading is the previous one, when a renewal failed without the
+    /// login being refused. `None` means it was read just now.
+    failure: Option<String>,
 }
 impl History {
     pub(crate) fn card_days(&self) -> Vec<crate::token_spend::CardDay> {
@@ -405,6 +476,7 @@ fn ledger(
         currency,
         checked_at: now.to_rfc3339(),
         notes,
+        failure: None,
     }
 }
 #[derive(Clone, PartialEq, Eq)]
@@ -477,9 +549,10 @@ pub(crate) async fn read_deepseek_history(
     let ctx = state.ctx.read().unwrap().clone();
     let mut token = match token() {
         Some(token) => token,
-        None => browser_renewal(&ctx)
-            .await
-            .ok_or("请先连接 DeepSeek 控制台。")?,
+        None => match browser_renewal(&ctx).await {
+            Some(token) => token,
+            None => return Err(missing_login()),
+        },
     };
     let now = chrono::Local::now();
     let key = CacheKey {
@@ -511,13 +584,13 @@ pub(crate) async fn read_deepseek_history(
         get(&ctx, "/api/v0/usage/by_api_key/amount", &query, &token),
         get(&ctx, "/api/v0/usage/by_api_key/cost", &query, &token)
     );
-    let signed_out = |result: &Result<Value, String>| {
-        result
-            .as_ref()
-            .err()
-            .is_some_and(|error| error.contains("登录已失效"))
-    };
-    if signed_out(&amount) || signed_out(&cost) {
+    // Only a rejected credential renews; a rejection *after* renewing is the
+    // one thing that really means "sign in again".
+    if [amount.as_ref().err(), cost.as_ref().err()]
+        .into_iter()
+        .flatten()
+        .any(|failure| *failure == Failure::CredentialRejected)
+    {
         if let Some(renewed) = browser_renewal(&ctx).await {
             token = renewed;
             (amount, cost) = tokio::join!(
@@ -526,9 +599,27 @@ pub(crate) async fn read_deepseek_history(
             );
         }
     }
-    let amount = amount?;
-    let cost = cost?;
-    complete_shapes(&amount, &cost)?;
+    // A temporary failure keeps the reading the card already has and labels
+    // why, instead of blanking the table the way a login failure may.
+    if let Some(failure) = amount
+        .as_ref()
+        .err()
+        .or_else(|| cost.as_ref().err())
+        .copied()
+    {
+        if failure.keeps_reading() {
+            if let Some(kept) = cache.as_ref().map(|cached| cached.value.clone()) {
+                let mut kept = kept;
+                kept.failure = Some(failure.class().to_string());
+                kept.notes.push(failure.kept_note());
+                return Ok(kept);
+            }
+        }
+        return Err(failure.text());
+    }
+    let amount = amount.map_err(|failure| failure.text())?;
+    let cost = cost.map_err(|failure| failure.text())?;
+    complete_shapes(&amount, &cost).map_err(|_| Failure::UnreadableReply.text())?;
     let result = ledger(&amount, &cost, key.currency.as_deref(), now);
     if !state
         .preferences
@@ -600,12 +691,45 @@ mod tests {
     fn invalid_login_and_business_errors_are_not_balances() {
         assert!(valid_token(Value::Null).is_none());
         assert!(valid_token(json!("\n")).is_none());
-        assert!(
-            envelope(json!({"code":40003,"data":{"biz_code":0,"biz_data":{}}}))
-                .unwrap_err()
-                .contains("登录已失效")
+        assert_eq!(
+            envelope(json!({"code":40003,"data":{"biz_code":0,"biz_data":{}}})).unwrap_err(),
+            Failure::CredentialRejected
+        );
+        assert_eq!(
+            envelope(json!({"code":1,"data":{"biz_code":0,"biz_data":{}}})).unwrap_err(),
+            Failure::UnreadableReply
         );
         assert!(envelope(json!({"code":0,"data":{"biz_code":1,"biz_data":{}}})).is_err());
+    }
+    /// Only a rejected login blanks the card. Everything else keeps the reading
+    /// it already has, labelled with the class it failed in.
+    #[test]
+    fn a_temporary_failure_keeps_the_reading_and_only_a_refusal_asks_for_a_login() {
+        for failure in [
+            Failure::RequestRefused,
+            Failure::RateLimited,
+            Failure::ServerError,
+            Failure::Network,
+            Failure::UnreadableReply,
+            Failure::TooLarge,
+            Failure::Redirected,
+        ] {
+            assert!(failure.keeps_reading(), "{:?} must keep the reading", failure);
+            assert!(failure.kept_note().contains("以下仍是上次成功读取的读数"));
+            assert!(!failure.text().contains("重新登录"));
+        }
+        assert!(!Failure::CredentialRejected.keeps_reading());
+        assert!(Failure::CredentialRejected.text().contains("重新登录"));
+    }
+    /// A profile Windows will not let us read is not an expired login, and the
+    /// sentence has to say which browser and what to change.
+    #[test]
+    fn a_refused_profile_is_not_reported_as_signed_out() {
+        let message = refusal_message(&["Chrome", "Edge"]);
+        assert!(message.contains("权限被拒绝"));
+        assert!(message.contains("Chrome、Edge"));
+        assert!(!message.contains("重新登录"));
+        assert!(!message.contains("Full Disk"));
     }
     #[test]
     fn wallet_currencies_stay_separate_and_missing_values_are_absent() {

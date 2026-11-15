@@ -54,9 +54,18 @@
 //!   to `.withInternetDateTime` alone and silently drops such a stamp.
 //! - Bucket identity, model scope, reported duration and explicit exhausted
 //!   status are retained for the panel and alert/cache reconciliation.
-//! - **`agy` is not looked for.** Antigravity 2.0's CLI embeds the same RPC
-//!   surface, but it postdates the original and is a different product from
-//!   the one whose two windows this reads.
+//! - **The `agy` CLI is a second route, and the reader chooses it.** `agy` is
+//!   the Antigravity CLI, including the copy Gemini ships; it answers the same
+//!   allowances in an envelope of its own. It is asked when the app reports no
+//!   figures, or alone when the reader pinned it. The route is a preference
+//!   (`antigravity_usage_source`), not a guess: an install that works is not
+//!   permission to read every account through it.
+//! - **Model groups are scopes, and the panel makes a ring of each.** A bucket
+//!   carries the group it belongs to (`Gemini`, `Claude and GPT`, and since
+//!   2026-11 a weekly-only `Gemini 4 Argon`). One login reports them all, so the
+//!   bytes are read once; whether the rail draws one ring per group and which
+//!   groups it draws are the reader's choices, held in `split_accounts` and
+//!   `shown_model_groups`.
 //!
 //! VERIFY ON A REAL MACHINE: no Antigravity is installed on the machine this
 //! was written on, so the two discovery commands have never been run for real.
@@ -75,6 +84,12 @@ use tokio::io::AsyncReadExt;
 use super::{by_window_length, percent_from_fraction, Ctx, FetchFuture, Provider};
 use crate::credentials;
 use crate::model::{parse_reset, ProviderUsage, UsageWindow};
+
+/// The CLI route, in its own file but declared here: the two routes share one
+/// window mapping, and keeping them in one module keeps that obvious.
+/// Reachable as `providers::antigravity::antigravity_cli`.
+#[path = "antigravity_cli.rs"]
+pub mod antigravity_cli;
 
 const ID: &str = "antigravity";
 const NAME: &str = "Antigravity";
@@ -137,13 +152,17 @@ impl Provider for Antigravity {
 // The reasons, in the original's own set
 // ---------------------------------------------------------------------------
 
-/// The three ways this ends without figures.
+/// The ways this ends without figures.
 ///
 /// **`NotAnswering` is not a fault to be told about on a timer.** The first
 /// attempt at this in the original reported "couldn't read the reply", which
 /// sits beside "the service didn't respond" in its failure classification, and
 /// the banner the fix was written to stop went on firing about an app that was
 /// open. Both of these are answers, not failures.
+///
+/// The CLI's endings are kept apart from the app's on purpose: "the app is not
+/// running" and "`agy` is not installed" send the reader to two different
+/// places, and one sentence for both is the bug above wearing a second hat.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Reason {
     /// Nothing of Antigravity's is running.
@@ -151,10 +170,18 @@ enum Reason {
     /// Something is, and every helper it runs refused this RPC.
     NotAnswering,
     NoLimitsReported,
+    /// The CLI route was pinned, and no `agy` was found to ask.
+    CliMissing,
+    /// `agy` is here and older than the version that answers `/usage` itself.
+    CliOutdated,
+    /// `agy` ran and exited without the figures.
+    CliFailed,
+    /// `agy` was still running when the deadline came.
+    CliTimedOut,
 }
 
 impl Reason {
-    /// The original's own copy, sentence for sentence.
+    /// The original's own copy, sentence for sentence, where it has one.
     fn message(self) -> &'static str {
         match self {
             Reason::NotRunning => "Open Antigravity to see its usage.",
@@ -162,18 +189,158 @@ impl Reason {
                 "Antigravity is open but didn't answer. Restarting it usually helps."
             }
             Reason::NoLimitsReported => "No limits reported.",
+            Reason::CliMissing => {
+                "No agy command was found for Antigravity. Install its CLI, or read from the desktop app."
+            }
+            Reason::CliOutdated => {
+                "Antigravity's agy is too old to report usage. Update it, or read from the desktop app."
+            }
+            Reason::CliFailed => {
+                "agy ran but didn't report usage. Run `agy -p /usage --output-format json` once to see why."
+            }
+            Reason::CliTimedOut => "agy didn't answer in time. Try again in a moment.",
         }
     }
 }
 
+/// Which route reads this account's figures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Route {
+    /// The app when it answers with figures, the CLI when it does not.
+    Automatic,
+    /// The CLI alone, even with the app open.
+    Cli,
+    /// The app alone, even with the CLI installed.
+    Desktop,
+}
+
+/// The stored choice read as one of the three.
+///
+/// Anything unrecognised is the default route: a preferences file edited by hand
+/// is not a reason to stop drawing the card.
+fn route(stored: &str) -> Route {
+    match stored {
+        "cli" => Route::Cli,
+        "desktop" => Route::Desktop,
+        _ => Route::Automatic,
+    }
+}
+
+/// What the language server route came to, before it is turned into a card.
+#[derive(Debug, Clone, PartialEq)]
+enum Desktop {
+    /// Figures, and the plan name when the status reply carried one.
+    Figures(Vec<UsageWindow>, Option<String>),
+    /// It answered, with no limits in it.
+    NoLimits,
+    /// Something of Antigravity's is running and every candidate refused.
+    NotAnswering,
+    /// Nothing of Antigravity's is running.
+    NotRunning,
+}
+
 async fn fetch_inner() -> ProviderUsage {
+    let stored = crate::preferences::load().antigravity_usage_source;
+    match route(&stored) {
+        Route::Desktop => desktop_usage(&desktop().await),
+        Route::Cli => cli_only(antigravity_cli::ask().await),
+        Route::Automatic => automatic().await,
+    }
+}
+
+/// The default route: the app first, the CLI when the app reported no figures.
+///
+/// **The CLI is asked only when the app has nothing to say**, as in the
+/// original: a running app is the cheaper and more current answer, and asking a
+/// second program for the same account on every refresh would spend a process
+/// per round to learn what was already on screen. A machine with no `agy` is not
+/// asked at all, so the reason the app gave stands on its own.
+async fn automatic() -> ProviderUsage {
+    let server = desktop().await;
+    if matches!(server, Desktop::Figures(..)) {
+        return desktop_usage(&server);
+    }
+    if antigravity_cli::locate().is_none() {
+        return desktop_usage(&server);
+    }
+    weigh(server, antigravity_cli::ask().await)
+}
+
+/// What to report when both routes were tried.
+///
+/// The original keeps the language server's answer and records the CLI's outcome
+/// beside it in its attempt list. This port has no attempt list, so: figures from
+/// the CLI are the answer (the app had none), a CLI that reports no limits is an
+/// answer, and a CLI that failed or was never asked leaves the app's own reason
+/// standing — with the app closed, "Open Antigravity" is the action that helps,
+/// and "agy didn't answer" would send the reader at the second program while the
+/// first one is the one that is not running.
+fn weigh(server: Desktop, answer: antigravity_cli::Answer) -> ProviderUsage {
+    match answer {
+        antigravity_cli::Answer::Windows(windows) => cli_usage(windows),
+        antigravity_cli::Answer::NoLimits => {
+            ProviderUsage::failed(ID, NAME, Reason::NoLimitsReported.message())
+        }
+        antigravity_cli::Answer::Failed(_) | antigravity_cli::Answer::NotAsked(_) => {
+            desktop_usage(&server)
+        }
+    }
+}
+
+/// The CLI alone, when the reader pinned that route.
+///
+/// **Every outcome is reported as itself**, including "not installed" and "too
+/// old": a pinned route that quietly read something else would be a lie about
+/// where the numbers on the card came from.
+fn cli_only(answer: antigravity_cli::Answer) -> ProviderUsage {
+    use antigravity_cli::{Answer, Fault, NotAsked};
+    match answer {
+        Answer::Windows(windows) => cli_usage(windows),
+        Answer::NoLimits => ProviderUsage::failed(ID, NAME, Reason::NoLimitsReported.message()),
+        Answer::Failed(Fault::Unreadable) => {
+            ProviderUsage::failed(ID, NAME, Reason::CliFailed.message())
+        }
+        Answer::Failed(Fault::Unreachable) => {
+            ProviderUsage::failed(ID, NAME, Reason::CliTimedOut.message())
+        }
+        Answer::NotAsked(NotAsked::Outdated) => {
+            ProviderUsage::failed(ID, NAME, Reason::CliOutdated.message())
+        }
+        Answer::NotAsked(NotAsked::Missing) => {
+            ProviderUsage::failed(ID, NAME, Reason::CliMissing.message())
+        }
+    }
+}
+
+/// A reading the CLI gave, saying where it came from.
+fn cli_usage(windows: Vec<UsageWindow>) -> ProviderUsage {
+    let mut usage = ProviderUsage::ok(ID, NAME, windows);
+    usage.source = Some("agy CLI".to_string());
+    usage
+}
+
+/// What the language server route says, as a card.
+fn desktop_usage(server: &Desktop) -> ProviderUsage {
+    match server {
+        Desktop::Figures(windows, plan) => {
+            ProviderUsage::ok(ID, NAME, windows.clone()).with_plan(plan.clone())
+        }
+        Desktop::NoLimits => ProviderUsage::failed(ID, NAME, Reason::NoLimitsReported.message()),
+        Desktop::NotAnswering => ProviderUsage::failed(ID, NAME, Reason::NotAnswering.message()),
+        Desktop::NotRunning => ProviderUsage::failed(ID, NAME, Reason::NotRunning.message()),
+    }
+}
+
+/// The language server route: every server, every port, in the order the machine
+/// lists them.
+async fn desktop() -> Desktop {
     let servers = discover().await;
     if servers.is_empty() {
-        return ProviderUsage::failed(ID, NAME, Reason::NotRunning.message());
+        return Desktop::NotRunning;
     }
 
     let Some(client) = loopback_client() else {
-        return ProviderUsage::failed(ID, NAME, Reason::NotRunning.message());
+        return Desktop::NotRunning;
     };
 
     // An answer with no limits in it is a real answer, but not a reason to
@@ -194,7 +361,7 @@ async fn fetch_inner() -> ProviderUsage {
                     // A second call, because the quota reply doesn't name the
                     // plan. Its absence is not worth failing over.
                     let plan = plan(&client, *port, &server.token).await;
-                    return ProviderUsage::ok(ID, NAME, windows).with_plan(plan);
+                    return Desktop::Figures(windows, plan);
                 }
                 Ok(_) => {
                     answered_empty = true;
@@ -224,15 +391,14 @@ async fn fetch_inner() -> ProviderUsage {
     }
 
     if answered_empty {
-        return ProviderUsage::failed(ID, NAME, Reason::NoLimitsReported.message());
+        return Desktop::NoLimits;
     }
 
-    let reason = if something_answered {
-        Reason::NotAnswering
+    if something_answered {
+        Desktop::NotAnswering
     } else {
-        Reason::NotRunning
-    };
-    ProviderUsage::failed(ID, NAME, reason.message())
+        Desktop::NotRunning
+    }
 }
 
 /// The client the loopback server is reached with.
@@ -469,6 +635,15 @@ fn length(window: Option<&str>) -> Option<(String, i64)> {
 /// The group's name is what the limit is scoped to, and it is shown after the
 /// window's own name — "5h · Gemini" — where the trailing "models" is a word
 /// the row can't spare.
+/// The id a model group's ring is addressed by in the panel.
+///
+/// The reading's own windows keep their bucket ids; this names the group that a
+/// ring stands for, so the per-group switch has something stable to point at
+/// even before a reading carrying that group arrives.
+pub fn group_id(group: &str) -> String {
+    format!("antigravity.group.{group}")
+}
+
 fn model_group(name: Option<&str>) -> Option<String> {
     let name = name?.trim();
     if name.is_empty() {
@@ -1394,5 +1569,173 @@ Active Connections
             .expect("a PATH");
         let path = path.to_string_lossy();
         assert!(path.starts_with("System32") || path.contains("System32"));
+    }
+
+    /// A third group appeared in the readings captured after 2026-11:
+    /// weekly-only, and named `Gemini 4 Argon` with no trailing "models", so the
+    /// name is the scope as given and its bucket can be given a ring of its own.
+    #[test]
+    fn a_third_group_keeps_its_own_name_and_its_own_weekly_ring() {
+        let reply = serde_json::json!({
+            "response": {
+                "groups": [
+                    {
+                        "displayName": "Gemini Models",
+                        "buckets": [
+                            { "bucketId": "gemini-5h", "window": "5h", "remainingFraction": 1.0 },
+                            { "bucketId": "gemini-weekly", "window": "weekly",
+                              "remainingFraction": 0.75 }
+                        ]
+                    },
+                    {
+                        "displayName": "Claude and GPT Models",
+                        "buckets": [
+                            { "bucketId": "3p-5h", "window": "5h", "remainingFraction": 0.5 }
+                        ]
+                    },
+                    {
+                        "displayName": "Gemini 4 Argon",
+                        "buckets": [
+                            { "bucketId": "gemini-argon-wtu-weekly", "window": "weekly",
+                              "remainingFraction": 0.4, "resetTime": "2026-10-18T10:19:51Z" }
+                        ]
+                    }
+                ]
+            }
+        });
+
+        let windows = windows_from(&reply);
+        assert_eq!(
+            windows
+                .iter()
+                .map(|window| window.scope.as_deref())
+                .collect::<Vec<_>>(),
+            vec![
+                Some("Gemini"),
+                Some("Gemini"),
+                Some("Claude and GPT"),
+                Some("Gemini 4 Argon")
+            ],
+            "three groups, in the answer's own order, each its own scope"
+        );
+
+        let argon = windows
+            .iter()
+            .find(|window| window.scope.as_deref() == Some("Gemini 4 Argon"))
+            .expect("the third group's window");
+        assert_eq!(argon.id.as_deref(), Some("gemini-argon-wtu-weekly"));
+        assert_eq!(argon.window_seconds, Some(604_800.0), "a weekly bucket");
+        assert_eq!(argon.percent_used, Some(60.0));
+        assert_eq!(argon.resets_at.as_deref(), Some("2026-10-18T10:19:51Z"));
+        assert_eq!(group_id("Gemini 4 Argon"), "antigravity.group.Gemini 4 Argon");
+    }
+
+    /// The stored choice, and what a hand-edited file falls back to.
+    #[test]
+    fn the_route_is_one_of_three_and_anything_else_is_the_default() {
+        assert_eq!(route("auto"), Route::Automatic);
+        assert_eq!(route("cli"), Route::Cli);
+        assert_eq!(route("desktop"), Route::Desktop);
+        assert_eq!(route(""), Route::Automatic);
+        assert_eq!(route("CLI"), Route::Automatic);
+        assert_eq!(route("desktop "), Route::Automatic);
+    }
+
+    /// A reading from the CLI is a reading; the card says which program gave it.
+    #[test]
+    fn a_cli_reading_says_where_it_came_from() {
+        let usage = cli_usage(vec![UsageWindow::new("5h", Some(10.0))]);
+        assert_eq!(usage.source.as_deref(), Some("agy CLI"));
+        assert!(usage.error.is_none());
+        assert!(usage.plan.is_none());
+        assert_eq!(usage.windows.len(), 1);
+    }
+
+    /// The default route's rule: the CLI's figures are the answer where the app
+    /// had none, and the app's own reason stands where the CLI had none either.
+    #[test]
+    fn the_cli_wins_where_the_app_had_nothing_and_the_app_stands_where_the_cli_failed() {
+        use antigravity_cli::{Answer, Fault, NotAsked};
+
+        let server = Desktop::NotRunning;
+        let from_cli = weigh(
+            server.clone(),
+            Answer::Windows(vec![UsageWindow::new("5h", Some(10.0))]),
+        );
+        assert_eq!(from_cli.source.as_deref(), Some("agy CLI"));
+        assert!(from_cli.error.is_none());
+
+        let no_limits = weigh(server.clone(), Answer::NoLimits);
+        assert_eq!(
+            no_limits.error.as_deref(),
+            Some(Reason::NoLimitsReported.message()),
+            "no limits from the CLI is an answer"
+        );
+
+        for answer in [
+            Answer::Failed(Fault::Unreadable),
+            Answer::Failed(Fault::Unreachable),
+            Answer::NotAsked(NotAsked::Missing),
+            Answer::NotAsked(NotAsked::Outdated),
+        ] {
+            let kept = weigh(server.clone(), answer);
+            assert_eq!(
+                kept.error.as_deref(),
+                Some(Reason::NotRunning.message()),
+                "with the app closed, opening it is the step that helps"
+            );
+        }
+    }
+
+    /// A pinned route reports its own endings: a route that quietly read the
+    /// other program would be a lie about where the numbers came from.
+    #[test]
+    fn a_pinned_cli_route_reports_its_own_failures() {
+        use antigravity_cli::{Answer, Fault, NotAsked};
+
+        for (answer, reason) in [
+            (Answer::NotAsked(NotAsked::Missing), Reason::CliMissing),
+            (Answer::NotAsked(NotAsked::Outdated), Reason::CliOutdated),
+            (Answer::Failed(Fault::Unreadable), Reason::CliFailed),
+            (Answer::Failed(Fault::Unreachable), Reason::CliTimedOut),
+        ] {
+            let usage = cli_only(answer);
+            assert_eq!(usage.error.as_deref(), Some(reason.message()));
+            assert!(usage.windows.is_empty());
+        }
+    }
+
+    #[test]
+    fn the_desktop_route_turns_each_ending_into_its_own_sentence() {
+        let windows = vec![UsageWindow::new("5h", Some(10.0))];
+        assert_eq!(
+            desktop_usage(&Desktop::Figures(windows, Some("Pro".to_string())))
+                .plan
+                .as_deref(),
+            Some("Pro")
+        );
+        assert_eq!(
+            desktop_usage(&Desktop::NoLimits).error.as_deref(),
+            Some(Reason::NoLimitsReported.message())
+        );
+        assert_eq!(
+            desktop_usage(&Desktop::NotAnswering).error.as_deref(),
+            Some(Reason::NotAnswering.message())
+        );
+        assert_eq!(
+            desktop_usage(&Desktop::NotRunning).error.as_deref(),
+            Some(Reason::NotRunning.message())
+        );
+    }
+
+    /// Each of these sends the reader somewhere different, which is the whole
+    /// reason the CLI endings are not folded into the app's.
+    #[test]
+    fn the_cli_reasons_say_what_to_do() {
+        assert!(Reason::CliMissing.message().contains("agy"));
+        assert!(Reason::CliMissing.message().contains("desktop app"));
+        assert!(Reason::CliOutdated.message().contains("too old"));
+        assert!(Reason::CliFailed.message().contains("/usage"));
+        assert!(Reason::CliTimedOut.message().contains("time"));
     }
 }

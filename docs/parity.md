@@ -6,8 +6,9 @@ Target: equivalent product behavior on Windows, and faithful layout and interact
 Upstream release-note sync (2026-11-15): latest stable Pulse is 1.13.0.
 [Summaries and Windows follow-up inventory](upstream-release-notes.md) cover
 1.7.0 through 1.13.0. The reference source checkout is now at 338c796
-(2026-11-11); 1.12.5-1.13.0 are documented but not yet ported, so this
-documentation sync does not establish parity with those releases.
+(2026-11-11); the 1.12.5-1.13.0 features are ported in the 0.1.20 working tree,
+whose live-account acceptance is still outstanding, so this does not establish
+parity with those releases.
 
 The user authorized an interim 0.1.16 release on 2026-10-11 and requested hiding
 unported Token sources from the UI. On 2026-10-18 the user requested committing,
@@ -43,7 +44,20 @@ because source logs changed during scanning and is not counted as accepted.
 The Token source catalog now declares 54 integrations (Crush recognizes a
 cost-only store and intentionally emits no token records); every source has a
 reader. This is a source inventory, not an overall parity percentage.
-The 0.1.19 tree does not establish full parity. Existing source failures and
+The 0.1.20 working-tree checkpoint ports the 1.12.5-1.13.0 features: the DimAgent
+provider (`dim usage --json`, subscription/token windows, top-ups and the web-search
+allowance as separate windows), MiniMax folded back into one provider with a site
+setting and a renamed mainland key file, Antigravity group rings (up to three, each
+switchable, with the Gemini.app `agy` route and one shared reply mapping), the Xiaomi
+prepaid balance ring, extension PNG icons scoped to the extension folder, ego lite
+browser reads, renewal-failure classification that keeps the last reading, the
+site-switch and Z.ai key-change history re-reads, Command Code models.dev pricing and
+its working mark, the daily chart drawn from the first day of records, Devin usage
+folded into Oh My Pi, the scrollable detail card, settings group symbols, the About
+Star/afdian entries with the one-time request after a fortnight of real use, and the
+Windows browser-permission wording. 1310 Rust checks pass with 2 real-account checks
+explicitly ignored; 287 frontend unit checks and 81 synthetic browser checks pass.
+The 0.1.20 tree does not establish full parity. Existing source failures and
 no-data states remain visible; [the internal backlog](token-source-backlog.md)
 records per-reader notes.
 
@@ -72,6 +86,26 @@ All unchecked items remain incomplete or unverified. No overall completion perce
 - [ ] Installer plus end-to-end acceptance with screenshots and actual native interaction
 
 ## Verification baseline
+
+0.1.20 ports the upstream 1.12.5-1.13.0 features: DimAgent reads `dim usage --json`
+with a 20-second deadline and a 256 KB ceiling and reports the subscription bucket, its
+five-hour/daily/weekly token windows, top-ups and the web-search allowance as separate
+windows, never turning an expired, empty or unreadable reply into an empty account;
+MiniMax is one provider with a site setting, folding the retired `minimax-cn` id and
+renaming a mainland key file at startup; Antigravity draws up to three group rings, each
+switchable, and reads the `agy` that Gemini.app ships through the same reply mapping as
+the desktop store; a Xiaomi pay-as-you-go account shows its balance as a money ring with
+a low-balance note; extensions ship a scoped PNG icon drawn in its own colours; DeepSeek
+console reads include ego lite and name the Windows permission that refused a profile; a
+console renewal failure is classified so only a refused sign-in asks for a new login;
+switching a console site or changing a Z.ai/Zhipu key discards the previous series;
+Command Code is priced from models.dev and shows the working mark mid-turn; the Token
+Spend daily chart starts at the first day of records and survives a single-day range;
+Devin usage arriving through Oh My Pi is folded into that card; a detail card longer than
+its bubble scrolls with its title held; settings groups carry a symbol; and the About pane
+has Star and afdian entries with the one-time request after a fortnight of real use.
+Validation: 1310 Rust tests plus two ignored, 287 frontend tests, tsc --noEmit and vite
+build clean. No native 0.1.20 artifact was rebuilt; 0.1.19 remains the last verified Windows build.
 
 0.1.19 syncs upstream release notes through 1.12.4 (16 versions) and closes thirteen
 gaps: model prices now follow ModelPrices.swift (`-extra-low` effort, Gemini

@@ -83,6 +83,12 @@ export function TokenSpendPane({ enabled, onEnabledChange, span: savedSpan, onSp
   // The rows are days with work on them. The chart above is what has to keep
   // its gaps to stay a calendar; a table of empty rows is a table to read past.
   const shownDays = useMemo(() => sortedDays.filter(day => day.tokens > 0 || day.cost !== null), [sortedDays])
+  // The daily bars start at the first day of records, so a long span with
+  // nothing in front of it does not squeeze the days that matter.
+  const chartDays = useMemo(() => {
+    const first = summary.days.findIndex(day => day.tokens > 0 || day.cost !== null)
+    return first > 0 ? summary.days.slice(first) : summary.days
+  }, [summary.days])
   const cacheSavings = useMemo(() => summary.records.reduce((sum, record) => sum + (record.cacheSavings ?? 0), 0), [summary.records])
   const start = useCallback(async (force: boolean,keep=false) => {
     if (!enabled) return
@@ -173,11 +179,13 @@ export function TokenSpendPane({ enabled, onEnabledChange, span: savedSpan, onSp
         {showRecap&&<RecapPane records={snapshot.records} monthlyPrice={recapMonthlyPrice} hidesProjects={recapHidesProjects} onChange={v=>onRecapChange?.(v)} onClose={()=>setShowRecap(false)} partial={snapshot.notes.length>0}/>}
         {summary.tokens === 0 && <p className="spend-empty">此时间范围内没有读到 Token 用量。可以扩大时间范围或重新扫描。</p>}
         <TokenActivityView records={snapshot.records} view={activityView} onChange={v=>{setLocalActivity(v);onActivityViewChange?.(v)}} agent={agent} model={model} partial={snapshot.notes.length>0}/>
-        {oneDay
-          ? (summary.hasAggregateTiming
-            ? <section className="spend-card spend-chart"><h2>小时分布</h2><p className="spend-empty">此范围包含仅能用于日统计的导出记录，无法确定请求时段。小时分布与活跃小时不可用。</p></section>
-            : <Chart title="小时分布" labels={summary.hours.map((_, hour) => `${String(hour).padStart(2,'0')}:00`)} values={summary.hours} />)
-          : <Chart title="每日 Token" labels={summary.days.map(d => d.day)} values={summary.days.map(d => d.tokens)} />}
+        {oneDay && (summary.hasAggregateTiming
+          ? <section className="spend-card spend-chart"><h2>小时分布</h2><p className="spend-empty">此范围包含仅能用于日统计的导出记录，无法确定请求时段。小时分布与活跃小时不可用。</p></section>
+          : <Chart title="小时分布" labels={summary.hours.map((_, hour) => `${String(hour).padStart(2,'0')}:00`)} values={summary.hours} />)}
+        {/* A one-day history still gets its daily bars, and a span with quiet
+            days in front starts at the first day that has records, as the
+            original does, so the bars are never squeezed to a sliver. */}
+        <Chart title="每日 Token" labels={chartDays.map(d => d.day)} values={chartDays.map(d => d.tokens)} />
         <section className="spend-card"><h2>Token 分类</h2><div className="spend-splits">
           {([['新输入',summary.tally.input,0],['输出',summary.tally.output,1],['缓存写入',summary.tally.cacheWrite,2],['缓存读取',summary.tally.cacheRead,3]] as const).map(([name,value,index]) => <div key={name}><span>{summary.unclassifiedTokens > 0 ? '已分类 · ' : ''}{name}{name==='缓存读取'&&summary.tally.cacheRead>0?<span className="spend-cache-hover" tabIndex={0} aria-label="缓存读取说明">ⓘ<span className="spend-cache-card" role="tooltip">缓存读取 {summary.tally.cacheRead.toLocaleString('zh-CN')} Token（占输入侧 {Math.round(summary.tally.cacheRead/Math.max(1,summary.tally.input+summary.tally.cacheWrite+summary.tally.cacheRead)*100)}%），按公开价格估算节省 {formatCost(cacheSavings)}；缓存写入 {summary.tally.cacheWrite.toLocaleString('zh-CN')} Token。</span></span>:null}</span><strong title={summary.unclassifiedTokens === summary.tokens && summary.tokens > 0 ? '来源仅报告总量，分类不可用' : (index===2||index===3)&&summary.repliesWithoutCacheFields&&summary.tally.cacheWrite===0&&summary.tally.cacheRead===0 ? '来源未报告缓存分类' : `${value.toLocaleString('zh-CN')}${(index===3&&cacheSavings>0)?` · 约节省 ${formatCost(cacheSavings)}`:''}`}>{summary.unclassifiedTokens === summary.tokens && summary.tokens > 0 || ((index===2||index===3)&&summary.repliesWithoutCacheFields&&summary.tally.cacheWrite===0&&summary.tally.cacheRead===0) ? '—' : shortTokens(value)}</strong><small>{(index===2||index===3)&&summary.repliesWithoutCacheFields&&summary.tally.cacheWrite===0&&summary.tally.cacheRead===0?'—':formatCost(summary.costBreakdown?.[index] ?? null)}</small></div>)}
         </div>{cacheSavings>0&&<p className="spend-footnote">缓存读取按公开价格估算约节省 {formatCost(cacheSavings)}；仅为估算，不是账单。</p>}{summary.unclassifiedTokens > 0 && <p className="spend-footnote">未分类：{shortTokens(summary.unclassifiedTokens)} Token。来源报告了总量但不能证明各分类；计入总量，不计价。</p>}{summary.unpricedTokens > 0 && summary.cost !== null && <p className="spend-footnote">分类金额覆盖可计价部分。</p>}</section>

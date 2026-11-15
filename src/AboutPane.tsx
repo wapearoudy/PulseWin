@@ -6,6 +6,8 @@ interface AppInfo { version: string; licenses: { title: string; text: string }[]
 const links = [
   ['source', 'PulseWin 源代码', 'Windows 移植、问题反馈与发布记录。'],
   ['upstream', 'Pulse 原版', 'qunqin24 与贡献者，原版功能、设计与资源。'],
+  ['star', '在 GitHub 上加星', '加星能让更多人找到 Pulse。'],
+  ['afdian', '在爱发电支持 Pulse', 'afdian.com/a/qunqin'],
   ['vinz', 'Vinz', '原版设计灵感。'],
   ['icons', 'LobeIcons', '服务商图标。'],
   ['morphbot', 'MorphBot', '机器人动画参考。'],

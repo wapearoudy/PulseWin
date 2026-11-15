@@ -306,6 +306,9 @@ mod tests {
             directory: PathBuf::from("/tmp/acme"),
             executable: PathBuf::from("/tmp/acme/run"),
             timeout: std::time::Duration::from_secs(20),
+            // A report is about what the program printed; an icon is only ever
+            // drawn, and running one never reads it.
+            icon: None,
         }
     }
 

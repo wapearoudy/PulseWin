@@ -8,6 +8,9 @@ export interface ExtensionView {
   executable: string
   timeoutSeconds: number
   accountId: string
+  /// The extension's own PNG as a data URL, already checked by Rust, or nothing
+  /// when its manifest names no icon: then the default glyph draws.
+  icon?: string | null
 }
 
 export interface ExtensionProblem { folder: string; message: string }
@@ -64,7 +67,7 @@ export function ExtensionsSettingsView({ enabled }: { enabled: string[] }) {
       {!scan ? <p className="group-copy" role="status">正在读取扩展文件夹…</p>
         : !scan.extensions.length ? <p className="group-copy">还没有扩展。每个扩展是一个独立文件夹，里面有 pulse-extension.json 和它的程序。</p>
         : scan.extensions.map(found => <div className="setting-row" key={found.id}>
-            <div><strong>{found.name}</strong><small>{enabled.includes(found.accountId) ? '显示在面板' : '已关闭'} · 时限 {Math.round(found.timeoutSeconds)} 秒</small></div>
+            <div><strong>{found.icon ? <img src={found.icon} alt="" width={16} height={16} style={{ verticalAlign: 'middle', marginInlineEnd: 6 }} /> : null}{found.name}</strong><small>{enabled.includes(found.accountId) ? '显示在面板' : '已关闭'} · 时限 {Math.round(found.timeoutSeconds)} 秒</small></div>
             <div className="setting-control"><input type="checkbox" role="switch" aria-label={`启用 ${found.name}`} checked={enabled.includes(found.accountId)} onChange={e => switchOn(found.accountId, e.target.checked)}/></div>
           </div>)}
     </div></section>

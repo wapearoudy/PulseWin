@@ -1,8 +1,8 @@
 {
- "version": "0.1.19",
- "status": "interim-published",
+ "version": "0.1.20",
+ "status": "implementation-in-progress",
  "releaseHold": true,
- "reason": "0.1.19 was published on GitHub on 2026-10-31 by .github/workflows/release-windows.yml at b8afed3. The hold is restored because the remaining items are real-machine and live-service acceptance, and this release does not establish full Pulse parity. Upstream 1.12.5-1.13.0 release notes were synced on 2026-11-15 as a documented-but-unported gap list.",
+ "reason": "0.1.20 is the working tree. It ports the upstream 1.12.5-1.13.0 features that were recorded as gaps on 2026-11-15: the DimAgent provider, the MiniMax and MiniMax CN merge, Antigravity group rings and the Gemini.app agy source, the Xiaomi prepaid balance ring, extension PNG icons, ego lite browser reads, renewal-failure classification that keeps the last reading, the Z.ai key-change history re-read, Command Code models.dev pricing and its working mark, the usage chart drawn from the first day of records, Devin usage folded into Oh My Pi, the scrollable detail card, settings group symbols, the About Star/afdian entries with the one-time request, the Windows browser-permission wording and the site-switch discard. The hold stays because the remaining items are real-machine and live-service acceptance, and this release does not establish full Pulse parity.",
  "upstream": "1.13.0",
  "publishedVersion": "0.1.19",
  "implementedVerified": [
@@ -50,16 +50,28 @@
   "DeepSeek console renewal: a saved login that the console has signed out is renewed from Chrome, Edge, Brave or Chromium LevelDB stores after the token is verified against the account summary, and Settings can import the browser session explicitly.",
   "OpenCode console renewal: a signed-out read re-reads the app WebView cookie jar for opencode.ai console sessions, saves the renewed sign-in and retries the workspace read once.",
   "DeepSeek and OpenCode Go console ledgers feed their detailed cards: one record per console day with the day's tokens, its top model and the console-reported cost, so the card's 31-day figures, chart, speed and cache summaries use the service's own accounting instead of local transcripts.",
-  "The monthly recap reminder's Windows toast opens the Token Spend recap when activated: the notification is sent through notify-rust and its WinRT activation callback routes a body click to the recap view, because the Tauri notification plugin exposes no desktop action events"
+  "The monthly recap reminder's Windows toast opens the Token Spend recap when activated: the notification is sent through notify-rust and its WinRT activation callback routes a body click to the recap view, because the Tauri notification plugin exposes no desktop action events",
+  "DimAgent is a provider of its own: `dim usage --json` is read with a 20-second deadline and a 256 KB ceiling, the subscription bucket, its five-hour/daily/weekly token windows, top-ups and the web-search allowance are separate windows, and an expired, empty or unreadable reply is never reported as an empty account.",
+  "MiniMax is one provider again: the retired `minimax-cn` id is folded into a site setting (international or mainland), an existing mainland key file is renamed to the live id at startup, and an enabled mainland account wins the site exactly once.",
+  "Antigravity can draw up to three group rings, each of which can be switched off, and reads allowances through the `agy` that Gemini.app ships when the desktop store has nothing, with the CLI and desktop replies mapped by the same code.",
+  "A Xiaomi pay-as-you-go account with no Coding Plan shows its balance as a money ring, with a low-balance note on the plan row when a plan exists.",
+  "User extensions can ship a PNG icon in `pulse-extension.json`: the path is scoped to the extension folder, the bytes are checked for the PNG signature and rejected above 256 KB, and the icon is drawn in its own colours on the rail, the card and the settings list rather than through the monochrome mask.",
+  "DeepSeek console browser reads include ego lite, and a refused profile names the Windows permission that refused it instead of asking for a login that already exists.",
+  "A console renewal failure is classified: a dropped network, rate limiting or a server error keeps the last reading with a note, and only a refused sign-in asks for a new one.",
+  "Switching a console site or changing a Z.ai/Zhipu key discards the previous series, so the card re-reads its own history instead of showing the other account's.",
+  "Command Code usage is priced from the models.dev rates PulseWin carries, and Command Code shows the working mark while its CLI or desktop app is mid-turn.",
+  "The Token Spend daily chart is drawn from the first day of records and still appears when the range holds a single day.",
+  "Devin usage that comes through Oh My Pi is folded into the Oh My Pi card instead of being counted twice.",
+  "A detailed card longer than its bubble scrolls with its title held at the top; settings groups carry a small symbol; the About pane gained Star and afdian entries plus the one-time request after a fortnight of real use."
  ],
  "verification": {
-  "rust": "1245 passed, 0 failed, 2 explicitly ignored real-account checks (1247 total) on this Windows machine, including the new price-alias, Kimi Code, Qoder, Cursor, progress-bar, browser-session and warmer-timer tests. The 35 failures recorded on macOS are Windows-only path/PATH tests that pass here; the Windows workflow reports the same green result.",
-  "frontendUnit": "269 passed in 26 files; tsc --noEmit and vite build clean.",
-  "browser": "81 passed in the full browser suite on the 0.1.19 working tree (45.8s); browser IPC responses are synthetic.",
-  "native": "PASS on GitHub Actions windows-latest release build: .github/workflows/release-windows.yml run 41181764309 at b8afed3 completed 2026-10-31T08:00:02Z; cargo test --all-targets 1245 passed, 0 failed, 2 ignored; frontend 269 passed (26 files); tsc --noEmit clean; build finished in 9m01s and produced nsis/msi plus two updater signatures. No installer executed.",
-  "localUpdateFeed": "0.1.19 is promoted on GitHub (latest.json version 0.1.19); no local updates/ feed was produced on this machine.",
+  "rust": "1310 passed, 0 failed, 2 explicitly ignored real-account checks (1312 total) on this Windows machine, including the new DimAgent, MiniMax-merge, Antigravity-CLI, Xiaomi balance, extension icon, ego lite, renewal-failure, Z.ai re-read, Command Code, star-request and activity tests.",
+  "frontendUnit": "287 passed in 28 files; tsc --noEmit and vite build clean.",
+  "browser": "81 passed in the full browser suite on the 0.1.20 working tree; browser IPC responses are synthetic.",
+  "native": "Not rebuilt for the 0.1.20 working tree. The last verified native artifact remains the 0.1.19 Windows/WebView2 build from .github/workflows/release-windows.yml run 41181764309 at b8afed3 (1212 Rust tests, 260 frontend tests, signed NSIS and MSI). No installer was executed.",
+  "localUpdateFeed": "0.1.19 remains the latest promoted feed (latest.json version 0.1.19); no 0.1.20 artifact exists yet.",
   "buildBlocker": "None for 0.1.19. The updater signing key is a repository secret (TAURI_SIGNING_PRIVATE_KEY, key id 218D1940E2C4F3DC) and .github/workflows/release-windows.yml builds, signs and publishes.",
-  "publicRelease": "0.1.19 is published as the latest release with five assets; GitHub API reports sizes and SHA-256 digests for all five, and the workflow signature-key check passed. See docs/release-0.1.19.json.",
+  "publicRelease": "PASS for the published 0.1.19 release; the 0.1.20 tree has not been published.",
   "externalLimitations": [
    "44 status pages verified against fixtures only; gemini-cli, command-code and hugging-face timed out from this network (curl times out too) and stay unverified",
    "Exchange-rate endpoint, offline and 429 behaviour not exercised against the real service",
@@ -84,7 +96,7 @@
   "Window starter real CLI send and Windows no-window launch acceptance",
   "User extensions acceptance with a real installed extension program",
   "Stable real Harness source integrity acceptance",
-  "Upstream 1.12.5-1.13.0 is synced as documentation but not ported: DimAgent, extension PNG icons, ego lite browser reads, Antigravity group rings and the Gemini.app agy source, the Xiaomi prepaid balance ring, the scrollable detail card, settings-row icons, the About Star/afdian entries, the renewal-failure classification and the Z.ai key-change history re-read; upstream 1.12.0's MiniMax/MiniMax CN merge is also still outstanding (they remain two providers). See docs/upstream-release-notes.md"
+  "Live acceptance of the 1.12.5-1.13.0 ports remains: a real `dim` CLI account, a real Xiaomi prepaid account, a machine with only Gemini.app for the agy route, a real multi-group Antigravity account, a real extension shipping a PNG icon and a real Command Code turn are needed to accept them beyond fixtures."
  ],
  "checkpointDate": "2026-11-15",
  "reference": "Pulse v1.13.0 tag objects, alongside the unchanged old checkout",
