@@ -1,10 +1,10 @@
 {
  "version": "0.1.20",
- "status": "release-preparation",
- "releaseHold": false,
- "reason": "0.1.20 is being released at the user's request on 2026-11-15. It ports the upstream 1.12.5-1.13.0 features: DimAgent, one MiniMax with a site setting, Antigravity group rings and the Gemini.app agy source, the Xiaomi balance ring, extension PNG icons, ego lite browser reads, renewal-failure classification that keeps the last reading, the Z.ai key-change history re-read, Command Code models.dev pricing and its working mark, the usage chart drawn from the first day of records, Devin usage folded into Oh My Pi, the scrollable detail card, settings group and row symbols, the About Star/afdian entries with the one-time request, the Windows browser-permission wording and the site-switch discard. The release does not establish full Pulse parity: real-account and real-machine acceptance remain open.",
+ "status": "interim-published",
+ "releaseHold": true,
+ "reason": "Pulse 1.12.5-1.13.0 was ported into 0.1.20 and the user asked for it to be pushed and released on 2026-11-15. The GitHub release v0.1.20 is published with the five signed assets and latest.json points at 0.1.20. The hold is restored because the release does not establish full Pulse parity: real-account and real-machine acceptance (DimAgent, Xiaomi prepaid, a Gemini.app-only machine, multi-group Antigravity, a real extension with a PNG icon, real Command Code turns, the updater on an installed client) remain open.",
  "upstream": "1.13.0",
- "publishedVersion": "0.1.19",
+ "publishedVersion": "0.1.20",
  "implementedVerified": [
   "Light assistant surfaces, rings and detail cards",
   "Horizontal floating, bottom docking and orientation-aware detail cards",
@@ -68,10 +68,10 @@
   "rust": "1310 passed, 0 failed, 2 explicitly ignored real-account checks (1312 total) on this Windows machine, including the new DimAgent, MiniMax-merge, Antigravity-CLI, Xiaomi balance, extension icon, ego lite, renewal-failure, Z.ai re-read, Command Code, star-request and activity tests.",
   "frontendUnit": "287 passed in 28 files; tsc --noEmit and vite build clean.",
   "browser": "81 passed in the full browser suite on the 0.1.20 working tree; browser IPC responses are synthetic.",
-  "native": "The 0.1.20 working tree has not been built as a native artifact locally. The release build runs on GitHub Actions windows-latest (.github/workflows/release-windows.yml), which runs cargo test --all-targets, the frontend tests, and a signed NSIS/MSI build, then publishes the five release assets. No installer is executed by this project.",
-  "localUpdateFeed": "0.1.19 remains the latest promoted feed (latest.json version 0.1.19) until the 0.1.20 GitHub release is published.",
+  "native": "The 0.1.20 artifact was built and signed on GitHub Actions windows-latest (.github/workflows/release-windows.yml run 43698512839 at cd10988): 1310 Rust tests passed with 2 explicitly ignored, 28 frontend files passed, tsc --noEmit clean, and the build produced a signed NSIS setup and MSI. No installer was executed and no isolated native updater run was performed.",
+  "localUpdateFeed": "latest.json inside the published v0.1.20 release reports version 0.1.20 with NSIS and MSI entries, so installed clients following the GitHub latest.json see 0.1.20.",
   "buildBlocker": "None for 0.1.19. The updater signing key is a repository secret (TAURI_SIGNING_PRIVATE_KEY, key id 218D1940E2C4F3DC) and .github/workflows/release-windows.yml builds, signs and publishes.",
-  "publicRelease": "PENDING for 0.1.20: the version is committed and the signed Windows build is dispatched; GitHub publication and the update feed follow from the workflow.",
+  "publicRelease": "PASS for the published 0.1.20 release: the release is public (not a draft or prerelease) with five uploaded assets, and the published latest.json reports 0.1.20 with three platform entries and signatures. Asset digests were read from the GitHub API rather than compared against a local rebuild, and the signed old-client upgrade download was not re-run for this version.",
   "externalLimitations": [
    "44 status pages verified against fixtures only; gemini-cli, command-code and hugging-face timed out from this network (curl times out too) and stay unverified",
    "Exchange-rate endpoint, offline and 429 behaviour not exercised against the real service",
@@ -79,7 +79,7 @@
    "Real Harness read-only integrity check failed because source logs changed during its 57.8-second scan; no stable live-source acceptance",
    "Raycast and Sketchybar status-line helpers are macOS-only and have no Windows equivalent; the developer kit exports PowerShell and POSIX status-line helpers with the same read-only commands."
   ],
-  "windows": "PASS on GitHub Actions windows-latest: 1212 passed, 0 failed, 2 ignored, plus 260 frontend tests, tsc --noEmit and a --no-bundle build that produced pulsewin.exe (run 39440841593 at 8e7f6f5, .github/workflows/windows-check.yml). The 35 tests that fail on macOS pass here. Two real Windows-only defects and three POSIX-assuming tests were found and fixed; this is compile-and-test evidence, NOT an installer build."
+  "windows": "PASS on GitHub Actions windows-latest run 43698512839 at cd10988: cargo test --all-targets 1310 passed, 0 failed, 2 ignored; vitest 28 files passed; tsc --noEmit clean; signed NSIS and MSI produced."
  },
  "pending": [
   "Execute an installer and upgrade one installed client to 0.1.19 to accept the install and in-app update paths; neither was exercised for this release.",
@@ -97,7 +97,7 @@
   "User extensions acceptance with a real installed extension program",
   "Stable real Harness source integrity acceptance",
   "Live acceptance of the 1.12.5-1.13.0 ports remains: a real `dim` CLI account, a real Xiaomi prepaid account, a machine with only Gemini.app for the agy route, a real multi-group Antigravity account, a real extension shipping a PNG icon and a real Command Code turn are needed to accept them beyond fixtures.",
-  "Verify the published 0.1.20 assets after the Windows release build, then restore the release hold for the remaining real-account and real-machine acceptance"
+  "Re-run the signed old-client update download against the published 0.1.20 assets and run the 0.1.20 native smoke suites on an installed build"
  ],
  "checkpointDate": "2026-11-15",
  "reference": "Pulse v1.13.0 tag objects, alongside the unchanged old checkout",

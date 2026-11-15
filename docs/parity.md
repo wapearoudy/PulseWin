@@ -105,7 +105,7 @@ Devin usage arriving through Oh My Pi is folded into that card; a detail card lo
 its bubble scrolls with its title held; settings groups and their rows carry a symbol; and the About pane
 has Star and afdian entries with the one-time request after a fortnight of real use.
 Validation: 1310 Rust tests plus two ignored, 287 frontend tests, tsc --noEmit and vite
-build clean. No native 0.1.20 artifact was rebuilt; 0.1.19 remains the last verified Windows build.
+build clean. The 0.1.20 artifact was then built and signed on GitHub Actions windows-latest (run 43698512839: 1310 Rust tests, 28 frontend files, tsc clean) and published as the v0.1.20 release; no installer was executed and no isolated native updater run was performed.
 
 0.1.19 syncs upstream release notes through 1.12.4 (16 versions) and closes thirteen
 gaps: model prices now follow ModelPrices.swift (`-extra-low` effort, Gemini

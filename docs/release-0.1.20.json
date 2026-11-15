@@ -1,6 +1,6 @@
 {
  "version": "0.1.20",
- "status": "prepared",
+ "status": "published",
  "authorization": "推送、发布（2026-11-15，用户指令「推送 发布」）",
  "releaseHold": false,
  "buildBlocker": [],
@@ -23,6 +23,17 @@
   "typescript": {
    "passed": true,
    "note": "tsc --noEmit clean; vite build succeeds (about 0.7s)."
+  },
+  "windows": {
+   "passed": 1310,
+   "failed": 0,
+   "ignored": 2,
+   "note": "GitHub Actions windows-latest release run 43698512839 at cd10988: cargo test --all-targets 1310 passed, 0 failed, 2 explicitly ignored; vitest 28 files passed and tsc --noEmit clean; signed NSIS and MSI built with the repository updater key."
+  },
+  "frontendWindows": {
+   "passed": 287,
+   "files": 28,
+   "note": "vitest ran on the Windows runner (28 files) and tsc --noEmit passed there."
   }
  },
  "portedFromUpstream": [
@@ -55,6 +66,50 @@
   "Real Harness read-only integrity check failed because source logs changed during its scan",
   "Raycast and Sketchybar status-line helpers are macOS-only; the developer kit exports PowerShell and POSIX helpers with the same read-only commands"
  ],
- "releaseCommit": null,
- "publicVerification": null
+ "releaseCommit": "cd10988",
+ "publicVerification": {
+  "passed": true,
+  "method": "GitHub REST API (authenticated as the repository owner) on 2026-11-15: the release v0.1.20 is published, not a draft and not a prerelease, with the five expected assets in the uploaded state; latest.json was downloaded from its release asset URL and reports version 0.1.20 with windows-x86_64, windows-x86_64-nsis and windows-x86_64-msi entries, each carrying a signature.",
+  "testedAt": "2026-11-15T09:34:50Z",
+  "repository": "wapearoudy/PulseWin",
+  "release": "v0.1.20",
+  "releaseId": 445944578,
+  "workflowRun": 43698512839,
+  "version": "0.1.20",
+  "assets": [
+   {
+    "name": "latest.json",
+    "size": 3975,
+    "sha256": "b5a0107f93ddcd1a1d494adf56b71fd7be68c8d01de1e2f7768b5b8f231f6109"
+   },
+   {
+    "name": "PulseWin_0.1.20_x64-setup.exe",
+    "size": 3636645,
+    "sha256": "294d986308a3a980999aec729598ff5ec78739c810ce170bd0eb57007e4549a1"
+   },
+   {
+    "name": "PulseWin_0.1.20_x64-setup.exe.sig",
+    "size": 440,
+    "sha256": "ebd01938d0f91ad479e7a3ef93029bd4c1dc3efab5310b0da5605e25ba97e525"
+   },
+   {
+    "name": "PulseWin_0.1.20_x64_en-US.msi",
+    "size": 4972544,
+    "sha256": "aee4ae403cfc81ca1a75095eb57b32e3e0c3025e74a1f650d0b16f4b49092430"
+   },
+   {
+    "name": "PulseWin_0.1.20_x64_en-US.msi.sig",
+    "size": 440,
+    "sha256": "656f5003c9ac268b52628c6effb226a69bb53a04a5bb620db862ca72db23e7ae"
+   }
+  ],
+  "nativeCheck": "Not executed for 0.1.20: no isolated native updater run and no anonymous download comparison were performed in this session. The digests above come from the GitHub assets API rather than a local rebuild, and no installer was executed.",
+  "signedUpgradeDownload": {
+   "from": "0.1.4",
+   "to": "0.1.20",
+   "passed": false,
+   "note": "Not executed for this release; the last signed old-client download acceptance remains 0.1.19."
+  },
+  "installationExecuted": false
+ }
 }

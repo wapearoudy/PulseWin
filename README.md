@@ -12,7 +12,8 @@
 > ports the upstream 1.12.5-1.13.0 features: DimAgent, one MiniMax with a site setting,
 > Antigravity group rings with the Gemini.app `agy` route, the Xiaomi balance ring, extension
 > PNG icons, ego lite browser reads, renewal-failure classification, a scrollable detail card
-> and the one-time Star request. Multi-account
+> and the one-time Star request. 0.1.20 was built and signed on GitHub Actions and
+> published as the v0.1.20 release. Multi-account
 > authentication, localization and full native/multiple-display acceptance remain open.
 > Existing installations explicitly select the services to monitor; stored credentials are retained.
 
