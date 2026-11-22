@@ -1,0 +1,46 @@
+{
+ "version": "0.1.21",
+ "status": "prepared",
+ "authorization": "修复后提交 发布（2026-11-22，用户指令「修复后提交 发布」）",
+ "releaseHold": false,
+ "buildBlocker": [],
+ "toFinishOnWindows": [],
+ "tests": {
+  "rust": {
+   "passed": 1310,
+   "failed": 0,
+   "ignored": 2,
+   "note": "cargo test --lib on the Windows development machine for the 0.1.21 working tree (1312 total). The two ignored tests are real-account checks. The GitHub Actions release run re-runs cargo test --all-targets."
+  },
+  "frontend": {
+   "passed": 287,
+   "files": 28
+  },
+  "browser": {
+   "passed": 81,
+   "note": "Full local browser suite last ran on the 0.1.20 tree (49.1s); the 0.1.21 change is CSS-only and does not touch IPC."
+  },
+  "typescript": {
+   "passed": true,
+   "note": "tsc --noEmit clean; vite build succeeds (782ms)."
+  }
+ },
+ "fixed": [
+  "Detailed cards that outgrow their bubble no longer paint a classic Windows scrollbar outside the clipped bubble; wheel and trackpad scrolling still work and the title stays pinned."
+ ],
+ "installationExecuted": false,
+ "fullParity": false,
+ "limitations": [
+  "Patch release over 0.1.20; it does not claim full Pulse 1.13.0 parity.",
+  "The remaining real-account and real-machine acceptance items are unchanged and listed in docs/release-progress.json."
+ ],
+ "externalLimitations": [
+  "44 status pages verified against fixtures only; gemini-cli, command-code and hugging-face timed out from this network",
+  "Exchange-rate endpoint, offline and 429 behaviour not exercised against the real service",
+  "Anonymous GitHub backup API rate limited; live fallback not accepted",
+  "Real Harness read-only integrity check failed because source logs changed during its scan",
+  "Raycast and Sketchybar status-line helpers are macOS-only; the developer kit exports PowerShell and POSIX helpers with the same read-only commands"
+ ],
+ "releaseCommit": null,
+ "publicVerification": null
+}

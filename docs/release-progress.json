@@ -1,8 +1,8 @@
 {
- "version": "0.1.20",
- "status": "interim-published",
- "releaseHold": true,
- "reason": "Pulse 1.12.5-1.13.0 was ported into 0.1.20 and the user asked for it to be pushed and released on 2026-11-15. The GitHub release v0.1.20 is published with the five signed assets and latest.json points at 0.1.20. The hold is restored because the release does not establish full Pulse parity: real-account and real-machine acceptance (DimAgent, Xiaomi prepaid, a Gemini.app-only machine, multi-group Antigravity, a real extension with a PNG icon, real Command Code turns, the updater on an installed client) remain open.",
+ "version": "0.1.21",
+ "status": "release-preparation",
+ "releaseHold": false,
+ "reason": "The card scrollbar fix in commit 8cb01f9 is being released at the user's request on 2026-11-22. This is a patch over 0.1.20; full Pulse 1.13.0 parity is not claimed and the hold returns after publication.",
  "upstream": "1.13.0",
  "publishedVersion": "0.1.20",
  "implementedVerified": [
@@ -99,7 +99,7 @@
   "Live acceptance of the 1.12.5-1.13.0 ports remains: a real `dim` CLI account, a real Xiaomi prepaid account, a machine with only Gemini.app for the agy route, a real multi-group Antigravity account, a real extension shipping a PNG icon and a real Command Code turn are needed to accept them beyond fixtures.",
   "Re-run the signed old-client update download against the published 0.1.20 assets and run the 0.1.20 native smoke suites on an installed build"
  ],
- "checkpointDate": "2026-11-15",
+ "checkpointDate": "2026-11-22",
  "reference": "Pulse v1.13.0 tag objects, alongside the unchanged old checkout",
  "implementedPartial": [
   "DeepSeek independent encrypted console login, 30-day actual billing and 60-second cache; interactive live read passed, browser renewal/import and the console ledger card are implemented, live detailed-card acceptance pending",
