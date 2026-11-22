@@ -1,10 +1,10 @@
 {
  "version": "0.1.21",
- "status": "release-preparation",
- "releaseHold": false,
- "reason": "The card scrollbar fix in commit 8cb01f9 is being released at the user's request on 2026-11-22. This is a patch over 0.1.20; full Pulse 1.13.0 parity is not claimed and the hold returns after publication.",
+ "status": "interim-published",
+ "releaseHold": true,
+ "reason": "0.1.21 is published on GitHub as a patch over 0.1.20 with the card scrollbar fix; latest.json points at 0.1.21. The hold is restored because the release does not establish full Pulse 1.13.0 parity: the real-account and real-machine acceptance items remain open.",
  "upstream": "1.13.0",
- "publishedVersion": "0.1.20",
+ "publishedVersion": "0.1.21",
  "implementedVerified": [
   "Light assistant surfaces, rings and detail cards",
   "Horizontal floating, bottom docking and orientation-aware detail cards",
@@ -68,10 +68,10 @@
   "rust": "1310 passed, 0 failed, 2 explicitly ignored real-account checks (1312 total) on this Windows machine, including the new DimAgent, MiniMax-merge, Antigravity-CLI, Xiaomi balance, extension icon, ego lite, renewal-failure, Z.ai re-read, Command Code, star-request and activity tests.",
   "frontendUnit": "287 passed in 28 files; tsc --noEmit and vite build clean.",
   "browser": "81 passed in the full browser suite on the 0.1.20 working tree; browser IPC responses are synthetic.",
-  "native": "The 0.1.20 artifact was built and signed on GitHub Actions windows-latest (.github/workflows/release-windows.yml run 43698512839 at cd10988): 1310 Rust tests passed with 2 explicitly ignored, 28 frontend files passed, tsc --noEmit clean, and the build produced a signed NSIS setup and MSI. No installer was executed and no isolated native updater run was performed.",
-  "localUpdateFeed": "latest.json inside the published v0.1.20 release reports version 0.1.20 with NSIS and MSI entries, so installed clients following the GitHub latest.json see 0.1.20.",
+  "native": "The 0.1.21 artifact was built and signed on GitHub Actions windows-latest (.github/workflows/release-windows.yml run 45032638207 at 45e85c7): cargo test --all-targets passed with 2 explicitly ignored, 28 frontend files passed, tsc --noEmit clean, and the build produced a signed NSIS setup and MSI. No installer was executed and no isolated native updater run was performed.",
+  "localUpdateFeed": "latest.json inside the published v0.1.21 release reports version 0.1.21 with NSIS and MSI entries, so installed clients following the GitHub latest.json see 0.1.21.",
   "buildBlocker": "None for 0.1.19. The updater signing key is a repository secret (TAURI_SIGNING_PRIVATE_KEY, key id 218D1940E2C4F3DC) and .github/workflows/release-windows.yml builds, signs and publishes.",
-  "publicRelease": "PASS for the published 0.1.20 release: the release is public (not a draft or prerelease) with five uploaded assets, and the published latest.json reports 0.1.20 with three platform entries and signatures. Asset digests were read from the GitHub API rather than compared against a local rebuild, and the signed old-client upgrade download was not re-run for this version.",
+  "publicRelease": "PASS for the published 0.1.21 release: the release is public (not a draft or prerelease) with five uploaded assets, and the published latest.json reports 0.1.21 with three platform entries and signatures. Asset digests were read from the GitHub API rather than compared against a local rebuild, and the signed old-client upgrade download was not re-run for this version.",
   "externalLimitations": [
    "44 status pages verified against fixtures only; gemini-cli, command-code and hugging-face timed out from this network (curl times out too) and stay unverified",
    "Exchange-rate endpoint, offline and 429 behaviour not exercised against the real service",
@@ -79,7 +79,7 @@
    "Real Harness read-only integrity check failed because source logs changed during its 57.8-second scan; no stable live-source acceptance",
    "Raycast and Sketchybar status-line helpers are macOS-only and have no Windows equivalent; the developer kit exports PowerShell and POSIX status-line helpers with the same read-only commands."
   ],
-  "windows": "PASS on GitHub Actions windows-latest run 43698512839 at cd10988: cargo test --all-targets 1310 passed, 0 failed, 2 ignored; vitest 28 files passed; tsc --noEmit clean; signed NSIS and MSI produced."
+  "windows": "PASS on GitHub Actions windows-latest run 45032638207 at 45e85c7: cargo test --all-targets 1310 passed, 0 failed, 2 ignored; vitest 28 files passed; tsc --noEmit clean; signed NSIS and MSI produced."
  },
  "pending": [
   "Execute an installer and upgrade one installed client to 0.1.19 to accept the install and in-app update paths; neither was exercised for this release.",
