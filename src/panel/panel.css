@@ -152,8 +152,18 @@
   /* A card whose rows outgrow the bubble scrolls, and the title stays put by
      being sticky — the original's rule for a long detailed card. */
   overflow-y: auto;
-  scrollbar-width: thin;
+  /* The original runs on macOS, where scrollbars are overlay indicators that
+     hide themselves. A classic Windows scrollbar is painted outside clip-path
+     and shows up beside the bubble, so keep the scrolling but not the bar. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   overscroll-behavior: contain;
+}
+
+.card__content::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .card__content > div:first-child {
