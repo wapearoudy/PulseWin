@@ -1,6 +1,6 @@
 {
  "version": "0.1.23",
- "status": "verified-candidate",
+ "status": "published",
  "authorization": "提交发版（2026-11-28）",
  "changes": [
   "Group settings accounts by monitoring state and show their connection status. Move the current usage and connection sections higher in account settings.",
@@ -43,5 +43,54 @@
  "limitations": [
   "Windows 2.36 background quota verification used the official agy CLI. The desktop Models page remains a manual fallback.",
   "The remaining original-Pulse and real-account acceptance items stay open in release-progress.json."
- ]
+ ],
+ "releaseCommit": "7a17be8cf86af7f9c04cd23ff2f52674cd96394a",
+ "publicVerification": {
+  "releaseId": 461312579,
+  "publishedAt": "2026-11-28T04:59:30Z",
+  "passed": true,
+  "testedAt": "2026-11-28T05:00:07.283Z",
+  "repository": "wapearoudy/PulseWin",
+  "release": "https://github.com/wapearoudy/PulseWin/releases/tag/v0.1.23",
+  "version": "0.1.23",
+  "anonymousAssets": [
+   {
+    "name": "latest.json",
+    "bytes": 2549,
+    "sha256": "a0fd6f6b235fb1ee8fdd6206ebe90786367ed85fe5df99913df8cb7f38164bf0"
+   },
+   {
+    "name": "PulseWin_0.1.23_x64-setup.exe",
+    "bytes": 3634769,
+    "sha256": "4908f18f03ee4ad52417ca4a296f3ae55d68c51e2cd3c52f74cc796d839f5044"
+   },
+   {
+    "name": "PulseWin_0.1.23_x64-setup.exe.sig",
+    "bytes": 440,
+    "sha256": "d2ed9cd7708c6556095dbf6cf058f36c137bd89e8986a19143524e4f346ae5b2"
+   },
+   {
+    "name": "PulseWin_0.1.23_x64_en-US.msi",
+    "bytes": 5742592,
+    "sha256": "bb48184621d9f1ba1e05dfdfa1b1f35acbcc5db029c8951aaac7c11c8b4b0d89"
+   },
+   {
+    "name": "PulseWin_0.1.23_x64_en-US.msi.sig",
+    "bytes": 440,
+    "sha256": "84936c753e86efe790e29e9235082d08f93c744ed879a9d321823ba7033458e8"
+   }
+  ],
+  "nativeCheck": {
+   "phase": "current",
+   "source": "https://github.com/wapearoudy/PulseWin/releases/latest/download/latest.json",
+   "currentVersion": "0.1.23"
+  },
+  "installationExecuted": false,
+  "signedUpgradeDownload": {
+   "from": "0.1.21",
+   "to": "0.1.23",
+   "passed": true,
+   "actualPublishedPackage": true
+  }
+ }
 }
