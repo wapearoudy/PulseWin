@@ -185,6 +185,15 @@ pub struct SpendSource { pub id: String, pub name: String, pub status: String, p
 pub struct SpendSnapshot {
     pub scanned_at: String, pub records: Vec<SpendRecord>, pub sources: Vec<SpendSource>,
     pub notes: Vec<String>, pub prices_at: Option<String>, pub pricing_status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub console_billing: Option<ConsoleBilling>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConsoleBilling {
+    currency: Option<String>,
+    days_with_missing_charges: Vec<String>,
 }
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -271,6 +280,7 @@ fn card_agent(provider: &str) -> Option<&'static str> {
 fn card_sources(provider: &str) -> Option<Vec<&'static str>> {
     match provider {
         "devin" => Some(vec!["devin-cli", "devin-desktop", "omp"]),
+        "antigravity" => Some(vec!["antigravity", "antigravity-cli", "antigravity-ide"]),
         _ => card_agent(provider).map(|agent| vec![agent]),
     }
 }
@@ -290,9 +300,20 @@ fn card_record(provider: &str, record: &SpendRecord) -> bool {
 #[derive(Serialize)] #[serde(rename_all="camelCase")]
 pub struct CardHistory {status:&'static str,snapshot:Option<SpendSnapshot>}
 /// One day of a console's own account ledger, in the shape the card uses.
-pub(crate) struct CardDay { pub date:String, pub input:u64, pub output:u64, pub cache_write:u64, pub cache_read:u64, pub cost:Option<f64>, pub models:BTreeMap<String,u64> }
-pub(crate) fn console_snapshot(agent:&str,name:&str,days:Vec<CardDay>,notes:Vec<String>,checked_at:String)->SpendSnapshot {
-    let records=days.into_iter().filter(|d|d.input+d.output+d.cache_write+d.cache_read>0).map(|d|{
+pub(crate) struct CardDay {
+    pub date: String,
+    pub input: u64,
+    pub output: u64,
+    pub cache_write: u64,
+    pub cache_read: u64,
+    pub cost: Option<f64>,
+    pub missing_charge: bool,
+    pub models: BTreeMap<String, u64>,
+}
+
+pub(crate) fn console_snapshot(agent: &str, name: &str, days: Vec<CardDay>, currency: Option<String>, notes: Vec<String>, checked_at: String) -> SpendSnapshot {
+    let days_with_missing_charges = days.iter().filter(|day| day.missing_charge).map(|day| day.date.clone()).collect();
+    let records=days.into_iter().filter(|d|d.input>0||d.output>0||d.cache_write>0||d.cache_read>0||d.cost.is_some()||d.missing_charge).map(|d|{
         let model=d.models.into_iter().max_by_key(|(_,tokens)|*tokens).map(|(name,_)|name).unwrap_or_else(||"console".into());
         SpendRecord{agent:agent.into(),model:model.clone(),model_name:Some(model),day:d.date.clone(),hour:0,session:"console".into(),project:None,
             tally:Tally{input:d.input,output:d.output,cache_write:d.cache_write,cache_read:d.cache_read,..Default::default()},
@@ -300,7 +321,7 @@ pub(crate) fn console_snapshot(agent:&str,name:&str,days:Vec<CardDay>,notes:Vec<
             source_scope:None,cost:d.cost,cost_breakdown:None,cache_savings:None,reply_timing:None}
     }).collect::<Vec<_>>();
     let count=records.len();
-    SpendSnapshot{scanned_at:checked_at.clone(),records,sources:vec![SpendSource{id:agent.into(),name:name.into(),status:"counted".into(),files:1,cached_files:0,records:count,retained_records:0,origin:"native".into(),roots:Vec::new()}],notes,prices_at:None,pricing_status:"console".into()}
+    SpendSnapshot{scanned_at:checked_at,records,sources:vec![SpendSource{id:agent.into(),name:name.into(),status:"counted".into(),files:1,cached_files:0,records:count,retained_records:0,origin:"native".into(),roots:Vec::new()}],notes,prices_at:None,pricing_status:"console".into(), console_billing:Some(ConsoleBilling{currency,days_with_missing_charges})}
 }
 pub(crate) fn card_history(status:&'static str,snapshot:Option<SpendSnapshot>)->CardHistory { CardHistory{status,snapshot} }
 /// Same measured readers and public prices as Token Spend, scoped to one card.
@@ -719,7 +740,7 @@ fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl
     let mut journals=Vec::new();
     let mut store_journals=Vec::new();
     let mut identities = HashSet::new();
-    let mut snapshot = SpendSnapshot { scanned_at: Utc::now().to_rfc3339(), records: Vec::new(), sources: Vec::new(), notes: Vec::new(), prices_at: None, pricing_status: "unavailable".into() };
+    let mut snapshot = SpendSnapshot { scanned_at: Utc::now().to_rfc3339(), records: Vec::new(), sources: Vec::new(), notes: Vec::new(), prices_at: None, pricing_status: "unavailable".into(), console_billing: None };
     for (index, (agent, name)) in AGENTS.iter().enumerate() {
         check(cancel)?; progress(name, index + 1);
         let inputs = inputs_for(agent);
@@ -737,9 +758,10 @@ fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl
             check(cancel)?;
             if snapshot.records.len() + raw_count >= MAX_RECORDS { snapshot.notes.push("记录超过读取上限，计数可能不完整".into()); break; }
             let before = match stamp(file, agent) { Ok(s) => s, Err(e) => { snapshot.notes.push(format!("读取文件元信息失败 {}：{e}", file.display())); continue; } };
-            let cache_name = format!("transcript-{TRANSCRIPT_VERSION}-{}-{:016x}.json", agent, hash(file.to_string_lossy().to_string()));
+            let transcript_version = if *agent == "codex" { TRANSCRIPT_VERSION + 1 } else { TRANSCRIPT_VERSION };
+            let cache_name = format!("transcript-{transcript_version}-{}-{:016x}.json", agent, hash(file.to_string_lossy().to_string()));
             let cached = fs::read(cache.join(&cache_name)).ok().and_then(|b| serde_json::from_slice::<FileCache>(&b).ok()).filter(|c|
-                c.version == TRANSCRIPT_VERSION && c.agent == *agent && c.fingerprint == before && c.records.iter().all(|record|
+                c.version == transcript_version && c.agent == *agent && c.fingerprint == before && c.records.iter().all(|record|
                     record.tally.valid() && record.agent == *agent && record.hour < 24 && !record.model.trim().is_empty()
                     && chrono::NaiveDate::parse_from_str(&record.day, "%Y-%m-%d").is_ok()
                     && (record.tally.total() > 0 || record.unclassified_tokens > 0)
@@ -753,7 +775,7 @@ fn scan_roots(cache: &Path, prices: &Prices, cancel: &AtomicBool, progress: impl
                     Err(error) if check(cancel).is_err() => return Err(error),
                     Err(error) => { snapshot.notes.push(error); continue; }
                 };
-                if notes.is_empty() && stamp(file, agent).ok() == Some(before) { let _ = write_cache(cache, &cache_name, &FileCache { version: TRANSCRIPT_VERSION, agent: (*agent).into(), fingerprint: before, records: records.clone() }, cancel); }
+                if notes.is_empty() && stamp(file, agent).ok() == Some(before) { let _ = write_cache(cache, &cache_name, &FileCache { version: transcript_version, agent: (*agent).into(), fingerprint: before, records: records.clone() }, cancel); }
                 else if stamp(file, agent).ok() != Some(before) { snapshot.notes.push(format!("扫描期间文件发生变化：{}；本次结果未缓存", file.display())); }
                 snapshot.notes.extend(notes); records
             };

@@ -2,10 +2,17 @@ import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import type { SpendSpan } from './token-spend/types'
+import type { CardPart } from './panel/cardParts'
 
 export interface AccountAppearance {
+  /** Retained for older versions. The card defaults to all eligible sections. */
   detailedCard: boolean
+  /** Missing/null uses the defaults; an empty list keeps only core limits. */
+  cardParts?: CardPart[] | null
   animatedMark: boolean
+  robotFigure?: string | null
+  robotMaterial?: 'flat' | 'fluffy'
+  /** Kept when loading older profiles. New robots choose a figure separately. */
   persona: string
   body: string
   markColour: string | null

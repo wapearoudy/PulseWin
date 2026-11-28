@@ -1,8 +1,8 @@
 {
- "version": "0.1.21",
- "status": "interim-published",
- "releaseHold": true,
- "reason": "0.1.21 is published on GitHub as a patch over 0.1.20 with the card scrollbar fix; latest.json points at 0.1.21. The hold is restored because the release does not establish full Pulse 1.13.0 parity: the real-account and real-machine acceptance items remain open.",
+ "version": "0.1.22",
+ "status": "release-preparation",
+ "releaseHold": false,
+ "reason": "The user authorized publication of the verified Windows changes for 0.1.22 on 2026-11-28. The remaining original-Pulse and real-account acceptance items stay open.",
  "upstream": "1.13.0",
  "publishedVersion": "0.1.21",
  "implementedVerified": [
@@ -108,5 +108,5 @@
   "Prompt-cache hover card is implemented on the Token split and DeepSeek/OpenCode console ledgers feed detailed cards; live per-model TTFT and real console-detail acceptance remain pending",
   "OpenCode encrypted independent login, workspace resolution and adaptive pager; 20,364 unique live Go IDs, zero pending ranges, restart recovery and account disable cancellation passed. Renewal and the console ledger card are implemented, live detailed-card acceptance pending."
  ],
- "interimReleaseAuthorization": "提交代码，发布一版（2026-10-20）"
+ "interimReleaseAuthorization": "提交发布（2026-11-28）"
 }

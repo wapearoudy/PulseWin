@@ -493,7 +493,7 @@ pub async fn start(provider: &str, folder: &Path) -> Outcome {
             };
             // The model list is a courtesy: if asking for it fails, the
             // account's default is used and the message still goes.
-            let model = codex_model_list(&binary, folder)
+            let model = codex_read_rpc(&binary, folder, "model/list", Some(serde_json::json!({})), MODELS_DEADLINE)
                 .await
                 .and_then(|reply| cheapest_codex_model(&reply));
             run(&binary, &codex_arguments(model.as_deref(), folder), folder).await
@@ -891,49 +891,22 @@ where
 /// feature exists to send. Standard error is drained into nothing for the same
 /// reason it is drained elsewhere: a helper that fills that pipe would wait for
 /// a reader for ever.
-async fn codex_model_list(binary: &Path, folder: &Path) -> Option<Value> {
+pub(crate) async fn codex_read_rpc(binary: &Path, folder: &Path, method: &str, params: Option<Value>, deadline: Duration) -> Option<Value> {
     let mut command = command_for(binary, folder);
-    command.stdin(Stdio::piped());
+    command.arg("app-server").stdin(Stdio::piped()).stderr(Stdio::null());
     let mut child = command.spawn().ok()?;
     let mut stdin = child.stdin.take()?;
     let stdout = child.stdout.take()?;
-    if let Some(mut pipe) = child.stderr.take() {
-        tokio::spawn(async move {
-            let mut sink = Vec::new();
-            drain(&mut Some(&mut pipe), &mut sink).await;
-        });
-    }
-
-    let handshake = [
-        serde_json::json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"PulseWin","title":"PulseWin","version":"0.1"}}}),
-        serde_json::json!({"jsonrpc":"2.0","method":"initialized","params":{}}),
-        serde_json::json!({"jsonrpc":"2.0","id":2,"method":"model/list","params":{}}),
-    ];
-    let mut text = String::new();
-    for message in handshake {
-        text.push_str(&message.to_string());
-        text.push('\n');
-    }
-    if stdin.write_all(text.as_bytes()).await.is_err() || stdin.flush().await.is_err() {
-        return None;
-    }
-
-    let reply = tokio::time::timeout(MODELS_DEADLINE, async move {
-        let mut reader = tokio::io::BufReader::new(stdout);
-        let mut line = String::new();
-        loop {
-            line.clear();
-            match reader.read_line(&mut line).await {
-                Ok(0) | Err(_) => return None,
-                Ok(_) => {}
-            }
-            let Ok(message) = serde_json::from_str::<Value>(line.trim()) else {
-                continue;
-            };
-            if message.get("id").and_then(Value::as_i64) == Some(2) {
-                return Some(message);
-            }
-        }
+    let reply = tokio::time::timeout(deadline, async move {
+        let mut reader = tokio::io::BufReader::new(stdout.take(1024 * 1024));
+        let initialize = serde_json::json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"PulseWin","title":"PulseWin","version":"0.1"}}});
+        stdin.write_all(format!("{initialize}\n").as_bytes()).await.ok()?;
+        codex_rpc_reply(&mut reader, 1).await?;
+        let initialized = serde_json::json!({"jsonrpc":"2.0","method":"initialized","params":{}});
+        let mut request = serde_json::json!({"jsonrpc":"2.0","id":2,"method":method});
+        if let Some(params) = params { request["params"] = params; }
+        stdin.write_all(format!("{initialized}\n{request}\n").as_bytes()).await.ok()?;
+        codex_rpc_reply(&mut reader, 2).await
     })
     .await;
 
@@ -943,6 +916,18 @@ async fn codex_model_list(binary: &Path, folder: &Path) -> Option<Value> {
     let _ = child.start_kill();
     let _ = tokio::time::timeout(Duration::from_secs(2), child.wait()).await;
     reply.ok().flatten()
+}
+
+async fn codex_rpc_reply(reader: &mut (impl tokio::io::AsyncBufRead + Unpin), id: i64) -> Option<Value> {
+    let mut line = Vec::new();
+    loop {
+        line.clear();
+        if reader.read_until(b'\n', &mut line).await.ok()? == 0 { return None; }
+        let Ok(message) = serde_json::from_slice::<Value>(&line) else { continue; };
+        if message.get("id").and_then(Value::as_i64) == Some(id) {
+            return message.get("result").is_some().then_some(message);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

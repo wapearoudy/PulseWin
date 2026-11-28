@@ -1,13 +1,11 @@
-//! Antigravity's limits, read from a language server running on this PC.
+//! Antigravity's limits, read from a compatible language server or `agy`.
 //!
-//! The odd one out. There is no account endpoint to ask and no stored login to
-//! borrow: Antigravity starts a `language_server` process of its own and talks
-//! to it over the loopback interface, and that process is the only thing that
-//! knows the quota. So this is the one provider whose figures exist **only
-//! while something of Antigravity's is running**, which is what "Open
-//! Antigravity to see its usage." says rather than dressing it up as a failure.
+//! The legacy desktop route needs a running `language_server` that accepts
+//! its own per-launch CSRF token on loopback. Newer desktop builds use a
+//! private Host Bridge channel. They are recognized locally, and automatic
+//! mode can read their quota through the separately installed `agy` CLI.
 //!
-//! Three things have to be found, and not one of them can be assumed:
+//! The legacy desktop route needs three things:
 //!
 //! - **the process**, which lives inside an install folder rather than on
 //!   `PATH`;
@@ -67,8 +65,6 @@
 //!   groups it draws are the reader's choices, held in `split_accounts` and
 //!   `shown_model_groups`.
 //!
-//! VERIFY ON A REAL MACHINE: no Antigravity is installed on the machine this
-//! was written on, so the two discovery commands have never been run for real.
 //! Set `PULSEWIN_DEBUG=1` to dump the quota reply.
 
 use std::collections::BTreeMap;
@@ -137,15 +133,29 @@ impl Provider for Antigravity {
     /// An install PulseWin cannot recognise is named by
     /// `PULSEWIN_ANTIGRAVITY_HOME`.
     fn is_configured(&self) -> bool {
-        if let Some(named) = credentials::env_override(ID, "home") {
-            return !named.trim().is_empty() && credentials::expand_tilde(named.trim()).exists();
-        }
-        installed(&candidate_roots(), &|path| path.exists())
+        configured_install(desktop_installed, antigravity_cli::installed)
     }
 
     fn fetch(&self, _ctx: Arc<Ctx>) -> FetchFuture {
         Box::pin(async move { fetch_inner().await })
     }
+}
+
+fn desktop_installed() -> bool {
+    if let Some(named) = credentials::env_override(ID, "home") {
+        return credentials::expand_tilde(&named).exists();
+    }
+    let profiles: Vec<_> = INSTALL_FOLDERS
+        .iter()
+        .flat_map(|folder| credentials::config_relative(&[folder]))
+        .collect();
+    installed(&candidate_roots(), &profiles, &|path| path.exists())
+}
+
+fn configured_install(desktop: impl FnOnce() -> bool, cli: impl FnOnce() -> bool) -> bool {
+    // Either install makes this an account we can diagnose. When a pinned
+    // route is unavailable, fetch reports which route needs attention.
+    desktop() || cli()
 }
 
 // ---------------------------------------------------------------------------
@@ -169,6 +179,10 @@ enum Reason {
     NotRunning,
     /// Something is, and every helper it runs refused this RPC.
     NotAnswering,
+    /// The running desktop uses the newer Host Bridge.
+    DesktopNeedsCli,
+    /// Automatic mode needs the CLI because the running desktop uses Host Bridge.
+    DesktopCliMissing,
     NoLimitsReported,
     /// The CLI route was pinned, and no `agy` was found to ask.
     CliMissing,
@@ -188,6 +202,12 @@ impl Reason {
             Reason::NotAnswering => {
                 "Antigravity is open but didn't answer. Restarting it usually helps."
             }
+            Reason::DesktopNeedsCli => {
+                "已识别 Antigravity 新版桌面端。请将用量来源改为「自动」或「CLI（agy）」。"
+            }
+            Reason::DesktopCliMissing => {
+                "已识别 Antigravity 新版桌面端。请安装并登录 agy CLI，然后刷新用量。"
+            }
             Reason::NoLimitsReported => "No limits reported.",
             Reason::CliMissing => {
                 "No agy command was found for Antigravity. Install its CLI, or read from the desktop app."
@@ -196,7 +216,7 @@ impl Reason {
                 "Antigravity's agy is too old to report usage. Update it, or read from the desktop app."
             }
             Reason::CliFailed => {
-                "agy ran but didn't report usage. Run `agy -p /usage --output-format json` once to see why."
+                "agy 未返回用量。请在终端打开 agy，确认已登录并检查 /usage。"
             }
             Reason::CliTimedOut => "agy didn't answer in time. Try again in a moment.",
         }
@@ -235,6 +255,8 @@ enum Desktop {
     NoLimits,
     /// Something of Antigravity's is running and every candidate refused.
     NotAnswering,
+    /// The desktop is running with a Host Bridge instead of the legacy route.
+    HostBridge,
     /// Nothing of Antigravity's is running.
     NotRunning,
 }
@@ -253,14 +275,10 @@ async fn fetch_inner() -> ProviderUsage {
 /// **The CLI is asked only when the app has nothing to say**, as in the
 /// original: a running app is the cheaper and more current answer, and asking a
 /// second program for the same account on every refresh would spend a process
-/// per round to learn what was already on screen. A machine with no `agy` is not
-/// asked at all, so the reason the app gave stands on its own.
+/// per round to learn what was already on screen.
 async fn automatic() -> ProviderUsage {
     let server = desktop().await;
     if matches!(server, Desktop::Figures(..)) {
-        return desktop_usage(&server);
-    }
-    if antigravity_cli::locate().is_none() {
         return desktop_usage(&server);
     }
     weigh(server, antigravity_cli::ask().await)
@@ -268,14 +286,17 @@ async fn automatic() -> ProviderUsage {
 
 /// What to report when both routes were tried.
 ///
-/// The original keeps the language server's answer and records the CLI's outcome
-/// beside it in its attempt list. This port has no attempt list, so: figures from
-/// the CLI are the answer (the app had none), a CLI that reports no limits is an
-/// answer, and a CLI that failed or was never asked leaves the app's own reason
-/// standing — with the app closed, "Open Antigravity" is the action that helps,
-/// and "agy didn't answer" would send the reader at the second program while the
-/// first one is the one that is not running.
+/// Keep the legacy desktop's diagnostic when it remains an option. For a Host
+/// Bridge install, the CLI outcome gives the actionable next step.
 fn weigh(server: Desktop, answer: antigravity_cli::Answer) -> ProviderUsage {
+    if server == Desktop::HostBridge {
+        return match answer {
+            antigravity_cli::Answer::NotAsked(antigravity_cli::NotAsked::Missing) => {
+                ProviderUsage::failed(ID, NAME, Reason::DesktopCliMissing.message())
+            }
+            other => cli_only(other),
+        };
+    }
     match answer {
         antigravity_cli::Answer::Windows(windows) => cli_usage(windows),
         antigravity_cli::Answer::NoLimits => {
@@ -328,19 +349,25 @@ fn desktop_usage(server: &Desktop) -> ProviderUsage {
         Desktop::NoLimits => ProviderUsage::failed(ID, NAME, Reason::NoLimitsReported.message()),
         Desktop::NotAnswering => ProviderUsage::failed(ID, NAME, Reason::NotAnswering.message()),
         Desktop::NotRunning => ProviderUsage::failed(ID, NAME, Reason::NotRunning.message()),
+        Desktop::HostBridge => ProviderUsage::failed(ID, NAME, Reason::DesktopNeedsCli.message()),
     }
 }
 
 /// The language server route: every server, every port, in the order the machine
 /// lists them.
 async fn desktop() -> Desktop {
-    let servers = discover().await;
+    let (servers, uses_host_bridge) = discover().await;
+    let unavailable = if uses_host_bridge {
+        Desktop::HostBridge
+    } else {
+        Desktop::NotRunning
+    };
     if servers.is_empty() {
-        return Desktop::NotRunning;
+        return unavailable;
     }
 
     let Some(client) = loopback_client() else {
-        return Desktop::NotRunning;
+        return unavailable;
     };
 
     // An answer with no limits in it is a real answer, but not a reason to
@@ -394,10 +421,10 @@ async fn desktop() -> Desktop {
         return Desktop::NoLimits;
     }
 
-    if something_answered {
+    if something_answered && !uses_host_bridge {
         Desktop::NotAnswering
     } else {
-        Desktop::NotRunning
+        unavailable
     }
 }
 
@@ -670,14 +697,20 @@ struct Server {
     token: String,
 }
 
-/// Every language server on this PC that might be able to answer, best first.
-async fn discover() -> Vec<Server> {
+#[derive(Default)]
+struct AntigravityProcesses {
+    legacy: Vec<(u32, String)>,
+    uses_host_bridge: bool,
+}
+
+/// Legacy servers that can answer, plus whether a Host Bridge server is running.
+async fn discover() -> (Vec<Server>, bool) {
     let printed = run(&powershell(), &process_arguments(), DISCOVERY_DEADLINE).await;
     let candidates = candidates_from_processes(&String::from_utf8_lossy(
         printed.as_deref().unwrap_or_default(),
     ));
-    if candidates.is_empty() {
-        return Vec::new();
+    if candidates.legacy.is_empty() {
+        return (Vec::new(), candidates.uses_host_bridge);
     }
 
     let printed = run(&netstat(), &port_arguments(), DISCOVERY_DEADLINE).await;
@@ -685,40 +718,47 @@ async fn discover() -> Vec<Server> {
         printed.as_deref().unwrap_or_default(),
     ));
 
-    servers_from(&candidates, &ports)
+    (servers_from(&candidates.legacy, &ports), candidates.uses_host_bridge)
 }
 
-/// The pids worth asking and each one's CSRF token.
+/// Classify Antigravity processes by their startup flags.
 ///
 /// `printed` is what `Get-CimInstance … | ConvertTo-Json` wrote: one object
 /// when a single process matched and an array when several did, which is why
 /// both are read.
-fn candidates_from_processes(printed: &str) -> Vec<(u32, String)> {
-    let trimmed = printed.trim();
-    if trimmed.is_empty() {
-        return Vec::new();
+fn candidates_from_processes(printed: &str) -> AntigravityProcesses {
+    let mut candidates = AntigravityProcesses::default();
+    let Ok(parsed) = serde_json::from_str::<Value>(printed.trim()) else {
+        return candidates;
+    };
+
+    let processes = parsed
+        .as_array()
+        .map_or(std::slice::from_ref(&parsed), Vec::as_slice);
+    for process in processes {
+        let Some(command_line) = process.get("CommandLine").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(pid) = process
+            .get("ProcessId")
+            .and_then(Value::as_u64)
+            .and_then(|pid| u32::try_from(pid).ok())
+        else {
+            continue;
+        };
+        if !is_antigravity(command_line) {
+            continue;
+        }
+        if let Some(token) = flag_value(command_line, "--csrf_token") {
+            candidates.legacy.push((pid, token));
+        } else if command_line
+            .split_whitespace()
+            .any(|arg| arg == "--read_host_bridge_token_from_stdin")
+        {
+            candidates.uses_host_bridge = true;
+        }
     }
-    let Ok(parsed) = serde_json::from_str::<Value>(trimmed) else {
-        return Vec::new();
-    };
-
-    let processes: Vec<&Value> = match &parsed {
-        Value::Array(items) => items.iter().collect(),
-        other => vec![other],
-    };
-
-    processes
-        .iter()
-        .filter_map(|process| {
-            let command_line = process.get("CommandLine").and_then(Value::as_str)?;
-            if !is_antigravity(command_line) {
-                return None;
-            }
-            let pid = process.get("ProcessId").and_then(Value::as_u64)?;
-            let token = flag_value(command_line, "--csrf_token")?;
-            Some((pid as u32, token))
-        })
-        .collect()
+    candidates
 }
 
 /// Does this process belong to Antigravity?
@@ -866,8 +906,7 @@ fn servers_from(candidates: &[(u32, String)], ports: &BTreeMap<u32, Vec<u16>>) -
 const INSTALL_FOLDERS: [&str; 2] = ["Antigravity", "Antigravity IDE"];
 
 /// Where an install puts itself: the per-user program folder, the two
-/// machine-wide ones, and the app's own data folder, which is there once it
-/// has run at least once.
+/// machine-wide ones.
 fn candidate_roots() -> Vec<PathBuf> {
     let mut roots: Vec<PathBuf> = Vec::new();
 
@@ -886,24 +925,17 @@ fn candidate_roots() -> Vec<PathBuf> {
         }
     }
 
-    // The app's own data folder, beside `%APPDATA%`: an Electron app writes
-    // one the first time it runs, which is the moment its quota becomes
-    // something this port can read.
-    roots.extend(credentials::config_relative(&["Antigravity"]));
-    roots.extend(credentials::config_relative(&["Antigravity IDE"]));
-
-    roots.retain(|root| !root.as_os_str().is_empty());
     roots
 }
 
-/// Whether the folder or the program beside it is there. The check is injected
-/// so a test can drive the search without installing anything.
-fn installed(roots: &[PathBuf], exists: &dyn Fn(&Path) -> bool) -> bool {
-    roots.iter().any(|root| {
-        INSTALL_FOLDERS
-            .iter()
-            .any(|folder| exists(&root.join(folder)) || exists(&root.join(format!("{folder}.exe"))))
-    })
+/// A profile directory is also a signal for installations on another drive.
+fn installed(roots: &[PathBuf], profiles: &[PathBuf], exists: &dyn Fn(&Path) -> bool) -> bool {
+    profiles.iter().any(|profile| exists(profile))
+        || roots.iter().any(|root| {
+            INSTALL_FOLDERS.iter().any(|folder| {
+                exists(&root.join(folder)) || exists(&root.join(format!("{folder}.exe")))
+            })
+        })
 }
 
 // ---------------------------------------------------------------------------
@@ -1349,9 +1381,27 @@ mod tests {
 
         let candidates = candidates_from_processes(&printed);
         assert_eq!(
-            candidates,
+            candidates.legacy,
             vec![(2, "bbb".to_string()), (3, "ccc".to_string())]
         );
+        assert!(!candidates.uses_host_bridge);
+    }
+
+    #[test]
+    fn standalone_antigravity_is_recognized_without_a_legacy_token() {
+        let printed = serde_json::json!([
+            { "ProcessId": 7, "CommandLine": r#"D:\Soft\Antigravity\resources\bin\language_server.exe --standalone --app_data_dir antigravity --read_host_bridge_token_from_stdin"# },
+            { "ProcessId": 8, "CommandLine": r#"C:\Apps\Antigravity IDE\language_server.exe --app_data_dir antigravity --csrf_token=legacy"# }
+        ]);
+        let candidates = candidates_from_processes(&printed.to_string());
+        assert!(candidates.uses_host_bridge);
+        assert_eq!(candidates.legacy, vec![(8, "legacy".into())]);
+
+        let unrelated = serde_json::json!({
+            "ProcessId": 9,
+            "CommandLine": r#"C:\Apps\Other\language_server.exe --read_host_bridge_token_from_stdin"#
+        });
+        assert!(!candidates_from_processes(&unrelated.to_string()).uses_host_bridge);
     }
 
     /// A candidate without a token is not a candidate: the server refuses the
@@ -1362,7 +1412,9 @@ mod tests {
             { "ProcessId": 7, "CommandLine": "C:\\Apps\\Antigravity\\language_server.exe" }
         ])
         .to_string();
-        assert!(candidates_from_processes(&printed).is_empty());
+        let candidates = candidates_from_processes(&printed);
+        assert!(candidates.legacy.is_empty());
+        assert!(!candidates.uses_host_bridge);
     }
 
     /// Windows writes `--csrf_token=<uuid>` where macOS writes
@@ -1417,14 +1469,15 @@ mod tests {
         })
         .to_string();
         assert_eq!(
-            candidates_from_processes(&single),
+            candidates_from_processes(&single).legacy,
             vec![(9, "solo".to_string())]
         );
 
-        assert!(candidates_from_processes("").is_empty());
-        assert!(candidates_from_processes("   ").is_empty());
-        assert!(candidates_from_processes("not json").is_empty());
-        assert!(candidates_from_processes("[]").is_empty());
+        for empty in ["", "   ", "not json", "[]"] {
+            let candidates = candidates_from_processes(empty);
+            assert!(candidates.legacy.is_empty());
+            assert!(!candidates.uses_host_bridge);
+        }
     }
 
     /// Only the rows that are waiting for connections, and only for the
@@ -1527,16 +1580,24 @@ Active Connections
         let roots = vec![PathBuf::from("C:\\one"), PathBuf::from("C:\\two")];
 
         // The folder, and the program beside it.
-        assert!(installed(&roots, &|path| path == Path::new("C:\\two\\Antigravity")));
-        assert!(installed(&roots, &|path| {
+        assert!(installed(&roots, &[], &|path| path == Path::new("C:\\two\\Antigravity")));
+        assert!(installed(&roots, &[], &|path| {
             path == Path::new("C:\\one\\Antigravity IDE.exe")
         }));
         // Anything else is not an install.
-        assert!(!installed(&roots, &|_| false));
-        assert!(!installed(&roots, &|path| path == Path::new("C:\\one\\Something Else")));
+        assert!(!installed(&roots, &[], &|_| false));
+        assert!(!installed(&roots, &[], &|path| path == Path::new("C:\\one\\Something Else")));
 
         // The roots this machine can actually name.
         assert!(!candidate_roots().is_empty());
+    }
+
+    #[test]
+    fn a_roaming_profile_identifies_a_custom_desktop_install() {
+        let roots = [PathBuf::from(r"C:\Program Files")];
+        let profile = PathBuf::from(r"C:\Users\test\AppData\Roaming\Antigravity");
+        assert!(installed(&roots, std::slice::from_ref(&profile), &|path| path == profile));
+        assert!(!installed(&roots, &[profile], &|_| false));
     }
 
     #[test]
@@ -1641,6 +1702,13 @@ Active Connections
         assert_eq!(route("desktop "), Route::Automatic);
     }
 
+    #[test]
+    fn a_cli_only_install_passes_provider_discovery() {
+        assert!(configured_install(|| false, || true));
+        assert!(!configured_install(|| false, || false));
+        assert!(configured_install(|| true, || false));
+    }
+
     /// A reading from the CLI is a reading; the card says which program gave it.
     #[test]
     fn a_cli_reading_says_where_it_came_from() {
@@ -1685,6 +1753,27 @@ Active Connections
                 "with the app closed, opening it is the step that helps"
             );
         }
+    }
+
+    #[test]
+    fn host_bridge_uses_cli_results_and_explains_when_cli_is_missing() {
+        use antigravity_cli::{Answer, Fault, NotAsked};
+
+        let missing = weigh(Desktop::HostBridge, Answer::NotAsked(NotAsked::Missing));
+        assert_eq!(missing.error.as_deref(), Some(Reason::DesktopCliMissing.message()));
+        assert!(missing.windows.is_empty());
+
+        let failed = weigh(Desktop::HostBridge, Answer::Failed(Fault::Unreadable));
+        assert_eq!(failed.error.as_deref(), Some(Reason::CliFailed.message()));
+
+        let windows = vec![UsageWindow::new("5h", Some(25.0))];
+        let loaded = weigh(Desktop::HostBridge, Answer::Windows(windows.clone()));
+        assert_eq!(loaded.source.as_deref(), Some("agy CLI"));
+        assert_eq!(loaded.windows, windows);
+        assert!(loaded.error.is_none());
+
+        let pinned_desktop = desktop_usage(&Desktop::HostBridge);
+        assert_eq!(pinned_desktop.error.as_deref(), Some(Reason::DesktopNeedsCli.message()));
     }
 
     /// A pinned route reports its own endings: a route that quietly read the

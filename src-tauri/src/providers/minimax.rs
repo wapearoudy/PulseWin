@@ -1,10 +1,7 @@
 //! The MiniMax Coding Plan's limits, from its token-plan endpoint.
 //!
-//! **Two providers, one service**, for the same reason as the GLM plan:
-//! `api.minimax.io` and `api.minimaxi.com` are one company's international and
-//! mainland storefronts, and a key for one is refused by the other. CodexBar
-//! models this as a region switch inside one provider; each gets its own ring
-//! here.
+//! `api.minimax.io` and `api.minimaxi.com` are the international and mainland
+//! storefronts of one provider. Store credentials separately for each site.
 //!
 //! `GET {host}/v1/token_plan/remains` with the key as a bearer token, falling
 //! back to the older coding-plan path. Undocumented, and it can change without
@@ -23,6 +20,7 @@
 //!   video. Read literally that is a ring pinned at 0% for a thing the account
 //!   cannot use, so they are left out.
 
+use std::path::Path;
 use std::sync::Arc;
 
 use serde_json::Value;
@@ -62,35 +60,80 @@ impl Provider for MiniMax {
         NAME
     }
 
-    /// The key the fetch reads — under either name, because a key saved before
-    /// the fold is still a key this provider owns.
     fn is_configured(&self) -> bool {
-        super::provider_key(ID).is_some() || super::provider_key(RETIRED_ID).is_some()
+        credential(&crate::preferences::load().minimax_site).is_some()
     }
 
     fn fetch(&self, ctx: Arc<Ctx>) -> FetchFuture {
         Box::pin(async move {
             let site = crate::preferences::load().minimax_site;
             let Some((key, host)) = credential(&site) else {
-                return ProviderUsage::failed(ID, NAME, super::missing_key(ID, ""));
+                return ProviderUsage::failed(ID, NAME, "当前 MiniMax 站点缺少 API 密钥，请在账号设置中填写。");
             };
             fetch_inner(ctx, key, host).await
         })
     }
 }
 
-/// The key to ask with, and the storefront it belongs to.
-///
-/// **The site is the setting; the key is evidence.** A preference saying
-/// "international" while the only key on disk lives in the mainland file is an
-/// account that never picked a site — the key decides which storefront can
-/// answer, and asking the other one would report a refusal as a broken account.
+pub fn credential_id(site: &str) -> &'static str {
+    if site == "china" { "minimax-china" } else { "minimax-international" }
+}
+
 fn credential(site: &str) -> Option<(String, &'static str)> {
-    if let Some(key) = super::provider_key(ID) {
-        let host = if site == "china" { MAINLAND_HOST } else { INTERNATIONAL_HOST };
-        return Some((key, host));
+    let (variable, host) = if site == "china" {
+        ("PULSEWIN_MINIMAX_CN_KEY", MAINLAND_HOST)
+    } else {
+        ("PULSEWIN_MINIMAX_KEY", INTERNATIONAL_HOST)
+    };
+    let key = std::env::var(variable).ok().map(|key| key.trim().to_owned()).filter(|key| !key.is_empty())
+        .or_else(|| crate::settings::read_credential(credential_id(site)).api_key)?;
+    Some((key, host))
+}
+
+/// Import old credentials without renaming their DPAPI envelope. An existing
+/// site file (even a cleared one) always wins over a legacy credential.
+pub fn migrate_credentials(directory: &Path, preferences: &crate::preferences::Preferences) -> std::io::Result<()> {
+    use crate::credential_store::{read_at, write_document};
+
+    let old_cn = directory.join(format!("{RETIRED_ID}.json"));
+    let old_live = directory.join(format!("{ID}.json"));
+    let cn_id = credential_id("china");
+    let intl_id = credential_id("international");
+    let cn = directory.join(format!("{cn_id}.json"));
+    let intl = directory.join(format!("{intl_id}.json"));
+
+    if old_cn.exists() {
+        let international = if !intl.exists() && !cn.exists() && preferences.minimax_site != "china" {
+            read_at(&old_live, ID).and_then(|document| {
+                document.map_or(Ok(()), |document| write_document(&intl, intl_id, &document))
+            })
+        } else { Ok(()) };
+        if !cn.exists() {
+            if let Some(document) = read_at(&old_cn, RETIRED_ID)? {
+                write_document(&cn, cn_id, &document)?;
+            }
+        }
+        return international;
     }
-    super::provider_key(RETIRED_ID).map(|key| (key, MAINLAND_HOST))
+    if cn.exists() || intl.exists() {
+        return Ok(());
+    }
+    match read_at(&old_live, ID) {
+        Ok(Some(document)) => {
+            // A consolidated build saved its key under the live id. Use the
+            // site it previously sent that credential to, once, at upgrade.
+            let target = credential_id(&preferences.minimax_site);
+            write_document(&directory.join(format!("{target}.json")), target, &document)?;
+        }
+        Ok(None) => {}
+        Err(original_error) => {
+            // 0.1.20/0.1.21 sometimes renamed the old mainland envelope.
+            // Authenticate its original id before trying to recover it.
+            let document = read_at(&old_live, RETIRED_ID).ok().flatten().ok_or(original_error)?;
+            write_document(&cn, cn_id, &document)?;
+        }
+    }
+    Ok(())
 }
 
 enum Attempt {
@@ -390,6 +433,90 @@ fn first_string(payload: &Value, keys: &[&str]) -> Option<String> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[cfg(windows)]
+    fn fixture_dir(label: &str) -> std::path::PathBuf {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../test-results/minimax-credentials")
+            .join(format!("{label}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[cfg(windows)]
+    fn read_from(dir: &Path, id: &str) -> Option<Value> {
+        crate::credential_store::read_at(&dir.join(format!("{id}.json")), id).unwrap()
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_renamed_mainland_credential_keeps_its_original_dpapi_identity() {
+        let dir = fixture_dir("renamed");
+        let old_cn = dir.join("minimax-cn.json");
+        let legacy = dir.join("minimax.json");
+        let document = json!({"apiKey":"fixture-cn"});
+        crate::credential_store::write_document(&old_cn, RETIRED_ID, &document).unwrap();
+        std::fs::rename(&old_cn, &legacy).unwrap();
+        assert!(crate::credential_store::read_at(&legacy, ID).is_err());
+        let legacy_bytes = std::fs::read(&legacy).unwrap();
+        let mut prefs = crate::preferences::Preferences::default();
+        prefs.enabled_providers.push(RETIRED_ID.into());
+        migrate_credentials(&dir, &prefs).unwrap();
+        prefs.migrate_minimax_cn();
+        assert_eq!(prefs.minimax_site, "china");
+        assert_eq!(read_from(&dir, credential_id(&prefs.minimax_site)), Some(document));
+        assert!(read_from(&dir, credential_id("international")).is_none());
+        assert_eq!(std::fs::read(&legacy).unwrap(), legacy_bytes);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn both_legacy_keys_are_imported_into_separate_sites_without_overwrite() {
+        let dir = fixture_dir("two-keys");
+        let china = json!({"apiKey":"fixture-cn"});
+        let international = json!({"apiKey":"fixture-international"});
+        crate::credential_store::write_document(&dir.join("minimax-cn.json"), RETIRED_ID, &china).unwrap();
+        crate::credential_store::write_document(&dir.join("minimax.json"), ID, &international).unwrap();
+        let mut prefs = crate::preferences::Preferences::default();
+        prefs.enabled_providers.push(RETIRED_ID.into());
+        migrate_credentials(&dir, &prefs).unwrap();
+        prefs.migrate_minimax_cn();
+        assert_eq!(prefs.minimax_site, "china");
+        let cn_id = credential_id("china");
+        assert_eq!(read_from(&dir, cn_id), Some(china));
+        assert_eq!(read_from(&dir, credential_id("international")), Some(international));
+        crate::credential_store::write_document(&dir.join(format!("{cn_id}.json")), cn_id, &json!({})).unwrap();
+        migrate_credentials(&dir, &prefs).unwrap();
+        assert_eq!(read_from(&dir, cn_id), Some(json!({})));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_consolidated_china_key_does_not_follow_a_later_site_switch() {
+        let dir = fixture_dir("consolidated");
+        let china = json!({"apiKey":"fixture-cn"});
+        crate::credential_store::write_document(&dir.join("minimax.json"), ID, &china).unwrap();
+        let mut prefs = crate::preferences::Preferences { minimax_site: "china".into(), ..Default::default() };
+        migrate_credentials(&dir, &prefs).unwrap();
+        prefs.minimax_site = "international".into();
+        migrate_credentials(&dir, &prefs).unwrap();
+        assert!(read_from(&dir, credential_id(&prefs.minimax_site)).is_none());
+        assert_eq!(read_from(&dir, credential_id("china")), Some(china));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn an_unbound_key_beside_an_original_china_key_does_not_move_after_a_switch() {
+        let dir = fixture_dir("ambiguous");
+        let china = json!({"apiKey":"fixture-cn"});
+        crate::credential_store::write_document(&dir.join("minimax-cn.json"), RETIRED_ID, &china).unwrap();
+        crate::credential_store::write_document(&dir.join("minimax.json"), ID, &json!({"apiKey":"fixture-unbound"})).unwrap();
+        let mut prefs = crate::preferences::Preferences { minimax_site: "china".into(), ..Default::default() };
+        migrate_credentials(&dir, &prefs).unwrap();
+        prefs.minimax_site = "international".into();
+        migrate_credentials(&dir, &prefs).unwrap();
+        assert!(read_from(&dir, credential_id(&prefs.minimax_site)).is_none());
+        assert_eq!(read_from(&dir, credential_id("china")), Some(china));
+    }
 
     /// A captured reply's shape: the plan's own window beside a per-model one,
     /// percentages reported as what is *left*.

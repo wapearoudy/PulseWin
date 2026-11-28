@@ -1,0 +1,23 @@
+.robot-avatar,
+.robot-avatar__drawing {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.robot-avatar__fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  transform: scale(var(--ring-fallback-icon-scale, 1));
+}
+
+.robot-avatar__drawing > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}

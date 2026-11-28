@@ -229,8 +229,6 @@ function RailImpl({
               highlight={highlightId === entry.id}
               secondFraction={entry.secondFraction ?? null}
               secondIsSpent={entry.secondIsSpent}
-              secondRingDiameter={layout.secondRingDiameter}
-              secondRingLineWidth={layout.secondRingLineWidth}
               windowClockFraction={entry.windowClockFraction ?? null}
               warningAt={warningAt}
               scale={size}

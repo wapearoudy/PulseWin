@@ -138,8 +138,10 @@ describe('Token Spend spans', () => {
     expect(spanDays('custom', new Date(2028, 1, 10), ['2028-02-28', '2028-03-01'])).toEqual(['2028-02-28', '2028-02-29', '2028-03-01'])
   })
   it('keeps every day of the open span, from the first record to today', () => {
-    const span = spanDays('all', now, null, [record({ day: '2026-09-30' })])
+    const records = [record({ day: '2026-10-02' }), record({ day: '2026-09-30' })]
+    const span = spanDays('all', now, null, records)
     expect(span).toEqual(['2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03'])
+    expect(summarize(records, 'all', now).tokens).toBe(400)
     expect(spanDays('all', now)).toEqual(['2026-10-03'])
     // A record dated ahead of today extends the span rather than being dropped
     // into a day the series does not carry.

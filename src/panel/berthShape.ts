@@ -57,8 +57,6 @@ export interface DockLayout {
   percentTextWidth: number
   /** Gap between ring+label items along the rail. */
   itemSpacing: number
-  secondRingDiameter: number
-  secondRingLineWidth: number
   /** Rail body's inner-side corner reach. */
   cornerRadius: number
   /** How far the concave flare rises above the body's flat top edge. */
@@ -115,8 +113,6 @@ export function dockLayout(options: DockLayoutOptions = {}): DockLayout {
     percentTextHeight,
     percentTextWidth: 38 * scale,
     itemSpacing: 30 * scale * spacing,
-    secondRingDiameter: 26 * scale,
-    secondRingLineWidth: 2.5 * scale,
     cornerRadius,
     flareHeight,
     flareWidth,

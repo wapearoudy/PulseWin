@@ -8,9 +8,9 @@ import { headlineWindow, percentFigure } from './usagePresentation'
 import { quotaWarning } from './quotaPacing'
 import { creditText } from './creditAmount'
 import type { ProviderUsage, Snapshot, UsageWindow } from './types'
-import { amounts, dayKey, formatCost, shortTokens } from './token-spend/summary'
+import { shortTokens } from './token-spend/summary'
 import { useMoney } from './money'
-import { cardActivity, useCardHistory } from './panel/cardHistory'
+import { cardActivity, cardFigure, cardFigureCost, consoleBillingNote, isConsoleHistory, useCardHistory } from './panel/cardHistory'
 import './tray.css'
 
 const close=()=>invoke<void>('hide_usage_dashboard')
@@ -107,6 +107,7 @@ export default function TrayDashboard(){
 function AccountDetail({account:p,remaining,warningAt,now,readsSpend,usageBarStyle}:{account:ProviderUsage;remaining:boolean;warningAt:number;now:number;readsSpend:boolean;usageBarStyle:'continuous'|'segmented'}){
   const local=!p.id.includes('--account-')&&['claude-code','codex','kimi-code','grok','opencode-go','cursor','antigravity','command-code','copilot','deepseek'].includes(p.id)
   const history=useCardHistory(p.id,local,readsSpend),credit=creditText(p.creditRemaining)
+  const historySource = p.id === 'deepseek' || p.id === 'opencode-go' ? '控制台记录' : '本机记录'
   return <article className="tray-detail">
     <div className="tray-detail-title"><h1>{p.name}</h1><span>{p.plan}</span></div>
     <p className="tray-muted">{updated(p.fetchedAt,now)}{p.stale?' · 旧读数':''}</p>
@@ -124,16 +125,18 @@ function AccountDetail({account:p,remaining,warningAt,now,readsSpend,usageBarSty
       </section>
     })}
     {credit&&<section className="tray-credit"><strong>余额</strong><p>{credit} 剩余</p></section>}
-    {readsSpend&&local&&<section className="tray-spend">{history.status==='ready'&&history.snapshot?.records.length?<Spend history={history.snapshot}/>:<p className="tray-muted">{history.status==='reading'?'正在读取本机记录…':history.status==='failed'?'本机记录读取失败':history.status==='unavailable'?'没有可归属此账号的本机记录':'暂无消费历史'}</p>}</section>}
+    {readsSpend&&local&&<section className="tray-spend">{history.status==='ready'&&history.snapshot?.records.length?<Spend history={history.snapshot}/>:<p className="tray-muted">{history.status==='reading'?`正在读取${historySource}…`:history.status==='failed'?`${historySource}读取失败`:history.status==='unavailable'?`没有可归属此账号的${historySource}`:'暂无消费历史'}</p>}</section>}
   </article>
 }
 function Spend({history}:{history:NonNullable<ReturnType<typeof useCardHistory>['snapshot']>}){
-  const activity=cardActivity(history),recent=history.records.filter(r=>r.day>=dayKey(new Date(new Date().getFullYear(),new Date().getMonth(),new Date().getDate()-30)))
+  const activity = cardActivity(history)
+  const recent = history.records.filter(record => record.day >= activity.chart[0].day && record.day <= activity.chart[30].day)
   const daily=new Map<string,typeof recent>();recent.forEach(r=>daily.set(r.day,[...(daily.get(r.day)??[]),r]))
-  const busiest=[...daily.values()].map(rows=>amounts(rows)).sort((a,b)=>b.tokens-a.tokens)[0]
-  const figures=[activity.figures[0],activity.figures[2],busiest,amounts(history.records)],titles=['今天','近 31 天','最忙的一天','全部记录']
+  const busiest = [...daily.values()].map(rows => cardFigure(history, rows)).filter(day => day.tokens > 0).sort((a, b) => b.tokens - a.tokens)[0]
+  const total = cardFigure(history, history.records)
+  const figures=[activity.figures[0],activity.figures[2],busiest,total],titles=['今天','近 31 天','最忙的一天','全部记录']
   const max=Math.max(1,...activity.chart.map(d=>d.tokens))
-  return <><h2>Token 消耗</h2><div className="tray-spend-figures">{figures.map((f,i)=><div key={i}><small>{titles[i]}</small><strong>{f?formatCost(f.cost):'—'}</strong><span>{f?shortTokens(f.tokens):'—'} tokens</span></div>)}</div>
+  return <><h2>{isConsoleHistory(history) ? '控制台用量' : 'Token 消耗'}</h2><div className="tray-spend-figures">{figures.map((f,i)=><div key={i}><small>{titles[i]}</small><strong>{f?cardFigureCost(f):'—'}</strong><span>{f?shortTokens(f.tokens):'—'} tokens</span></div>)}</div>
     <div className="tray-spend-chart" role="img" aria-label="近 31 天 Token 消耗">{activity.chart.map(d=><span key={d.day} title={`${d.day} · ${shortTokens(d.tokens)} tokens`} style={{height:d.tokens?`${Math.max(3,d.tokens/max*100)}%`:'0%'}}/>)}</div>
-    <p className="tray-muted">按 API 价格估算，并非订阅账单。{history.notes.length?'记录不完整，费用可能无法计算。':''}</p></>
+    <p className="tray-muted">{isConsoleHistory(history) ? consoleBillingNote(total) : <>按 API 价格估算，并非订阅账单。{history.notes.length?'记录不完整，费用可能无法计算。':''}</>}</p></>
 }

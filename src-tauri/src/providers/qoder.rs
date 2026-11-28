@@ -668,6 +668,7 @@ fn pool_window(
     }
     Some(
         UsageWindow::new(label, Some(percent_from_fraction(pool.used / pool.limit)))
+            .with_quota_amounts(pool.used, pool.limit)
             .with_id(Some(id.to_string()))
             .with_kind(kind)
             .with_reset(

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import type { UsageWindow } from '../types'
-import type { SpendSnapshot } from '../token-spend/types'
-import { amounts, dayKey, totalTokens } from '../token-spend/summary'
+import type { SpendAmounts, SpendRecord, SpendSnapshot } from '../token-spend/types'
+import { amounts, dayKey, formatCost, totalTokens } from '../token-spend/summary'
+import { format } from '../money'
 
 export interface CardHistory { status:'disabled'|'unavailable'|'ready'|'reading'|'failed'; snapshot:SpendSnapshot|null }
 const retained = new Map<string,{at:number;value:CardHistory}>()
@@ -38,12 +39,61 @@ export function useCardHistory(provider:string,detailed:boolean,tokenEnabled:boo
   if(!detailed || (!tokenEnabled&&!consoleLedger))return {status:'disabled',snapshot:null}
   return owned.provider===provider?owned.value:{status:'reading',snapshot:null}
 }
+interface ConsoleCharge {
+  currency: string | null
+  amount: number | null
+  partial: boolean
+}
+
+export type CardFigure = SpendAmounts & { charge?: ConsoleCharge }
+
+export function isConsoleHistory(snapshot: SpendSnapshot | null): boolean {
+  return snapshot?.pricingStatus === 'console'
+}
+
+export function cardFigure(snapshot: SpendSnapshot, records: SpendRecord[]): CardFigure {
+  const figure = amounts(records)
+  if (!isConsoleHistory(snapshot)) return figure
+
+  const billing = snapshot.consoleBilling
+  // Intl accepts ISO-style codes. A missing or malformed currency cannot be
+  // labeled as USD or converted using the model-price currency.
+  const currency = billing?.currency?.trim().toUpperCase()
+  const missingDays = new Set(billing?.daysWithMissingCharges)
+  const charge: ConsoleCharge = { currency: currency && /^[A-Z]{3}$/.test(currency) ? currency : null, amount: null, partial: snapshot.notes.length > 0 }
+  for (const record of records) {
+    const cost = record.cost !== null && Number.isFinite(record.cost) ? record.cost : null
+    if (cost === null || missingDays.has(record.day)) charge.partial = true
+    if (charge.currency && cost !== null) charge.amount = (charge.amount ?? 0) + cost
+  }
+  return { ...figure, cost: null, costBreakdown: null, unpricedTokens: 0, charge }
+}
+
+export function cardFigureCost(figure: CardFigure): string {
+  const { charge } = figure
+  if (!charge) return formatCost(figure.cost)
+  if (charge.amount === null || !charge.currency) return '—'
+  return `${format(charge.amount, charge.currency, Infinity)}${charge.partial ? ' *' : ''}`
+}
+
+export function consoleBillingNote(figure: CardFigure): string {
+  const { charge } = figure
+  if (!charge?.currency) return '控制台未报告扣费币种。'
+  return `控制台实际扣费（${charge.currency}）。${charge.partial ? '账单可能不完整。' : ''}`
+}
+
 export function cardActivity(snapshot:SpendSnapshot,now=new Date()) {
   const days=Array.from({length:31},(_,i)=>dayKey(new Date(now.getFullYear(),now.getMonth(),now.getDate()-30+i)))
   const records=snapshot.records.filter(r=>r.day>=days[0] && r.day<=days[30])
-  const figures=[amounts(records.filter(r=>r.day===days[30])),amounts(records.filter(r=>r.day>=days[24])),amounts(records)]
+  const figures=[cardFigure(snapshot, records.filter(r=>r.day===days[30])), cardFigure(snapshot, records.filter(r=>r.day>=days[24])), cardFigure(snapshot, records)]
   const chart=days.map(day=>({day,tokens:records.filter(r=>r.day===day).reduce((sum,r)=>sum+totalTokens(r),0)}))
-  const models=new Map<string,number>();records.forEach(r=>models.set(r.modelName??r.model,(models.get(r.modelName??r.model)??0)+totalTokens(r)))
+  const models = new Map<string, number>()
+  for (const record of records) {
+    const tokens = totalTokens(record)
+    if (tokens <= 0) continue
+    const model = record.modelName ?? record.model
+    models.set(model, (models.get(model) ?? 0) + tokens)
+  }
   const top=[...models].sort((a,b)=>b[1]-a[1])[0]
   const month=figures[2],input=month.tally.input+month.tally.cacheRead+month.tally.cacheWrite
   return {figures,chart,speeds:outputSpeeds(snapshot.records,now.getTime()),top:top?{name:top[0],share:top[1]/month.tokens}:null,

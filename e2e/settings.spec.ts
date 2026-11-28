@@ -9,6 +9,10 @@ test.beforeEach(async ({ page }) => {
     const prefs: any = { accounts: [], accountLabels: {}, enabledProviders: [], providerOrder: ['codex','claude-code','deepseek'], panelSize: 1, railSpacing: 1, roundEnds: false, showsRemaining: false, showPercentages: true, labelAbove: false, autoCollapse: true, warningThreshold: .75, refreshSeconds: 120, showResetClock: false, clockRemaining: false, pinnedWindows: {} }
     let providers: any[] = [{id:'codex',name:'Codex',configured:true},{id:'claude-code',name:'Claude Code',configured:true},{id:'deepseek',name:'DeepSeek',configured:false}].map(x=>({...x,providerId:x.id,stored:false,hints:['Local tool sign-in'],credentialPath:null}))
     w.testCommands = []; w.testPrefs = prefs
+    if (new URLSearchParams(location.search).get('account') === 'minimax') {
+      w.testMiniMaxProvider = true
+      prefs.enabledProviders = ['minimax']
+    }
     const emit = (event: string, payload: unknown) => Object.values(listeners).filter(x => x.event === event).forEach(x => callbacks[x.handler]?.({ event, payload }))
     w.testEmit=emit
     w.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: (_: string, id: number) => delete listeners[id] }
@@ -34,7 +38,7 @@ test.beforeEach(async ({ page }) => {
         if(cmd === 'get_prompt_cache') { if(w.testCacheError) throw new Error(w.testCacheError); return structuredClone(w.testCache ?? {live:[],lastLapsed:null,notes:[]}) }
         if(cmd === 'get_preferences') return structuredClone(prefs)
         if(cmd === 'save_preferences') { Object.assign(prefs,args.value); emit('preferences-changed',structuredClone(prefs)); return }
-        if(cmd === 'provider_settings') return structuredClone([...providers,...(w.testGrokProvider?[{id:'grok',providerId:'grok',name:'Grok',configured:false,stored:false,hints:[],credentialPath:null}]:[]),...(w.testOpenCodeProvider?[{id:'opencode-go',providerId:'opencode-go',name:'OpenCode Go',configured:true,stored:false,hints:[],credentialPath:null}]:[])])
+        if(cmd === 'provider_settings') return structuredClone([...providers,...(w.testGrokProvider?[{id:'grok',providerId:'grok',name:'Grok',configured:false,stored:false,hints:[],credentialPath:null}]:[]),...(w.testOpenCodeProvider?[{id:'opencode-go',providerId:'opencode-go',name:'OpenCode Go',configured:true,stored:false,hints:[],credentialPath:null}]:[]),...(w.testMiniMaxProvider?[{id:'minimax',providerId:'minimax',name:'MiniMax',configured:prefs.minimaxSite==='china',stored:prefs.minimaxSite==='china',hints:[],credentialPath:null}]:[])])
         if(cmd === 'add_account') {
           const id=args.provider+'--account-ab';prefs.accounts.push({id,provider:args.provider});prefs.accountLabels[id]=args.label;
           if(args.enabled!==false)prefs.enabledProviders.push(id);prefs.providerOrder.push(id);
@@ -56,6 +60,58 @@ test.beforeEach(async ({ page }) => {
     }
   })
   await page.goto('/?view=settings')
+})
+
+test('current usage respects bar style, remaining display, pace, and unknown readings', async ({ page }, testInfo) => {
+  const now = Date.parse('2026-11-28T08:00:00Z')
+  await page.emulateMedia({ colorScheme: 'light' })
+  await page.clock.install({ time: now })
+  await page.getByRole('button', { name: '选择已检测到的服务' }).click()
+  await page.getByRole('button', { name: '完成', exact: true }).click()
+  await page.getByRole('button', { name: 'Codex', exact: true }).click()
+  await page.evaluate(now => {
+    const dashboard = window as any
+    const reading = (label: string, percentUsed: number | null, hours: number, isExhausted = false) => ({
+      label, percentUsed, windowSeconds: 4 * 3600, resetsAt: new Date(now + hours * 3600_000).toISOString(),
+      detail: null, isExhausted,
+    })
+    dashboard.testEmit('usage-updated', { providers: [{
+      id: 'codex', name: 'Codex', configured: true, fetchedAt: new Date(now).toISOString(),
+      windows: [reading('正常', 75, 1), reading('超前', 75, 3), reading('未报告', null, 2), reading('已限额', 70, 1, true)],
+      creditRemaining: { amount: 3, currency: 'USD' },
+    }], fetchedAt: new Date(now).toISOString() })
+  }, now)
+  const group = page.getByRole('heading', { name: '当前用量' }).locator('..')
+  const onPace = group.getByRole('progressbar', { name: '正常' })
+  const ahead = group.getByRole('progressbar', { name: '超前' })
+  const locked = group.getByRole('progressbar', { name: '已限额' })
+  await expect(onPace).toHaveAttribute('aria-valuenow', '75')
+  await expect(onPace.locator('span.card__bar-fill')).toHaveCSS('background-color', 'rgb(0, 148, 89)')
+  await expect(ahead.locator('span.card__bar-fill')).toHaveCSS('background-color', 'rgb(222, 56, 43)')
+  await expect(locked).toHaveAttribute('aria-valuetext', /已限额/)
+  await expect(group.getByRole('progressbar', { name: '未报告' })).toHaveCount(0)
+  await expect(group.getByText('—', { exact: true })).toBeVisible()
+  await expect(group.getByText(/resets in (?:59m|1h)/).first()).toBeVisible()
+  await expect(group.getByText('USD 3.00', { exact: true })).toBeVisible()
+
+  await page.evaluate(() => {
+    const dashboard = window as any
+    Object.assign(dashboard.testPrefs, { showsRemaining: true, usageBarStyle: 'segmented' })
+    dashboard.testEmit('preferences-changed', structuredClone(dashboard.testPrefs))
+  })
+  await expect(onPace).toHaveAttribute('aria-valuenow', '25')
+  await expect(onPace).toHaveAttribute('aria-valuetext', '25% 剩余')
+  await expect(onPace.locator('.usage-bar--segmented span').first()).toHaveCSS('background-color', 'rgb(0, 148, 89)')
+  await expect(ahead.locator('.usage-bar--segmented span').first()).toHaveCSS('background-color', 'rgb(222, 56, 43)')
+  await expect(group.getByRole('progressbar', { name: '未报告' })).toHaveCount(0)
+  await group.screenshot({ path: testInfo.outputPath('settings-current-usage.png'), animations: 'disabled' })
+
+  await page.emulateMedia({ colorScheme: 'dark' })
+  await page.setViewportSize({ width: 720, height: 600 })
+  const ticks = onPace.locator('.usage-bar--segmented')
+  await expect(ticks.locator('span').first()).toHaveCSS('background-color', 'rgb(0, 230, 140)')
+  await expect.poll(() => ticks.evaluate(bar => bar.scrollWidth <= bar.clientWidth)).toBe(true)
+  await group.screenshot({ path: testInfo.outputPath('settings-current-usage-dark.png'), animations: 'disabled' })
 })
 
 test('official status shows source colours, missing history and publisher uptime',async({page})=>{
@@ -107,7 +163,7 @@ test('appearance persists, account refresh is scoped, and save errors are visibl
   await page.screenshot({path:'test-results/settings-appearance.png'})
   await page.getByRole('button',{name:'Codex',exact:true}).click()
   await page.getByRole('button',{name:'刷新此账号'}).click()
-  await expect(page.getByText('37%',{exact:true})).toBeVisible()
+  await expect(page.getByRole('progressbar',{name:'5h'})).toHaveAttribute('aria-valuetext','63% 剩余')
   expect(await page.evaluate(() => (window as any).testCommands.filter((x:any) => x.cmd === 'refresh_provider').map((x:any) => x.args.provider))).toEqual(['codex'])
   await page.getByLabel('访问凭据',{exact:true}).fill('test-only-not-a-real-key')
   await page.getByRole('button',{name:'保存并检查'}).click()
@@ -119,18 +175,18 @@ test('appearance persists, account refresh is scoped, and save errors are visibl
 })
 
 
-test('account robot preferences preserve other accounts and all eighteen bodies are selectable', async ({page})=>{
+test('account robot preferences preserve other accounts and all 23 figures are selectable', async ({page})=>{
   await page.getByRole('button',{name:'选择已检测到的服务'}).click()
   await page.getByRole('button',{name:'完成',exact:true}).click()
   await page.getByRole('button',{name:'Codex',exact:true}).click()
   await page.getByRole('switch',{name:'使用动画机器人'}).check()
-  await page.getByLabel('机器人人格',{exact:true}).selectOption('curious')
-  await page.getByLabel('机器人形状',{exact:true}).selectOption('gem')
-  await expect(page.locator('.bot-preview .botmark')).toHaveAttribute('data-persona','curious')
-  await expect(page.locator('.bot-preview .botmark')).toHaveAttribute('data-body','gem')
-  await expect(page.getByLabel('机器人形状',{exact:true}).locator('option')).toHaveCount(18)
+  await page.getByLabel('机器人形象',{exact:true}).selectOption('cat')
+  await page.getByLabel('机器人材质',{exact:true}).selectOption('fluffy')
+  await expect(page.locator('.bot-preview .robot-avatar')).toHaveAttribute('data-figure','cat')
+  await expect(page.locator('.bot-preview .robot-avatar')).toHaveAttribute('data-ready','true')
+  await expect(page.getByLabel('机器人形象',{exact:true}).locator('option')).toHaveCount(24)
   const saved=await page.evaluate(()=>(window as any).testPrefs.accountAppearance)
-  expect(saved.codex).toMatchObject({animatedMark:true,persona:'curious',body:'gem'})
+  expect(saved.codex).toMatchObject({animatedMark:true,robotFigure:'cat',robotMaterial:'fluffy'})
   expect(saved['claude-code']).toBeUndefined()
   await page.waitForTimeout(450)
   await page.screenshot({path:'test-results/account-bot-settings.png',fullPage:true})
@@ -138,12 +194,61 @@ test('account robot preferences preserve other accounts and all eighteen bodies 
 
 test('panel connection action selects the matching account in an existing settings window',async({page})=>{
   await page.getByRole('button',{name:'选择已检测到的服务'}).click();await page.getByRole('button',{name:'完成',exact:true}).click()
+  await page.getByRole('button',{name:'位置与行为',exact:true}).click()
+  await page.getByRole('button',{name:'通知',exact:true}).click()
   await page.evaluate(()=>(window as any).testEmit('settings-account','codex'))
   await expect(page.getByRole('heading',{name:'Codex',exact:true})).toBeVisible()
-  await page.getByRole('switch',{name:'显示详细用量卡'}).check()
-  expect(await page.evaluate(()=>(window as any).testPrefs.accountAppearance.codex.detailedCard)).toBe(true)
+  const cardOptions = page.locator('.card-content-options')
+  await expect(cardOptions).not.toHaveAttribute('open','')
+  await cardOptions.locator('summary').click()
+  await expect(cardOptions.getByRole('switch',{name:'套餐'})).toBeChecked()
+  await expect(cardOptions.getByRole('switch',{name:'用尽预测'})).not.toBeChecked()
+  await expect(cardOptions.getByRole('switch',{name:'提示词缓存'})).toHaveCount(0)
+  await cardOptions.getByRole('switch',{name:'套餐'}).uncheck()
+  await cardOptions.getByRole('switch',{name:'用尽预测'}).check()
+  const parts = await page.evaluate(()=>(window as any).testPrefs.accountAppearance)
+  expect(parts.codex.cardParts).not.toContain('plan')
+  expect(parts.codex.cardParts).toContain('forecast')
+  expect(parts['claude-code']).toBeUndefined()
   await page.evaluate(()=>(window as any).testEmit('usage-updated',{providers:[{id:'codex',name:'Codex',windows:[],configured:true,error:'当前密钥所属账号或工作区未检测到订阅。',source:'OpenCode CLI：synthetic/auth.json',fetchedAt:new Date().toISOString()}]}))
   await expect(page.getByTestId('credential-source')).toContainText('synthetic/auth.json')
+  await page.getByRole('button',{name:'后退',exact:true}).click()
+  await expect(page.getByRole('heading',{name:'通知',exact:true})).toBeVisible({timeout:1000})
+  await page.keyboard.press('Alt+ArrowLeft')
+  await expect(page.getByRole('heading',{name:'位置与行为',exact:true})).toBeVisible()
+  await page.keyboard.press('Alt+ArrowRight')
+  await page.getByRole('button',{name:'前进',exact:true}).click()
+  await expect(page.getByRole('heading',{name:'Codex',exact:true})).toBeVisible()
+})
+
+test('developer integrations are reachable through Settings search',async({page})=>{
+  await page.getByRole('button',{name:'暂不设置'}).click()
+  await page.getByRole('searchbox',{name:'搜索设置与账号'}).fill('statusline')
+  const entry=page.getByRole('button',{name:'开发者集成',exact:true})
+  await expect(entry).toBeVisible({timeout:1000})
+  await entry.click()
+  await expect(page.getByRole('region',{name:'读取缓存的用量'})).toBeVisible()
+})
+
+test('switching account pages starts the new page at its first settings',async({page})=>{
+  await page.getByRole('button',{name:'选择已检测到的服务'}).click()
+  await page.getByRole('button',{name:'完成',exact:true}).click()
+  const nav=page.getByRole('complementary',{name:'设置导航'})
+  const content=page.getByRole('main')
+  await nav.getByRole('button',{name:'Codex',exact:true}).click()
+  await content.evaluate(node=>{node.scrollTop=node.scrollHeight})
+  expect(await content.evaluate(node=>node.scrollTop)).toBeGreaterThan(0)
+  await nav.getByRole('button',{name:'Claude Code',exact:true}).click()
+  await expect(page.getByRole('heading',{name:'Claude Code',exact:true})).toBeVisible()
+  expect(await content.evaluate(node=>node.scrollTop)).toBe(0)
+  const titlebar = page.locator('.settings-titlebar')
+  const firstGroup = page.getByRole('heading',{name:'账号',exact:true})
+  for (const width of [960, 720]) {
+    await page.setViewportSize({ width, height: 600 })
+    const title = (await titlebar.boundingBox())!
+    const group = (await firstGroup.boundingBox())!
+    expect(group.y).toBeGreaterThanOrEqual(title.y + title.height)
+  }
 })
 
 test('reordering moves only the enabled accounts with arrows and drag',async({page})=>{
@@ -215,6 +320,8 @@ test('same-service accounts add, rename, refresh and remove independently',async
   await expect(page.getByRole('heading',{name:'管理账号',exact:true})).toBeVisible()
   await expect(page.locator('nav').getByRole('button',{name:'公司账号',exact:true})).toHaveCount(0)
   expect(await page.evaluate(()=>(window as any).testPrefs.enabledProviders)).toEqual(['codex','claude-code'])
+  await page.getByRole('button',{name:'后退',exact:true}).click()
+  await expect(page.getByRole('heading',{name:'外观',exact:true})).toBeVisible({timeout:1000})
 })
 
 
@@ -300,4 +407,18 @@ test('switching account pages never retains another account identity or draft',a
   }
   expect(warnings).toEqual([]);
   await page.screenshot({path:'test-results/settings-account-switch.png',fullPage:true});
+})
+
+
+test('MiniMax keeps credential drafts and saves scoped to the selected site', async ({page}) => {
+  await page.goto('/?view=settings&account=minimax')
+  const key = page.getByLabel('访问凭据', {exact:true})
+  await key.fill('synthetic-international-draft')
+  await page.getByLabel('MiniMax 站点').selectOption('china')
+  await expect(key).toHaveValue('')
+  await expect(page.getByText('已保存凭据。留空保留现有值。')).toBeVisible()
+  await key.fill('synthetic-china-key')
+  await page.getByRole('button', {name:'保存并检查'}).click()
+  const saves = await page.evaluate(() => (window as any).testCommands.filter((call:any) => call.cmd === 'save_provider_credential'))
+  expect(saves.map((call:any) => call.args)).toEqual([{provider:'minimax',apiKey:'synthetic-china-key',baseUrl:null,minimaxSite:'china'}])
 })

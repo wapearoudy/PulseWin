@@ -1,16 +1,16 @@
 import { OpenCodeConsoleGroup } from './OpenCodeConsoleGroup'
-import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { getSnapshot, onUsageUpdated, onSettingsAccount, onSettingsRecap, panelPlacement, onPlacementChanged, setPanelPosition, providerSettings, addAccount, removeAccount, importAccountLogin, refreshProvider, saveProviderCredential, claimStarRequest, type ProviderSetting } from './api'
-import { usePreferences, savePreferences, defaultAccountAppearance, groupsShown, modelGroups, type Preferences } from './preferences'
+import { usePreferences, savePreferences, defaultAccountAppearance, groupsShown, modelGroups, type AccountAppearance, type MiniMaxSite, type Preferences } from './preferences'
 import { AntigravitySettingsGroup } from './AntigravitySettingsGroup'
-import { formatReset, type ProviderUsage, type Snapshot } from './types'
-import { percentFigure } from './usagePresentation'
+import { accountCardParts, availableCardParts, cardPartNeedsLocalSpend, cardParts, type CardPart } from './panel/cardParts'
+import type { ProviderUsage, Snapshot } from './types'
+import { AccountUsageBars, type UsageBarPreferences } from './AccountUsageBars'
 import { creditText } from './creditAmount'
 import { ProviderIcon } from './panel/ProviderIcon'
-import { BotMark } from './panel/botmark/BotMark'
-import { PERSONAS, PERSONA_LABELS, personaAt } from './panel/botmark/programme'
-import { SHAPE_ORDER, SHAPE_LABELS } from './panel/botmark/data'
-import { brandColour } from './panel/botmark/tint'
+import { RobotAvatar } from './panel/avatar/RobotAvatar'
+import { robotFigures, robotFigureAt, spreadRobotFigures } from './panel/avatar/catalog'
+import { brandColourHex } from './panel/botmark/tint'
 import './settings.css'
 import { NotificationsPane, LowBalanceAlert } from './NotificationsPane'
 import { ServiceStatusGroup } from './ServiceStatusGroup'
@@ -59,21 +59,47 @@ export default function Settings() {
     return rows
   },[providers,prefs.enabledProviders,prefs.accounts,prefs.accountLabels])
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null)
-  const [pane, setPane] = useState(()=>new URLSearchParams(window.location.search).get('account') ?? 'appearance'), [query, setQuery] = useState('')
-  const [trail, setTrail] = useState<string[]>(()=>[new URLSearchParams(window.location.search).get('account') ?? 'appearance'])
-  const [trailIndex, setTrailIndex] = useState(0)
+  const [query, setQuery] = useState('')
+  const [history, setHistory] = useState(() => ({
+    entries: [new URLSearchParams(window.location.search).get('account') ?? 'appearance'],
+    index: 0,
+  }))
+  const { entries: trail, index: trailIndex } = history
+  const pane = trail[trailIndex]
+  const content = useRef<HTMLElement>(null)
+  const [selection, setSelection] = useState<string[]>([]), [choose, setChoose] = useState(false), [dismissed, setDismissed] = useState(false)
   const [recapSignal, setRecapSignal] = useState(()=>new URLSearchParams(window.location.search).get('recap') ? 1 : 0)
 // The one request for a star. The backend decides whether it is due and spends
 // it when it says yes, so opening this window twice cannot ask twice.
 const [starBanner, setStarBanner] = useState(false)
 useEffect(() => { let live = true; claimStarRequest().then(due => { if (live && due) setStarBanner(true) }).catch(() => undefined); return () => { live = false } }, [])
 const openAbout = (key: string) => invoke('open_about_link', { key }).catch((error: unknown) => setError(String(error)))
-  function navigate(id: string) { const next=[...trail.slice(0, trailIndex+1), id]; setTrail(next); setTrailIndex(next.length-1); setPane(id) }
-  function goBack() { if (trailIndex <= 0) return; const index=trailIndex-1; setTrailIndex(index); setPane(trail[index]) }
-  function goForward() { if (trailIndex >= trail.length-1) return; const index=trailIndex+1; setTrailIndex(index); setPane(trail[index]) }
-  useEffect(()=>{const onKey=(event:KeyboardEvent)=>{if(event.altKey&&event.key==='ArrowLeft'){event.preventDefault();goBack()}else if(event.altKey&&event.key==='ArrowRight'){event.preventDefault();goForward()}};window.addEventListener('keydown',onKey);return()=>window.removeEventListener('keydown',onKey)})
-  useEffect(()=>{let live=true,off:(()=>void)|undefined;void onSettingsAccount(id=>{if(live){navigate(id);setChoose(false);setDismissed(true)}}).then(fn=>{if(live)off=fn;else fn()}).catch(()=>undefined);return()=>{live=false;off?.()}},[])
-  useEffect(()=>{let live=true,off:(()=>void)|undefined;void onSettingsRecap(()=>{if(live){navigate('token-spend');setRecapSignal(value=>value+1)}}).then(fn=>{if(live)off=fn;else fn()}).catch(()=>undefined);return()=>{live=false;off?.()}},[])
+  const navigate = useCallback((id: string) => {
+    setHistory(current => {
+      if (current.entries[current.index] === id) return current
+      const entries = [...current.entries.slice(0, current.index + 1), id]
+      return { entries, index: entries.length - 1 }
+    })
+    setChoose(false)
+    setDismissed(true)
+  }, [])
+  const stepHistory = useCallback((by: -1 | 1) => {
+    setHistory(current => {
+      const index = current.index + by
+      return index < 0 || index >= current.entries.length ? current : { ...current, index }
+    })
+  }, [])
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!event.altKey || (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) return
+      event.preventDefault()
+      stepHistory(event.key === 'ArrowLeft' ? -1 : 1)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [stepHistory])
+  useEffect(()=>{let live=true,off:(()=>void)|undefined;void onSettingsAccount(id=>{if(live)navigate(id)}).then(fn=>{if(live)off=fn;else fn()}).catch(()=>undefined);return()=>{live=false;off?.()}},[navigate])
+  useEffect(()=>{let live=true,off:(()=>void)|undefined;void onSettingsRecap(()=>{if(live){navigate('token-spend');setRecapSignal(value=>value+1)}}).then(fn=>{if(live)off=fn;else fn()}).catch(()=>undefined);return()=>{live=false;off?.()}},[navigate])
   const [error, setError] = useState<string | null>(null), [busy, setBusy] = useState(false)
   // The window starter's last attempts. Read through its own command rather
   // than out of the preferences, so the pane and the starter report the same
@@ -85,11 +111,23 @@ const openAbout = (key: string) => invoke('open_about_link', { key }).catch((err
       .catch(() => undefined)
     return () => { live = false }
   }, [prefs.primedProviders, prefs.primerRunTimes])
-  const [selection, setSelection] = useState<string[]>([]), [choose, setChoose] = useState(false), [dismissed, setDismissed] = useState(false)
   const [position,setPosition]=useState<'left'|'right'|'top'|'bottom'|'free'|'free-horizontal'>('right')
   useEffect(()=>{let live=true,off:(()=>void)|undefined;const sync=(p:{dockEdge:'left'|'right'|'top'|'bottom'|null;facingEdge?:'left'|'right'|'top'|'bottom'|null;railPosition:[number,number]|null})=>{if(live)setPosition(p.dockEdge??(p.railPosition?(p.facingEdge==='top'||p.facingEdge==='bottom'?'free-horizontal':'free'):'right'))};panelPlacement().then(sync).catch(()=>undefined);onPlacementChanged(sync).then(fn=>{if(live)off=fn;else fn()}).catch(()=>undefined);return()=>{live=false;off?.()}},[])
   const reload = () => providerSettings().then(setProviders).catch(e => setError(String(e)))
-  useEffect(()=>{void reload()},[prefs.accounts])
+  function accountRemoved(id: string) {
+    void reload()
+    setHistory(current => {
+      const previous = current.entries.slice(0, current.index).filter(entry => entry !== id)
+      const active = current.entries[current.index]
+      if (active === id) {
+        if (previous[previous.length - 1] !== 'accounts') previous.push('accounts')
+        return { entries: previous, index: previous.length - 1 }
+      }
+      const forward = current.entries.slice(current.index + 1).filter(entry => entry !== id)
+      return { entries: [...previous, active, ...forward], index: previous.length }
+    })
+  }
+  useEffect(()=>{void reload()},[prefs.accounts,prefs.minimaxSite])
   useEffect(() => {
     let live = true, off: (() => void) | undefined
     void providerSettings().then(p => { if(live) setProviders(p) }).catch(e => { if(live) setError(String(e)) })
@@ -118,6 +156,7 @@ const openAbout = (key: string) => invoke('open_about_link', { key }).catch((err
   const appearance = { ...defaultAccountAppearance, ...prefs.accountAppearance[pane] }
   const setAppearance = (patch:Partial<typeof appearance>) => change({accountAppearance:{...prefs.accountAppearance,[pane]:{...appearance,...patch}}})
   const choosing = loaded && (choose || (!dismissed && !prefs.enabledProviders.length))
+  useLayoutEffect(() => { if (content.current) content.current.scrollTop = 0 }, [pane, choosing])
   const paneTitle = choosing ? '选择要监控的服务' : settingsPanes.find(([id])=>id===pane)?.[1] ?? providers.find(p=>p.id===pane)?.name ?? '设置'
   const orderedEnabled=prefs.providerOrder.filter(id=>prefs.enabledProviders.includes(id))
   function moveTo(id:string,target:string) {
@@ -134,21 +173,21 @@ const openAbout = (key: string) => invoke('open_about_link', { key }).catch((err
     <aside className="settings-sidebar" aria-label="设置导航">
       <div className="settings-brand"><span className="brand-mark">◉</span><strong>Pulse</strong><span>Windows</span></div>
       <input type="search" aria-label="搜索设置与账号" placeholder="搜索设置与账号" value={query} onChange={e => setQuery(e.target.value)} />
-      <nav>{[['面板', ['appearance', 'rings', 'behavior']], ['应用', ['general', 'notifications', 'network', 'accounts', 'token-spend', 'extensions']]].map(([title, ids]) => {
+      <nav>{[['面板', ['appearance', 'rings', 'behavior']], ['应用', ['general', 'notifications', 'network', 'accounts', 'token-spend', 'extensions', 'integrations']]].map(([title, ids]) => {
         const entries = settingsPanes.filter(([id, name,,terms]) => (ids as string[]).includes(id) && `${id} ${name} ${terms}`.toLowerCase().includes(query.toLowerCase())).sort((a,b) => (ids as string[]).indexOf(a[0]) - (ids as string[]).indexOf(b[0]))
-        return entries.length > 0 && <div key={String(title)}><p className="nav-section">{title}</p>{entries.map(([id,name,icon]) => <button key={id} className={pane === id ? 'selected' : ''} onClick={() => { navigate(id); setChoose(false); setDismissed(true) }}><span className="settings-nav-icon" aria-hidden="true">{icon}</span><span className="settings-nav-label">{name}</span></button>)}</div>
+        return entries.length > 0 && <div key={String(title)}><p className="nav-section">{title}</p>{entries.map(([id,name,icon]) => <button key={id} className={pane === id ? 'selected' : ''} onClick={() => navigate(id)}><span className="settings-nav-icon" aria-hidden="true">{icon}</span><span className="settings-nav-label">{name}</span></button>)}</div>
       })}
         <p className="nav-section">账号</p>
-        {shown.map(p => <button key={p.id} className={pane === p.id ? 'selected' : ''} onClick={() => { navigate(p.id); setChoose(false); setDismissed(true) }}><span className="settings-nav-icon" aria-hidden="true"><ProviderIcon provider={p.id}/></span><span className="account-name">{p.name}</span></button>)}
+        {shown.map(p => <button key={p.id} className={pane === p.id ? 'selected' : ''} onClick={() => navigate(p.id)}><span className="settings-nav-icon" aria-hidden="true"><ProviderIcon provider={p.id}/></span><span className="account-name">{p.name}</span></button>)}
         {!shown.length && query && <p className="muted">没有匹配的账号</p>}
-        {settingsPanes.filter(([id,name,,terms]) => id === 'about' && `${id} ${name} ${terms}`.toLowerCase().includes(query.toLowerCase())).map(([id,name,icon]) => <button key={id} className={pane === id ? 'selected' : ''} onClick={() => { navigate(id); setChoose(false); setDismissed(true) }}><span className="settings-nav-icon" aria-hidden="true">{icon}</span><span className="settings-nav-label">{name}</span></button>)}
+        {settingsPanes.filter(([id,name,,terms]) => id === 'about' && `${id} ${name} ${terms}`.toLowerCase().includes(query.toLowerCase())).map(([id,name,icon]) => <button key={id} className={pane === id ? 'selected' : ''} onClick={() => navigate(id)}><span className="settings-nav-icon" aria-hidden="true">{icon}</span><span className="settings-nav-label">{name}</span></button>)}
       </nav><div className="sidebar-footer">{prefs.enabledProviders.length} 个账号显示在面板</div>
     </aside>
-    <main className="settings-content">
+    <main className="settings-content" ref={content}>
       <header className="settings-titlebar">
         <div className="settings-history" role="group" aria-label="设置导航历史">
-          <button aria-label="后退" title="后退 (Alt+←)" disabled={trailIndex <= 0} onClick={goBack}>‹</button>
-          <button aria-label="前进" title="前进 (Alt+→)" disabled={trailIndex >= trail.length-1} onClick={goForward}>›</button>
+          <button aria-label="后退" title="后退 (Alt+←)" disabled={trailIndex <= 0} onClick={() => stepHistory(-1)}>‹</button>
+          <button aria-label="前进" title="前进 (Alt+→)" disabled={trailIndex >= trail.length-1} onClick={() => stepHistory(1)}>›</button>
         </div>
         <h1 className="settings-page-title">{paneTitle}</h1>
       </header>
@@ -170,7 +209,7 @@ const openAbout = (key: string) => invoke('open_about_link', { key }).catch((err
         <h1>圆环与数字</h1><p className="page-description">圆环、数字与额度窗口的显示方式。达到变红阈值且用量超过时间进度时预警；按进度使用保持正常，额度用尽仍显示警告。</p><Group title="用量显示"><Toggle title="显示剩余额度" subtitle="圆环和数字显示剩余量，预警仍对比已用量与时间进度。" value={prefs.showsRemaining} disabled={busy} onChange={v => change({ showsRemaining: v })} />
         <Toggle title="显示百分比" subtitle="侧边显示数字，顶部面板保持紧凑。" value={prefs.showPercentages} disabled={busy} onChange={v => change({ showPercentages: v })} />
         <Toggle title="顶部显示百分比" value={prefs.topShowPercentages} disabled={busy} onChange={v=>change({topShowPercentages:v})}/><Toggle title="显示第二个用量圆环" subtitle="在主环内显示第二个额度窗口，单一窗口保持单环。" value={prefs.showSecondRing} disabled={busy} onChange={v=>change({showSecondRing:v})}/><Toggle title="收起时显示预警颜色" value={prefs.dockAlertColour} disabled={busy} onChange={v=>change({dockAlertColour:v})}/><Toggle title="数字显示在圆环上方" value={prefs.labelAbove} disabled={busy} onChange={v => change({ labelAbove: v })} />
-        <Toggle title="显示用量预测" subtitle="按窗口内的平均使用速度估算，只在有足够信息时显示。" value={prefs.showForecast} disabled={busy} onChange={v=>change({showForecast:v})}/><Toggle title="重置时间圆环" subtitle="仅在服务明确报告窗口时长时显示。" value={prefs.showResetClock} disabled={busy} onChange={v => change({ showResetClock: v })} /><Toggle title="时间圆环显示剩余时间" value={prefs.clockRemaining} disabled={busy || !prefs.showResetClock} onChange={v => change({ clockRemaining: v })} /><Row title="变红阈值"><select disabled={busy} value={prefs.warningThreshold} onChange={e => change({ warningThreshold: Number(e.target.value) })}>{[.6,.7,.75,.8,.85,.9].map(v => <option key={v} value={v}>{Math.round(v*100)}%</option>)}</select></Row></Group>
+        <Toggle title="重置时间圆环" subtitle="仅在服务明确报告窗口时长时显示。" value={prefs.showResetClock} disabled={busy} onChange={v => change({ showResetClock: v })} /><Toggle title="时间圆环显示剩余时间" value={prefs.clockRemaining} disabled={busy || !prefs.showResetClock} onChange={v => change({ clockRemaining: v })} /><Row title="变红阈值"><select disabled={busy} value={prefs.warningThreshold} onChange={e => change({ warningThreshold: Number(e.target.value) })}>{[.6,.7,.75,.8,.85,.9].map(v => <option key={v} value={v}>{Math.round(v*100)}%</option>)}</select></Row></Group>
       </> : pane === 'behavior' ? <>
         <h1>位置与行为</h1><p className="page-description">面板位置、停靠与交互行为。</p>
         <Group title="面板"><Row title="位置" subtitle="靠近边缘停靠，也可以自由悬浮。"><select aria-label="面板位置" value={position} onChange={e=>{void setPanelPosition(e.target.value as typeof position).catch(err=>setError(String(err)))}}><option value="left">左侧</option><option value="top">顶部</option><option value="bottom">底部</option><option value="free">竖向自由</option><option value="free-horizontal">横向自由</option><option value="right">右侧</option></select></Row><Toggle title="全屏时隐藏" subtitle="在面板所在屏幕播放全屏内容时暂时隐藏，退出后恢复。" value={prefs.hideInFullscreen} disabled={busy} onChange={v=>change({hideInFullscreen:v})}/><Toggle title="截图时隐藏" subtitle="支持此设置的截图工具不会截到悬浮面板；录屏和共享屏幕时仍可能显示。" value={prefs.hideFromCapture} disabled={busy} onChange={v=>change({hideFromCapture:v})}/><Toggle title="跟随鼠标所在屏幕" subtitle="移到另一块屏幕时，保留面板在屏幕上的相对位置。" value={prefs.followActiveDisplay} disabled={busy} onChange={v=>change({followActiveDisplay:v})}/><Toggle title="自动收起" subtitle="鼠标离开后收起至屏幕边缘。" value={prefs.autoCollapse} disabled={busy} onChange={v => change({ autoCollapse: v })} /></Group>
@@ -186,20 +225,20 @@ const openAbout = (key: string) => invoke('open_about_link', { key }).catch((err
         <h1>管理账号</h1><p className="page-description">控制面板显示的服务和排列顺序。</p><button onClick={() => { setSelection(prefs.enabledProviders); setChoose(true) }}>选择服务</button>
         <AddAccountForm onCreated={id=>{void reload();navigate(id)}} onError={setError}/><Group title="排列顺序">{shown.filter(p=>prefs.enabledProviders.includes(p.id)).map(p => <div key={p.id} draggable onDragStart={e=>e.dataTransfer.setData('application/x-pulse-account',p.id)} onDragOver={e=>{if(e.dataTransfer.types.includes('application/x-pulse-account'))e.preventDefault()}} onDrop={e=>{e.preventDefault();moveTo(e.dataTransfer.getData('application/x-pulse-account'),p.id)}}><Row title={p.name} subtitle={prefs.enabledProviders.includes(p.id) ? '显示在面板' : '未显示'}><div className="toolbar"><button disabled={busy || orderedEnabled.indexOf(p.id) === 0} aria-label={`上移 ${p.name}`} onClick={() => move(p.id,-1)}>↑</button><button disabled={busy || orderedEnabled.indexOf(p.id) === orderedEnabled.length-1} aria-label={`下移 ${p.name}`} onClick={() => move(p.id,1)}>↓</button></div></Row></div>)}</Group>
       </> : provider ? <Fragment key={provider.id}>
-        <h1>{provider.name}</h1><AccountIdentity provider={provider} onRename={name=>update({accountLabels:{...prefs.accountLabels,[provider.id]:name}})} onRemoved={()=>{void reload();navigate('accounts')}} onError={setError}/><p className="page-description">{provider.configured ? '已发现凭据；连接结果以下方实际检查为准。' : '尚未发现可用凭据。'}</p>
+        <h1>{provider.name}</h1><AccountIdentity provider={provider} onRename={name=>update({accountLabels:{...prefs.accountLabels,[provider.id]:name}})} onRemoved={()=>accountRemoved(provider.id)} onError={setError}/>
+        <p className="page-description">{provider.id === 'antigravity'
+          ? (provider.configured ? '已检测到 Antigravity 桌面端或 agy CLI。' : '尚未检测到 Antigravity 桌面端或 agy CLI。')
+          : (provider.configured ? '已发现凭据；连接结果以下方实际检查为准。' : '尚未发现可用凭据。')}</p>
         {provider.credentialError&&<div role="alert" className="settings-alert">{provider.credentialError}</div>}
         {enabled&&accountUsage?.creditRemaining&&<LowBalanceAlert value={prefs.alerts.lowBalance[pane]} currency={accountUsage.creditRemaining.currency} disabled={busy} onChange={v=>{const lowBalance={...prefs.alerts.lowBalance};if(v===undefined)delete lowBalance[pane];else lowBalance[pane]=v;change({alerts:{...prefs.alerts,lowBalance}})}}/>}
         <Group title="面板"><Toggle title="显示在面板" subtitle="关闭后停止此账号的用量检查。" disabled={busy} value={enabled} onChange={v => change({ enabledProviders: v ? [...prefs.enabledProviders,pane] : prefs.enabledProviders.filter(id => id !== pane) })} /></Group>
-        {enabled ? <><Group title="圆环显示"><Row title="显示的额度窗口"><select aria-label="显示的额度窗口" disabled={busy} value={accountUsage?.windows.find(w=>w.label===prefs.pinnedWindows[pane])?.id ?? prefs.pinnedWindows[pane] ?? ''} onChange={e => { const pins = { ...prefs.pinnedWindows }; if(e.target.value) pins[pane] = e.target.value; else delete pins[pane]; change({ pinnedWindows: pins }) }}><option value="">自动选择最接近上限的窗口</option>{accountUsage?.windows.map((w,i) => <option key={w.id ?? `${w.label}:${i}`} value={w.id ?? w.label}>{w.label}{w.scope ? ` · ${w.scope}` : ''}</option>)}</select></Row></Group><Group title="详情卡"><Toggle title="显示详细用量卡" subtitle="显示更新时刻、用量历史与金额估算。读取本机历史需开启 Token 消耗。" value={appearance.detailedCard} disabled={busy} onChange={v=>setAppearance({detailedCard:v})}/></Group><Group title="动画标记"><Toggle title="使用动画机器人" subtitle="替代此账号的供应商图标，随用量状态变化。" value={appearance.animatedMark} disabled={busy} onChange={v=>setAppearance({animatedMark:v})}/>{appearance.animatedMark && <>
-        <div className="bot-preview"><BotMark mood="idle" colour={appearance.markColour??brandColour(pane)??'#8e9dff'} body={appearance.body} persona={personaAt(appearance.persona,Math.max(0,prefs.providerOrder.indexOf(pane)))}/><span>闲置时的动作预览</span></div>
-        <Row title="人格"><select aria-label="机器人人格" disabled={busy} value={appearance.persona} onChange={e=>setAppearance({persona:e.target.value})}><option value="automatic">自动分配</option>{PERSONAS.map((id,i)=><option key={id} value={id}>{PERSONA_LABELS[i]}</option>)}</select></Row>
-        <Row title="形状"><select aria-label="机器人形状" disabled={busy} value={appearance.body} onChange={e=>setAppearance({body:e.target.value})}>{SHAPE_ORDER.map(id=><option key={id} value={id}>{SHAPE_LABELS[id]?.zh??id}</option>)}</select></Row>
-        <Row title="机器人颜色"><div className="toolbar"><input type="color" aria-label="机器人颜色" value={appearance.markColour??'#8e9dff'} disabled={busy} onChange={e=>setAppearance({markColour:e.target.value})}/><button disabled={busy||!appearance.markColour} onClick={()=>setAppearance({markColour:null})}>自动</button></div></Row></>}</Group>
-        <Group title="圆环颜色"><Row title="高亮色" subtitle="自动随用量变化；用尽时仍显示深红。"><div className="toolbar"><input type="color" aria-label="圆环高亮色" value={appearance.ringColour??'#00e68c'} disabled={busy} onChange={e=>setAppearance({ringColour:e.target.value})}/><button disabled={busy||!appearance.ringColour} onClick={()=>setAppearance({ringColour:null})}>自动</button></div></Row></Group><AccountDetails key={provider.id} provider={provider} usage={snapshot?.providers.find(p => p.id === pane)} onError={setError} onChanged={reload} /></> : <Group title="当前用量"><p className="group-copy">未显示。启用后配置连接并检查用量。</p></Group>}
+        {enabled ? <><Group title="圆环显示"><Row title="显示的额度窗口"><select aria-label="显示的额度窗口" disabled={busy} value={accountUsage?.windows.find(w=>w.label===prefs.pinnedWindows[pane])?.id ?? prefs.pinnedWindows[pane] ?? ''} onChange={e => { const pins = { ...prefs.pinnedWindows }; if(e.target.value) pins[pane] = e.target.value; else delete pins[pane]; change({ pinnedWindows: pins }) }}><option value="">自动选择最接近上限的窗口</option>{accountUsage?.windows.map((w,i) => <option key={w.id ?? `${w.label}:${i}`} value={w.id ?? w.label}>{w.label}{w.scope ? ` · ${w.scope}` : ''}</option>)}</select></Row></Group><CardContentGroup account={provider.id} preferences={prefs} disabled={busy} onChange={parts => setAppearance({cardParts:parts})}/>
+        <RobotSettings account={provider.id} appearance={appearance} preferences={prefs} disabled={busy} onChange={setAppearance} />
+        <Group title="圆环颜色"><Row title="高亮色" subtitle="自动随用量变化；用尽时仍显示深红。"><div className="toolbar"><input type="color" aria-label="圆环高亮色" value={appearance.ringColour??'#00e68c'} disabled={busy} onChange={e=>setAppearance({ringColour:e.target.value})}/><button disabled={busy||!appearance.ringColour} onClick={()=>setAppearance({ringColour:null})}>自动</button></div></Row></Group><AccountDetails key={provider.id==='minimax' ? `minimax:${prefs.minimaxSite}` : provider.id} minimaxSite={provider.id==='minimax' ? prefs.minimaxSite : undefined} provider={provider} usage={accountUsage} settings={prefs} onError={setError} onChanged={reload} /></> : <Group title="当前用量"><p className="group-copy">未显示。启用后配置连接并检查用量。</p></Group>}
         {provider.id==='deepseek'&&<DeepSeekConsoleGroup enabled={enabled} onChanged={reload}/>}
         {provider.id==='qoder'&&<QoderCreditsGroup enabled={enabled}/>}
     {provider.id==='opencode-go'&&<OpenCodeConsoleGroup enabled={enabled} onChanged={reload}/>}
-    {provider.id==='minimax'&&<Group title="站点"><Row title="购买站点" subtitle="两个站点是同一服务的国际与国内入口，密钥各自独立；换站点后需要重新填写该站点的密钥。"><select aria-label="MiniMax 站点" disabled={busy} value={prefs.minimaxSite} onChange={e=>change({minimaxSite:e.target.value as 'international'|'china'})}><option value="international">国际站 api.minimax.io</option><option value="china">国内站 api.minimaxi.com</option></select></Row></Group>}
+    {provider.id==='minimax'&&<Group title="站点"><Row title="购买站点" subtitle="国际站与国内站分别保存密钥和检查用量。"><select aria-label="MiniMax 站点" disabled={busy} value={prefs.minimaxSite} onChange={e=>change({minimaxSite:e.target.value as 'international'|'china'})}><option value="international">国际站 api.minimax.io</option><option value="china">国内站 api.minimaxi.com</option></select></Row></Group>}
         {provider.id==='antigravity'&&<AntigravitySettingsGroup
           source={prefs.antigravityUsageSource}
           split={prefs.splitAccounts.includes(pane)}
@@ -230,6 +269,50 @@ const openAbout = (key: string) => invoke('open_about_link', { key }).catch((err
     </main>
   </div>
 }
+function RobotSettings({ account, appearance, preferences, disabled, onChange }: {
+  account: string
+  appearance: AccountAppearance
+  preferences: Preferences
+  disabled: boolean
+  onChange: (patch: Partial<AccountAppearance>) => void
+}) {
+  const [materialFallback, setMaterialFallback] = useState(false)
+  const selection = robotFigures.some(([id]) => id === appearance.robotFigure) ? appearance.robotFigure ?? '' : ''
+  const material = appearance.robotMaterial === 'fluffy' ? 'fluffy' : 'flat'
+  const accounts = preferences.providerOrder.filter(id => preferences.enabledProviders.includes(id)
+    && (id === account || preferences.accountAppearance[id]?.animatedMark))
+  const figures = spreadRobotFigures(accounts.map(id => preferences.accountAppearance[id]?.robotFigure))
+  const figure = figures[accounts.indexOf(account)] ?? robotFigureAt(selection)
+  const automaticColour = brandColourHex(account) ?? '#8e9dff'
+  return <Group title="圆环机器人">
+    <Toggle title="使用动画机器人" subtitle="替代此账号的供应商图标，随用量状态变化。" value={appearance.animatedMark} disabled={disabled} onChange={animatedMark => onChange({ animatedMark })} />
+    {appearance.animatedMark && <>
+      <Row title="机器人形象" subtitle="自动分配会让相邻的机器人使用不同形象。">
+        <select aria-label="机器人形象" disabled={disabled} value={selection} onChange={event => onChange({ robotFigure: event.target.value || null })}>
+          <option value="">自动分配</option>
+          {robotFigures.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+        </select>
+      </Row>
+      <Row title="机器人材质">
+        <select aria-label="机器人材质" disabled={disabled} value={material} onChange={event => {
+          setMaterialFallback(false)
+          onChange({ robotMaterial: event.target.value === 'fluffy' ? 'fluffy' : 'flat' })
+        }}><option value="flat">纯色</option><option value="fluffy">毛绒</option></select>
+      </Row>
+      <Row title="机器人颜色"><div className="toolbar">
+        <input type="color" aria-label="机器人颜色" value={appearance.markColour ?? automaticColour} disabled={disabled} onChange={event => onChange({ markColour: event.target.value })} />
+        <button disabled={disabled || !appearance.markColour} onClick={() => onChange({ markColour: null })}>自动</button>
+      </div></Row>
+      <div className="bot-preview">
+        <div className="bot-preview__figure"><RobotAvatar accountId={account} figure={figure} material={material} mood="idle"
+          colour={appearance.markColour ?? automaticColour} fallback={<ProviderIcon provider={account} />}
+          onMaterialFallback={setMaterialFallback} /></div>
+        <span>{material === 'fluffy' && materialFallback ? '当前图形环境无法绘制毛绒，预览使用纯色。' : '闲置时的动作预览'}</span>
+      </div>
+    </>}
+  </Group>
+}
+
 // A small symbol beside a settings group's title and in front of its rows, as
 // the original puts one in front of each item. It is chosen from the title
 // rather than passed at every call site, so a row added later still gets one;
@@ -264,11 +347,28 @@ function groupSymbol(title: string): ReactNode {
 function Group({ title, children }: { title: string; children: ReactNode }) { return <section className="group-wrap"><h2><span className="group-symbol" aria-hidden="true">{groupSymbol(title)}</span>{title}</h2><div className="settings-group">{children}</div></section> }
 function Row({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) { const symbol = symbolFor(title); return <div className="setting-row"><div><strong>{symbol && <span className="row-symbol" aria-hidden="true">{symbol}</span>}{title}</strong>{subtitle && <small>{subtitle}</small>}</div><div className="setting-control">{children}</div></div> }
 function Toggle({ title, subtitle, value, disabled, onChange }: { title: string; subtitle?: string; value: boolean; disabled: boolean; onChange: (v:boolean) => void }) { return <Row title={title} subtitle={subtitle}><input type="checkbox" role="switch" aria-label={title} checked={value} disabled={disabled} onChange={e => onChange(e.target.checked)} /></Row> }
-function AccountDetails({ provider, usage, onError, onChanged }: { provider: ProviderSetting; usage?: ProviderUsage; onError:(e:string|null)=>void; onChanged:()=>void }) {
+function CardContentGroup({ account, preferences, disabled, onChange }: {
+  account: string; preferences: Preferences; disabled: boolean; onChange: (parts: CardPart[]) => void
+}) {
+  const available = availableCardParts(account)
+  const shown = accountCardParts(account, preferences.accountAppearance[account], preferences.showForecast)
+  return <Group title="卡片内容">
+    <details className="card-content-options">
+      <summary>选择卡片显示内容 <span className="muted">已显示 {shown.length} / {available.length} 项</span></summary>
+      {cardParts.filter(([part]) => available.includes(part)).map(([part, title]) => (
+        <Toggle key={part} title={title} value={shown.includes(part)} disabled={disabled}
+          subtitle={!preferences.tokenSpendEnabled && cardPartNeedsLocalSpend(account, part) ? '开启 Token 消耗后显示。'
+            : part === 'resetCredits' ? '刷新时读取 Codex 应用服务器。' : undefined}
+          onChange={enabled => onChange(available.filter(candidate => candidate === part ? enabled : shown.includes(candidate)))} />
+      ))}
+    </details>
+  </Group>
+}
+function AccountDetails({ provider, usage, onError, onChanged, minimaxSite, settings }: { provider: ProviderSetting; usage?: ProviderUsage; onError:(e:string|null)=>void; onChanged:()=>void; minimaxSite?:MiniMaxSite; settings: UsageBarPreferences }) {
   const [key,setKey] = useState(''), [address,setAddress] = useState(''), [busy,setBusy] = useState(false), [saved,setSaved] = useState(false), [copied,setCopied] = useState(false)
   const action = async (save:boolean) => {
     setBusy(true); setSaved(false); onError(null)
-    try { if(save) { await saveProviderCredential(provider.id,key||null,address||null); setKey(''); setAddress(''); setSaved(true); onChanged() } else await refreshProvider(provider.id) }
+    try { if(save) { await saveProviderCredential(provider.id,key||null,address||null,minimaxSite); setKey(''); setAddress(''); setSaved(true); onChanged() } else await refreshProvider(provider.id) }
     catch(e) { onError(String(e)) } finally { setBusy(false) }
   }
   return <><Group title="连接"><Row title="访问凭据" subtitle={provider.additional?'仅用于此账号。可粘贴 OAuth Token、登录 JSON 或会话 Cookie。':provider.stored ? '已保存凭据。留空保留现有值。' : '填写 API Key、Token 或 Cookie。'}><input type="password" aria-label="访问凭据" autoComplete="off" placeholder="粘贴凭据" value={key} onChange={e => { setKey(e.target.value); setSaved(false) }} /></Row>
@@ -278,7 +378,7 @@ function AccountDetails({ provider, usage, onError, onChanged }: { provider: Pro
     <details><summary>凭据读取位置</summary>{provider.hints.map(p => <code key={p}>{p}</code>)}</details></Group>
     {provider.id === 'opencode-go' && <p className="group-copy">需要当前密钥所属账号和工作区的 Go 订阅。默认读取 OpenCode CLI 登录；在这里保存的 API key 优先于 CLI。若已订阅却提示未检测到订阅，请核对 OpenCode 控制台中的账号、工作区与密钥。</p>}
     {usage?.source && <p className="group-copy" data-testid="credential-source">凭据来源：{usage.source}</p>}
-    <Group title="当前用量">{usage?.error&&<div className="connection-error"><strong>{usage.windows.length||creditText(usage.creditRemaining)?'检查失败，显示上次有效读数':'无法获取用量'}</strong><p>{usage.error}</p></div>}{usage?.stale&&<p className="group-copy">旧读数 · {new Date(usage.fetchedAt).toLocaleString()}</p>}{usage?.windows.length ? usage.windows.map((w,i) => <Row key={`${w.label}-${i}`} title={w.label} subtitle={[w.detail,formatReset(w.resetsAt)].filter(Boolean).join(' · ')}><span className="usage-value">{w.percentUsed === null ? '—' : `${percentFigure(w.percentUsed/100)}%`}</span></Row>) : !usage?.error&&!creditText(usage?.creditRemaining)&&<p className="group-copy">尚未完成检查。</p>}
+    <Group title="当前用量">{usage?.error&&<div className="connection-error"><strong>{usage.windows.length||creditText(usage.creditRemaining)?'检查失败，显示上次有效读数':'无法获取用量'}</strong><p>{usage.error}</p></div>}{usage?.stale&&<p className="group-copy">旧读数 · {new Date(usage.fetchedAt).toLocaleString()}</p>}{usage?.windows.length ? <AccountUsageBars usage={usage} settings={settings} /> : !usage?.error&&!creditText(usage?.creditRemaining)&&<p className="group-copy">尚未完成检查。</p>}
     {creditText(usage?.creditRemaining)&&<Row title="余额"><span className="usage-value">{creditText(usage?.creditRemaining)}</span></Row>}
     <div className="group-actions"><small>{usage ? `最近检查：${new Date(usage.fetchedAt).toLocaleString()}` : ''}</small><button disabled={busy} onClick={() => { void action(false) }}>{busy ? '正在检查…' : '刷新此账号'}</button></div></Group>
     <Group title="连接诊断"><Row title="最近检查" subtitle={usage?.error ?? (usage ? '最近一次检查已完成。' : '启动后尚未完成检查。')}><span>{usage?.stale ? '旧读数' : usage?.error ? '失败' : '—'}</span></Row>

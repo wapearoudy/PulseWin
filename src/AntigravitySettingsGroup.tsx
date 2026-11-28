@@ -8,17 +8,17 @@ export const SOURCE_OPTIONS: { value: AntigravityUsageSource; label: string; sub
   {
     value: 'auto',
     label: '自动',
-    subtitle: 'Antigravity 打开时读取它报告的用量，它没有数字时改用 agy CLI。',
+    subtitle: '优先读取兼容的桌面端。新版桌面端的用量通过已登录的 agy CLI 读取。',
   },
   {
     value: 'cli',
     label: 'CLI（agy）',
-    subtitle: '只问 agy，使用它已经保存的登录。',
+    subtitle: '使用官方 agy CLI 中已登录的账号读取用量。',
   },
   {
     value: 'desktop',
     label: '桌面端',
-    subtitle: '只问 Antigravity 打开时运行的语言服务器。',
+    subtitle: '从运行中的兼容桌面端读取。新版桌面端请选择「自动」或「CLI（agy）」。',
   },
 ]
 

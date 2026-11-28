@@ -1,7 +1,7 @@
 import { memo, useEffect, useId, useMemo, useState } from 'react'
 import { bubblePath, bubbleTransform } from './bubbleShape'
 import type { PanelEdge } from './berthShape'
-import { cardBox, type DetailCardLayout } from './cardLayout'
+import type { DetailCardLayout } from './cardLayout'
 import { UsageBar } from './UsageBar'
 import { tintColour, usageTint } from './tint'
 import { openSettings } from '../api'
@@ -14,6 +14,8 @@ import { formatReset } from '../types'
 import { balanceOnly, creditText } from '../creditAmount'
 import { budgetEstimate, useCardHistory } from './cardHistory'
 import { CardActivity } from './CardActivity'
+import { ClaudeCacheSummary, QoderCardHistory } from './CardSupplement'
+import { historyParts } from './cardParts'
 import { PanelOutline } from './PanelOutline'
 import { formatCost } from '../token-spend/summary'
 import { cardMetricTrends, metricSummary, metricText, trendPoints } from '../metricTrend'
@@ -32,6 +34,9 @@ export interface UsageCardProps {
   light?: boolean
   provider: ProviderUsage
   layout: DetailCardLayout
+  width: number
+  height: number
+  scrollable: boolean
   /** The edge the rail is docked to; the tail leaves towards it. */
   edge: PanelEdge
   /** Where the pointer's tip sits along the card's rail-facing side. */
@@ -50,6 +55,9 @@ function UsageCardImpl({
   provider,
   light=false,
   layout,
+  width,
+  height,
+  scrollable,
   edge,
   pointerCentre,
   top,
@@ -64,30 +72,26 @@ function UsageCardImpl({
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer) }, [])
   const rows = provider.windows
   const clipId=`card-clip-${useId().replace(/:/g,'')}`
-  const history=useCardHistory(provider.id,layout.detailed,tokenSpendEnabled)
+  const { parts } = layout
+  const showsHistory = historyParts.some(part => parts.has(part))
+  const history = useCardHistory(provider.id, provider.id !== 'qoder' && (showsHistory || parts.has('value')), tokenSpendEnabled)
 
   // The box the card lands in, tail included, and the space the outline is
   // drawn in. For a top rail the outline is the same one turned a quarter turn,
   // so its viewBox is expressed in screen coordinates with the tail's band
   // sitting *above* the body rather than beside it.
-  // An extension states figures that are not limits: one line each, and the series
-  // behind the first few that carry one. The card's frame has to budget for them
-  // before anything is drawn, or the last series would fall outside the outline.
   const metrics = provider.metrics ?? []
   const metricTrends = cardMetricTrends(metrics)
-  const trendCount = metricTrends.filter(Boolean).length
-  const box = cardBox(edge, layout, rows.length, balanceOnly(provider),!!provider.stale,!!provider.error, metrics.length, trendCount)
   const tail = layout.pointerWidth
-  const viewBox =
-    `0 0 ${box.width} ${box.height}`
+  const viewBox = `0 0 ${width} ${height}`
 
-  const transform = bubbleTransform(edge, box.height, box.width)
+  const transform = bubbleTransform(edge, height, width)
 
   const d = useMemo(
     () =>
       bubblePath({
-        width: box.width,
-        height: box.height,
+        width,
+        height,
         usesRoundEnds,
         edge,
         pointerCenter: pointerCentre,
@@ -95,7 +99,7 @@ function UsageCardImpl({
         pointerWidth: layout.pointerWidth,
         pointerHeight: layout.pointerHeight,
       }),
-    [layout, box.width, box.height, usesRoundEnds, edge, pointerCentre],
+    [layout, width, height, usesRoundEnds, edge, pointerCentre],
   )
 
   // The body sits inside the tail: padding, then the pointer's band, on
@@ -111,15 +115,15 @@ function UsageCardImpl({
     <div
       className="card"
       style={{
-        width: box.width,
-        height: box.height,
+        width,
+        height,
         top,
       }}
     >
       <svg
         className="card__bubble"
-        width={box.width}
-        height={box.height}
+        width={width}
+        height={height}
         viewBox={viewBox}
         aria-hidden="true"
       >
@@ -129,6 +133,9 @@ function UsageCardImpl({
 
       <div style={{position:'absolute',inset:0,clipPath:`url(#${clipId})`}}><div
         className="card__content"
+        tabIndex={scrollable ? 0 : undefined}
+        role={scrollable ? 'region' : undefined}
+        aria-label={scrollable ? `${provider.name} 用量详情` : undefined}
         style={{
           padding: layout.padding,
           gap: layout.contentSpacing,
@@ -147,13 +154,13 @@ function UsageCardImpl({
             <ProviderIcon provider={provider.id}/>
           </span>
           <span className="card__title" title={provider.stale ? `旧读数 · ${new Date(provider.fetchedAt).toLocaleString()}${provider.error ? ' · '+provider.error : ''}` : undefined}>{provider.name}{provider.stale ? ' · 旧读数' : ''}</span>
-          {layout.detailed && provider.plan ? (
+          {parts.has('plan') && provider.plan ? (
             <span className="card__plan" style={{ fontSize: layout.footnoteFontSize }}>
               {provider.plan}
             </span>
           ) : null}
         </header>
-        {layout.detailed&&<div className="card__muted" style={{height:layout.footnoteHeight,marginTop:layout.headerLineSpacing,marginLeft:layout.headerIconSize+8,fontSize:layout.footnoteFontSize}}>{provider.stale?'':Number.isFinite(Date.parse(provider.fetchedAt))?(now-Date.parse(provider.fetchedAt)<60000?'刚刚更新':`${Math.max(1,Math.floor((now-Date.parse(provider.fetchedAt))/60000))}分钟前更新`):'更新时间未知'}</div>}
+        {parts.has('updated')&&!provider.stale&&<div className="card__muted" style={{height:layout.footnoteHeight,marginTop:layout.headerLineSpacing,marginLeft:layout.headerIconSize+8,fontSize:layout.footnoteFontSize}}>{Number.isFinite(Date.parse(provider.fetchedAt))?(now-Date.parse(provider.fetchedAt)<60000?'刚刚更新':`${Math.max(1,Math.floor((now-Date.parse(provider.fetchedAt))/60000))}分钟前更新`):'更新时间未知'}</div>}
         </div>
 
         {balanceOnly(provider) ? (
@@ -212,8 +219,9 @@ function UsageCardImpl({
                     </span>
                   ) : null}
                 </div>
-                {layout.detailed&&<div className="card__estimate card__muted" style={{height:layout.rowTextLineHeight,fontSize:layout.footnoteFontSize,lineHeight:`${layout.rowTextLineHeight}px`}}>{(()=>{const estimate=history.snapshot?budgetEstimate(w,history.snapshot,now):null;return estimate?`估算额度 ≈${formatCost(estimate.full)} · 已用 ≈${formatCost(estimate.spent)}`:''})()}</div>}
-                {layout.showForecast && <div className="card__forecast" style={{height:layout.rowTextLineHeight,fontSize:layout.footnoteFontSize,lineHeight:`${layout.rowTextLineHeight}px`,color:light?'var(--panel-muted)':'rgba(255,255,255,.55)'}}>{spent?'':forecastText(w,now)}</div>}
+                {parts.has('amounts') && w.quotaAmounts && <div className="card__muted card__estimate" style={{height:layout.rowTextLineHeight,fontSize:layout.footnoteFontSize,lineHeight:`${layout.rowTextLineHeight}px`}}>{formatQuotaAmounts(w.quotaAmounts, showsRemaining)}</div>}
+                {parts.has('value')&&<div className="card__estimate card__muted" style={{height:layout.rowTextLineHeight,fontSize:layout.footnoteFontSize,lineHeight:`${layout.rowTextLineHeight}px`}}>{(()=>{const estimate=history.snapshot?budgetEstimate(w,history.snapshot,now):null;return estimate?`估算额度 ≈${formatCost(estimate.full)} · 已用 ≈${formatCost(estimate.spent)}`:''})()}</div>}
+                {parts.has('forecast') && <div className="card__forecast" style={{height:layout.rowTextLineHeight,fontSize:layout.footnoteFontSize,lineHeight:`${layout.rowTextLineHeight}px`,color:light?'var(--panel-muted)':'rgba(255,255,255,.55)'}}>{spent?'':forecastText(w,now)}</div>}
               </section>
             )
           })
@@ -223,10 +231,22 @@ function UsageCardImpl({
         ))}
         {provider.stale&&<div className="card__muted card__footnote" style={{height:layout.footnoteHeight,fontSize:layout.footnoteFontSize}}>旧读数 · 截至 {new Date(provider.fetchedAt).toLocaleString()}</div>}
         {provider.error && (rows.length>0 || balanceOnly(provider)) && <WhyNoReading message={provider.error} provider={provider.id} layout={layout} onRetry={()=>onRetry(provider.id)} refreshing={refreshing}/>}
-        {layout.detailed&&<CardActivity history={history} layout={layout} now={now}/>}
+        {parts.has('resetCredits') && provider.resetCredits && <div className="card__row-line" style={{height:layout.rowTextLineHeight,fontSize:layout.rowFontSize}}>
+          <span className="card__muted">额度重置券</span>
+          <span className="card__model" title={provider.resetCredits.nextExpiry ? `最早到期：${new Date(provider.resetCredits.nextExpiry).toLocaleString()}` : undefined}>可用 {provider.resetCredits.available.toLocaleString('zh-CN')} 张</span>
+        </div>}
+        {showsHistory && (provider.id === 'qoder'
+          ? <QoderCardHistory layout={layout} now={now} />
+          : <CardActivity history={history} layout={layout} now={now} />)}
+        {parts.has('promptCache') && <ClaudeCacheSummary layout={layout} now={now} />}
       </div></div>
     </div>
   )
+}
+
+function formatQuotaAmounts({ used, limit }: { used: number; limit: number }, remaining: boolean): string {
+  const format = (value: number) => value.toLocaleString('zh-CN', { maximumFractionDigits: 2 })
+  return `${format(remaining ? Math.max(0, limit - used) : used)} / ${format(limit)} ${remaining ? '剩余' : '已用'}`
 }
 
 

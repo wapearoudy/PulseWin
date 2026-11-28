@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use super::{Ctx, FetchFuture, Provider};
 use crate::credentials::{self, codex_credential_paths};
-use crate::model::{parse_reset, ProviderUsage, UsageWindow};
+use crate::model::{parse_reset, ProviderUsage, ResetCredits, UsageWindow};
 
 const USAGE_URL: &str = "https://chatgpt.com/backend-api/wham/usage";
 
@@ -106,9 +106,48 @@ pub(crate) async fn fetch_inner(ctx: Arc<Ctx>, explicit: Option<serde_json::Valu
 
     let plan = credentials::dig_first_str(&json, &["plan_type", "plan", "subscription_plan"]);
 
-    ProviderUsage::ok(ID, NAME, windows)
+    let mut usage = ProviderUsage::ok(ID, NAME, windows)
         .with_plan(plan)
-        .with_account(Some(source_label(&source)))
+        .with_account(Some(source_label(&source)));
+    if explicit.is_none() && same_cli_login(&source) && reset_credits_enabled(&crate::preferences::load()) {
+        usage.reset_credits = read_reset_credits().await;
+    }
+    usage
+}
+
+pub fn reset_credits_enabled(prefs: &crate::preferences::Preferences) -> bool {
+    prefs.enabled_providers.iter().any(|id| id == "codex")
+        && prefs.account_appearance.get("codex").and_then(|appearance| appearance.card_parts.as_ref())
+            .is_some_and(|parts| parts.iter().any(|part| part == "resetCredits"))
+}
+
+fn same_cli_login(source: &std::path::Path) -> bool {
+    // A token pasted into PulseWin or set in the environment may correspond
+    // to another account. Never attach the CLI's credits to that reading.
+    let home = std::env::var_os("CODEX_HOME").map(std::path::PathBuf::from)
+        .or_else(|| credentials::home_dir().map(|home| home.join(".codex")));
+    home.is_some_and(|home| home.join("auth.json") == source)
+}
+
+async fn read_reset_credits() -> Option<ResetCredits> {
+    if std::env::args().any(|arg| arg == "--native-smoke") { return None; }
+    let binary = crate::window_starter::locate("codex", &[])?;
+    let folder = crate::settings::directory()?.join("codex-usage");
+    std::fs::create_dir_all(&folder).ok()?;
+    let reply = crate::window_starter::codex_read_rpc(
+        &binary, &folder, "account/rateLimits/read", None, std::time::Duration::from_secs(5),
+    ).await?;
+    parse_reset_credits(reply.get("result")?)
+}
+
+fn parse_reset_credits(value: &Value) -> Option<ResetCredits> {
+    let block = value.get("rateLimitResetCredits")?.as_object()?;
+    let listed = block.get("credits").and_then(Value::as_array);
+    let active = || listed.into_iter().flatten().filter(|entry| entry["status"] == "available");
+    let available = block.get("availableCount").and_then(Value::as_u64)
+        .or_else(|| listed.map(|_| active().count() as u64))?;
+    let next_expiry = active().filter_map(|entry| entry.get("expiresAt").and_then(parse_reset)).min();
+    Some(ResetCredits { available, next_expiry })
 }
 
 fn source_label(source: &std::path::Path) -> String {
@@ -190,6 +229,22 @@ fn humanize_seconds(seconds: f64) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn reset_credits_require_a_reported_count_or_list() {
+        use serde_json::json;
+        assert!(super::parse_reset_credits(&json!({"rateLimits": {}})).is_none());
+        assert!(super::parse_reset_credits(&json!({"rateLimitResetCredits": {}})).is_none());
+        let empty = super::parse_reset_credits(&json!({"rateLimitResetCredits":{"availableCount":0}})).unwrap();
+        assert_eq!((empty.available, empty.next_expiry), (0, None));
+        let reading = super::parse_reset_credits(&json!({"rateLimitResetCredits":{"credits":[
+            {"status":"used","expiresAt":1700000000},
+            {"status":"available","expiresAt":1900000000},
+            {"status":"available","expiresAt":1800000000}
+        ]}})).unwrap();
+        assert_eq!(reading.available, 2);
+        assert_eq!(reading.next_expiry, super::parse_reset(&json!(1800000000)));
+    }
+
     #[test]
     fn small_reported_percentages_are_not_fractions() {
         for used in [0.0, 0.5, 1.0, 37.0, 41.0, 100.0] {

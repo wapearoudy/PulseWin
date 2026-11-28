@@ -15,7 +15,7 @@ describe('bottom-facing panel geometry', () => {
     expect(pointerHits([tracking,surface],surface.x+surface.w/2,200).claimsClick).toBe(false)
   })
   it('places the bottom card tail below its body with the requested horizontal anchor',()=>{
-    const layout=detailCardLayout('standard',false,false),box=cardBox('bottom',layout,1)
+    const layout=detailCardLayout(),box=cardBox('bottom',layout,1)
     expect(box.width).toBe(layout.width)
     const surface=cardSurfaceRegion({edge:'bottom',left:0,top:0,...box,pointerCentre:60,layout,usesRoundEnds:false})
     expect(pointerHits([surface],60,box.height-1).claimsClick).toBe(true)

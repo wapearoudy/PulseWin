@@ -7,14 +7,10 @@ const standard = {
   lineWidth: 4,
   scale: 1,
   hasSecondRing: false,
-  secondRingDiameter: 26,
 }
 
 describe('ringGeometry', () => {
   it('puts a 20pt disc inside a standard ring', () => {
-    // "at 1.4 the canvas is the full 28pt inside a standard 36pt ring … wider
-    // than the 20pt disc behind it" — the disc is the anchor for everything
-    // else, so it is checked first.
     expect(ringGeometry(standard).centreDiameter).toBe(20)
   })
 
@@ -56,6 +52,26 @@ describe('ringGeometry', () => {
     expect(with2.secondRingRadius).toBe(13)
   })
 
+  it.each([0.82, 1, 1.22])('keeps the activity and clock ink clear of the usage strokes at %s', scale => {
+    const lineWidth = 4 * scale
+    const g = ringGeometry({ ...standard, diameter: 36 * scale, lineWidth, scale, hasSecondRing: true })
+    const activityHalfStroke = Math.max(lineWidth / 2, 1.5) / 2
+    const clockHalfStroke = CLOCK_LINE_WIDTH * scale / 2
+    expect(g.busyDiameter / 2 - activityHalfStroke).toBeCloseTo(g.centreDiameter / 2, 10)
+    expect(g.busyDiameter / 2 + activityHalfStroke).toBeLessThan(g.secondRingRadius - lineWidth / 2)
+    expect(g.clockDiameter / 2 - clockHalfStroke - (g.ringRadius + lineWidth / 2)).toBeCloseTo(CLOCK_GAP * scale, 10)
+    expect(g.inkHalf).toBeCloseTo(g.clockDiameter / 2 + clockHalfStroke, 10)
+  })
+
+  it('fits the avatar box and its clip within the adjacent stroke', () => {
+    const single = ringGeometry(standard)
+    const double = ringGeometry({ ...standard, hasSecondRing: true })
+    expect(single.robotDiameter).toBeCloseTo(27, 10)
+    expect(single.robotRoom).toBe(28)
+    expect(double.robotDiameter).toBeCloseTo(17.6, 10)
+    expect(double.robotRoom).toBe(18)
+  })
+
   it('clears the usage ring by exactly clockGap', () => {
     // clockDiameter is measured out from the ring's outer edge, and the clock
     // arc is stroked centred, so its inner edge is radius - clockLineWidth/2.
@@ -91,7 +107,6 @@ describe('ringGeometry', () => {
       lineWidth: 4 * 0.82,
       scale: 0.82,
       hasSecondRing: false,
-      secondRingDiameter: 26 * 0.82,
     })
     expect(small.centreDiameter).toBeCloseTo(36 * 0.82 - (4 * 0.82 + 4) * 2, 10)
     expect(small.centreDiameter).toBeCloseTo(14.96, 10)
@@ -104,14 +119,12 @@ describe('ringGeometry', () => {
         lineWidth: 4 * scale,
         scale,
         hasSecondRing: true,
-        secondRingDiameter: 26 * scale,
       })
       const withoutSecond = ringGeometry({
         diameter: 36 * scale,
         lineWidth: 4 * scale,
         scale,
         hasSecondRing: false,
-        secondRingDiameter: 26 * scale,
       })
       // Exactly two scaled points a side.
       expect(withoutSecond.centreDiameter - g.centreDiameter, `scale ${scale}`).toBeCloseTo(

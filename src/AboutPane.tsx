@@ -11,6 +11,7 @@ const links = [
   ['vinz', 'Vinz', '原版设计灵感。'],
   ['icons', 'LobeIcons', '服务商图标。'],
   ['morphbot', 'MorphBot', '机器人动画参考。'],
+  ['open-bot-avatar', 'Open Bot Avatar', 'Dominik Scholz 与贡献者制作的小机器人形象、动作和毛绒渲染。'],
 ]
 export function AboutPane() {
   const [info, setInfo] = useState<AppInfo | null>(null), [error, setError] = useState<string | null>(null), [opening, setOpening] = useState<string | null>(null)

@@ -166,6 +166,10 @@
   display: none;
 }
 
+.card__content > * {
+  flex-shrink: 0;
+}
+
 .card__content > div:first-child {
   position: sticky;
   top: 0;

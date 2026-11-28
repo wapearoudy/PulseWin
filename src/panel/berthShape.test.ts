@@ -29,8 +29,6 @@ describe('dockLayout', () => {
     expect(l.percentTextHeight).toBe(16)
     expect(l.percentTextWidth).toBe(38)
     expect(l.itemSpacing).toBe(30)
-    expect(l.secondRingDiameter).toBe(26)
-    expect(l.secondRingLineWidth).toBe(2.5)
     expect(l.collapsedWidth).toBe(6)
     expect(l.collapsedHeight).toBe(96)
     expect(l.collapsedHitWidth).toBe(20)

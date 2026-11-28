@@ -8,6 +8,8 @@ pub struct ReplyTiming {
     pub replies: u64,
     pub first_token_seconds: f64,
     pub first_token_turns: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finished_at: Option<i64>,
 }
 impl ReplyTiming {
     fn measured(output: u64, sent: i64, finished: i64) -> Option<Self> {
@@ -16,6 +18,7 @@ impl ReplyTiming {
             output_tokens: output,
             seconds,
             replies: 1,
+            finished_at: Some(finished),
             ..Default::default()
         })
     }
@@ -173,6 +176,7 @@ mod tests {
         assert_eq!(m.output_tokens, 200);
         assert_eq!(m.seconds, 4.);
         assert_eq!(m.replies, 1);
+        assert_eq!(m.finished_at, Some(4000));
     }
     #[test]
     fn claude_final_fragment_closes_from_request_not_first_block() {

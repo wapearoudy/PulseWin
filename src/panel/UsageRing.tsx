@@ -1,9 +1,7 @@
-import { memo, useId } from 'react'
+import { memo, useId, type CSSProperties } from 'react'
 import { usageTint, isSpent as computeSpent, tintColour, type UsageTintName } from './tint'
 import {
   CLOCK_LINE_WIDTH,
-  ICON_SCALE,
-  BOT_SCALE,
   HALO_RADIUS,
   dashArray as dash,
   ringGeometry,
@@ -79,10 +77,6 @@ export interface UsageRingProps {
   warningAt: number
   /** `/`-independent scale from `PanelMetrics`. */
   scale?: number
-  /** `DockLayout.secondRingDiameter`, threaded in so the two cannot drift. */
-  secondRingDiameter?: number
-  /** `DockLayout.secondRingLineWidth`. */
-  secondRingLineWidth?: number
   /** The provider's glyph, drawn on the dark disc. */
   icon?: React.ReactNode
   showsBotMark?: boolean
@@ -110,8 +104,6 @@ function UsageRingImpl({
   windowClockFraction = null,
   warningAt,
   scale = 1,
-  secondRingDiameter = 26,
-  secondRingLineWidth = 2.5,
   icon,
   showsBotMark = false,
   hasReading = true,
@@ -125,8 +117,8 @@ function UsageRingImpl({
 
   const secondDrawn = secondFraction !== null && secondFraction !== undefined
 
-  const { centreDiameter, busyDiameter, clockDiameter, ringRadius, secondRingRadius, inkHalf } =
-    ringGeometry({ diameter, lineWidth, scale, hasSecondRing: secondDrawn, secondRingDiameter })
+  const { centreDiameter, busyDiameter, clockDiameter, ringRadius, secondRingRadius, robotDiameter, robotRoom, inkHalf } =
+    ringGeometry({ diameter, lineWidth, scale, hasSecondRing: secondDrawn })
 
   // Colour says how full the limit is, not which provider this is.
   const tintName: UsageTintName | null =
@@ -149,7 +141,12 @@ function UsageRingImpl({
   const half = inkHalf
   const size = half * 2
 
-  const iconDiameter=centreDiameter*(showsBotMark?BOT_SCALE:ICON_SCALE)
+  const iconDiameter = showsBotMark ? robotDiameter : centreDiameter
+  const iconStyle = {
+    opacity: hasReading ? 1 : 0.35,
+    overflow: 'visible',
+    '--ring-fallback-icon-scale': showsBotMark && robotDiameter > 0 ? centreDiameter / robotDiameter : 1,
+  } as CSSProperties
   const showActivity = isBusy && !showsBotMark && animatesActivity
   const showRefresh = isRefreshing && animatesActivity
 
@@ -175,6 +172,7 @@ function UsageRingImpl({
           <circle cx={0} cy={0} r={half + HALO_RADIUS * 2} fill="white" />
           <circle cx={0} cy={0} r={centreDiameter / 2} fill="black" />
         </mask>
+        {showsBotMark && <clipPath id={`${uid}-robot`}><circle cx={0} cy={0} r={robotRoom / 2} /></clipPath>}
       </defs>
 
       {/* 1. Track */}
@@ -218,7 +216,8 @@ function UsageRingImpl({
               y={-iconDiameter / 2}
               width={iconDiameter}
               height={iconDiameter}
-              style={{ opacity: hasReading || showsBotMark ? 1 : 0.35, overflow:'visible' }}
+              clipPath={showsBotMark ? `url(#${uid}-robot)` : undefined}
+              style={iconStyle}
             >
               <div className="ring__icon">{icon}</div>
             </foreignObject>
@@ -226,7 +225,7 @@ function UsageRingImpl({
         </>
       )}
 
-      {/* 4. Second ring — same colour language, thinner, inside */}
+      {/* 4. Second ring — same weight and tint rules, one point inside */}
       {secondDrawn && (
         <>
           <circle
@@ -235,7 +234,7 @@ function UsageRingImpl({
             r={secondRingRadius}
             fill="none"
             stroke={`rgba(${light?'0,0,0':'255,255,255'},${TRACK_OPACITY})`}
-            strokeWidth={secondRingLineWidth}
+            strokeWidth={lineWidth}
           />
           {secondArcFraction > 0 && (
             <circle
@@ -244,10 +243,11 @@ function UsageRingImpl({
               r={secondRingRadius}
               fill="none"
               stroke={secondColour}
-              strokeWidth={secondRingLineWidth}
+              strokeWidth={lineWidth}
               strokeLinecap="round"
               strokeDasharray={dash(secondArcFraction, secondRingRadius)}
               transform="rotate(-90)"
+              style={{ transition: 'stroke-dasharray 0.35s ease-out' }}
             />
           )}
         </>

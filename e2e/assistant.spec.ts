@@ -9,17 +9,18 @@ test.beforeEach(async ({page}) => {
     const prefs={enabledProviders:ids,providerOrder:ids,panelSize:1,railSpacing:1,roundEnds:false,showsRemaining:false,showPercentages:true,labelAbove:false,autoCollapse:true,warningThreshold:.75,refreshSeconds:120,showResetClock:false,clockRemaining:false,pinnedWindows:{},accountAppearance:Object.fromEntries(ids.map((id,i)=>[id,{animatedMark:true,persona:['calm','eager','steady','curious','sleepy','playful','stoic'][i],body:'blob'}]))}
     const snapshot={providers:ids.map((id,i)=>({id,name:id,plan:null,account:null,windows:[{label:'5h',percentUsed:[24,13,2,1,0,0,0][i],resetsAt:null,detail:null}],configured:true,error:null,fetchedAt:new Date().toISOString()})),fetchedAt:new Date().toISOString()}
     w.testCommands=[]; w.testPrefs=prefs; w.testSnapshot=snapshot
-    w.testEmit=(event:string,payload:unknown)=>Object.values(listeners).filter(x=>x.event===event).forEach(x=>callbacks[x.handler]?.({event,payload}))
+    w.testPlacement={dockEdge:null,railPosition:[800,80]}
+    w.testEmit=(event:string,payload:unknown)=>Object.values(listeners).filter(x=>x.event===event).forEach(x=>callbacks[x.handler]?.({event,payload:structuredClone(payload)}))
     w.__TAURI_EVENT_PLUGIN_INTERNALS__={unregisterListener:(_:string,id:number)=>delete listeners[id]}
     w.__TAURI_INTERNALS__={transformCallback:(fn:Function)=>{callbacks[++seq]=fn;return seq},invoke:async(cmd:string,args:any={})=>{
       w.testCommands.push({cmd,args})
       if(cmd==='plugin:event|listen'){listeners[++seq]=args;return seq}
-      if(cmd==='get_preferences')return prefs
+      if(cmd==='get_preferences')return structuredClone(prefs)
       if(cmd==='get_activity')return {running:[],lastWrite:null,finishedAt:{}}
       if(cmd==='get_resets')return {}
       if(cmd==='get_snapshot'||cmd==='refresh_provider')return snapshot
       if(cmd==='panel_edge')return 'right'
-      if(cmd==='panel_placement')return {dockEdge:null,railPosition:[800,80]}
+      if(cmd==='panel_placement')return w.testPlacement
     }}
   })
   await page.goto('/')
@@ -33,7 +34,10 @@ test('floating assistant matches original capsule geometry and stays expanded',a
   const a=await page.locator('.rail__item').nth(0).boundingBox(); const b=await page.locator('.rail__item').nth(1).boundingBox()
   expect(b!.y-a!.y).toBe(88)
   const ring=await page.locator('.ring').first().boundingBox(); const frame=await rail.boundingBox()
-  await expect(page.locator('.botmark').first()).toHaveCSS('width','28px')
+  const robots = page.locator('.rail .robot-avatar')
+  await expect(robots.first()).toHaveCSS('width','27px')
+  await expect(robots.first()).toHaveAttribute('data-ready','true')
+  expect(await robots.evaluateAll(nodes => nodes.map(node => (node as HTMLElement).dataset.figure))).toEqual(['mug','ghost','cat','lightbulb','chat','cloud','egg'])
   expect(ring!.width).toBe(36)
   expect(ring!.y-frame!.y+ring!.height/2).toBe(40)
   await page.waitForTimeout(1200)
@@ -116,7 +120,7 @@ test('the refreshing animation belongs only to the clicked account and lasts at 
 test('a per-account switch restores the original provider glyph and right click opens the menu',async({page})=>{
   await page.evaluate(()=>{const w=window as any;w.testPrefs.accountAppearance.codex.animatedMark=false;w.testEmit('preferences-changed',w.testPrefs)})
   await expect(page.locator('[data-provider-icon="codex"]')).toBeVisible()
-  await expect(page.locator('.rail .botmark')).toHaveCount(6)
+  await expect(page.locator('.rail .robot-avatar')).toHaveCount(6)
   await page.locator('.rail__item').first().click({button:'right'})
   expect(await page.evaluate(()=>(window as any).testCommands.filter((c:any)=>c.cmd==='show_panel_menu'))).toHaveLength(1)
   expect(await page.evaluate(()=>(window as any).testCommands.filter((c:any)=>c.cmd==='begin_drag'))).toHaveLength(0)
@@ -138,7 +142,7 @@ test('detail card has a continuous filled body and its tail touches the allocate
   await page.screenshot({path:'test-results/assistant-detail-card.png'})
 })
 
-test('detailed card is opt-in, uses measured history and keeps the native frame fixed',async({page})=>{
+test('per-account card sections obey consent and keep the native frame fixed',async({page})=>{
   await page.setViewportSize({width:960,height:1100})
   await page.evaluate(()=>{
     const w=window as any,invoke=w.__TAURI_INTERNALS__.invoke
@@ -146,10 +150,9 @@ test('detailed card is opt-in, uses measured history and keeps the native frame 
       if(cmd!=='spend_card_history')return invoke(cmd,args)
       w.testCommands.push({cmd,args});const now=new Date(),day=now.toLocaleDateString('sv-SE')
       const tokens=args.provider==='codex'?180:720
-      return {status:'ready',snapshot:{scannedAt:now.toISOString(),records:[{agent:args.provider==='codex'?'codex':'claude',model:'fixture-only-model',modelName:'Fixture model',day,hour:now.getHours(),session:'synthetic',project:null,tally:{input:tokens-80,output:25,cacheWrite:5,cacheRead:50},unclassifiedTokens:0,cost:.5,costBreakdown:[.3,.1,.02,.08],sourceTimestamp:Math.floor(now.getTime()/1000)}],sources:[],notes:[],pricesAt:null,pricingStatus:'unavailable'}}
+      return {status:'ready',snapshot:{scannedAt:now.toISOString(),records:[{agent:args.provider==='codex'?'codex':'claude',model:'fixture-only-model',modelName:'Fixture model',day,hour:now.getHours(),session:'synthetic',project:null,tally:{input:tokens-80,output:25,cacheWrite:5,cacheRead:50},unclassifiedTokens:0,cost:.5,costBreakdown:[.3,.1,.02,.08],sourceTimestamp:Math.floor(now.getTime()/1000),replyTiming:{replies:1,outputTokens:25,seconds:2,firstTokenTurns:0,firstTokenSeconds:0,finishedAt:now.getTime()-1500}}],sources:[],notes:[],pricesAt:null,pricingStatus:'unavailable'}}
     }
-    w.testPrefs.accountAppearance.codex.detailedCard=true
-    w.testPrefs.accountAppearance['claude-code'].detailedCard=true
+    w.testPrefs.accountAppearance['claude-code'].cardParts=['figures']
     w.testEmit('preferences-changed',structuredClone(w.testPrefs))
     w.testEmit('hover-changed','entry:codex')
   })
@@ -161,16 +164,49 @@ test('detailed card is opt-in, uses measured history and keeps the native frame 
   await expect(page.getByLabel('本机用量记录').getByLabel('今天')).toContainText('180')
   await expect(page.getByRole('img',{name:'最近31天 Token 消耗'})).toBeVisible()
   await expect(page.getByText('32%',{exact:true})).toBeVisible()
+  await expect(page.getByText(/12\.5 tok\/s · \d+ 秒前/)).toBeVisible()
   const frameCount=await page.evaluate(()=>(window as any).testCommands.filter((x:any)=>x.cmd==='set_panel_metrics').length)
   await page.evaluate(()=>(window as any).testEmit('hover-changed','entry:claude-code'))
   await expect(page.getByLabel('本机用量记录').getByLabel('今天')).toContainText('720')
+  await expect(page.getByRole('img',{name:'最近31天 Token 消耗'})).toHaveCount(0)
+  await expect(page.getByText('刚刚更新',{exact:true})).toHaveCount(0)
+  await expect(page.getByText('最近一步',{exact:true})).toHaveCount(0)
+  await expect(page.locator('.card__row')).toHaveCount(1)
   await page.evaluate(()=>(window as any).testEmit('hover-changed','entry:codex'))
   await expect(page.getByLabel('本机用量记录').getByLabel('今天')).toContainText('180')
   expect(await page.evaluate(()=>(window as any).testCommands.filter((x:any)=>x.cmd==='spend_card_history'))).toHaveLength(2)
   expect(await page.evaluate(()=>(window as any).testCommands.filter((x:any)=>x.cmd==='set_panel_metrics').length)).toBe(frameCount)
   await page.locator('.panel__card').screenshot({path:'test-results/assistant-detailed-card.png'})
+  await page.evaluate(()=>{const w=window as any;w.testPrefs.accountAppearance.codex.cardParts=[];w.testEmit('preferences-changed',structuredClone(w.testPrefs))})
+  await expect(page.getByLabel('本机用量记录')).toHaveCount(0)
+  await expect(page.locator('.card__row')).toHaveCount(1)
   await page.evaluate(()=>{const w=window as any;w.testPrefs.tokenSpendEnabled=false;w.testEmit('preferences-changed',structuredClone(w.testPrefs))})
   await expect(page.getByLabel('本机用量记录')).toHaveCount(0)
+})
+
+test('quota counts and reset credits obey the selected account sections', async ({ page }) => {
+  await page.evaluate(() => {
+    const w = window as any
+    const codex = w.testSnapshot.providers.find((p: any) => p.id === 'codex')
+    const copilot = w.testSnapshot.providers.find((p: any) => p.id === 'copilot')
+    codex.resetCredits = { available: 2, nextExpiry: null }
+    copilot.windows[0].quotaAmounts = { used: 176, limit: 300 }
+    w.testEmit('usage-updated', structuredClone(w.testSnapshot))
+    w.testEmit('hover-changed', 'entry:codex')
+  })
+  await expect(page.locator('.card__title')).toHaveText('codex')
+  await expect(page.getByText('额度重置券',{exact:true})).toHaveCount(0)
+  await page.evaluate(() => {
+    const w = window as any
+    w.testPrefs.accountAppearance.codex.cardParts = ['resetCredits']
+    w.testPrefs.accountAppearance.copilot.cardParts = ['amounts']
+    w.testPrefs.showsRemaining = true
+    w.testEmit('preferences-changed', structuredClone(w.testPrefs))
+  })
+  await expect(page.getByText('可用 2 张',{exact:true})).toBeVisible()
+  await page.evaluate(() => (window as any).testEmit('hover-changed', 'entry:copilot'))
+  await expect(page.getByText('124 / 300 剩余',{exact:true})).toBeVisible()
+  await expect(page.getByText('额度重置券',{exact:true})).toHaveCount(0)
 })
 
 test('OpenCode entitlement failure shows no invented zero and opens its own settings',async({page})=>{
@@ -191,34 +227,36 @@ test('local activity drives only its account and a witnessed finish plays once',
   await page.evaluate(()=>(window as any).testEmit('activity-changed',{running:['codex'],lastWrite:Date.now(),finishedAt:{}}))
   await expect(codex.locator('.ring__spin')).toHaveCount(0)
   await expect(other.locator('.ring__spin')).toHaveCount(0)
+  await expect(codex.locator('.robot-avatar')).toHaveAttribute('data-state','working')
+  await expect(other.locator('.robot-avatar')).toHaveAttribute('data-state','idle')
   await page.evaluate(()=>{const w=window as any;w.testPrefs.accountAppearance.codex.animatedMark=false;w.testEmit('preferences-changed',w.testPrefs)})
   await expect(codex.locator('.ring__spin')).toHaveCount(1)
   await page.evaluate(()=>{const w=window as any;w.testPrefs.accountAppearance.codex.animatedMark=true;w.testEmit('preferences-changed',w.testPrefs)})
-  await expect(codex.locator('.botmark')).toHaveCount(1)
+  await expect(codex.locator('.robot-avatar')).toHaveCount(1)
   await page.evaluate(()=>(window as any).testEmit('activity-changed',{running:[],lastWrite:Date.now(),finishedAt:{codex:Date.now()}}))
   await expect(codex.locator('.ring__spin')).toHaveCount(0)
-  await expect(codex.locator('.botmark')).toHaveAttribute('data-state','excited')
-  await expect(codex.locator('.botmark')).not.toHaveAttribute('data-state','excited',{timeout:4000})
+  await expect(codex.locator('.robot-avatar')).toHaveAttribute('data-gesture','finish')
+  await expect(codex.locator('.robot-avatar')).not.toHaveAttribute('data-gesture','finish',{timeout:4000})
   expect(await page.evaluate(()=>(window as any).testCommands.filter((c:any)=>c.cmd==='refresh_provider'))).toHaveLength(0)
 })
 
 test('a live reset celebrates once without resizing the panel',async({page})=>{
-  const bot=page.locator('.rail__item').nth(1).locator('.botmark')
+  const bot=page.locator('.rail__item').nth(1).locator('.robot-avatar')
   const count=await page.evaluate(()=>(window as any).testCommands.filter((c:any)=>c.cmd==='set_panel_metrics').length)
   const reset=Date.now()
   await page.evaluate(at=>(window as any).testEmit('resets-changed',{codex:at}),reset)
-  await expect(bot).toHaveAttribute('data-state','celebrate')
-  await expect(bot).not.toHaveAttribute('data-state','celebrate',{timeout:8500})
+  await expect(bot).toHaveAttribute('data-state','done')
+  await expect(bot).not.toHaveAttribute('data-state','done',{timeout:6000})
   await page.evaluate(at=>(window as any).testEmit('resets-changed',{codex:at}),reset)
   await page.waitForTimeout(100)
-  await expect(bot).not.toHaveAttribute('data-state','celebrate')
+  await expect(bot).not.toHaveAttribute('data-state','done')
   expect(await page.evaluate(()=>(window as any).testCommands.filter((c:any)=>c.cmd==='set_panel_metrics').length)).toBe(count)
 })
 
 test('reduced motion settles every robot instead of running frames',async({page})=>{
   await page.emulateMedia({reducedMotion:'reduce'})
-  const bots=page.locator('.botmark')
-  await page.waitForTimeout(150)
+  const bots=page.locator('.robot-avatar')
+  await expect(page.locator('.robot-avatar[data-ready="true"][data-motion="still"]')).toHaveCount(7)
   const before=await bots.evaluateAll(nodes=>nodes.map(n=>n.innerHTML))
   await page.waitForTimeout(1200)
   expect(await bots.evaluateAll(nodes=>nodes.map(n=>n.innerHTML))).toEqual(before)
@@ -250,6 +288,158 @@ test('a failed reading keeps its message and connection action within the card',
   expect(a.y+a.height).toBeLessThanOrEqual(b.y+b.height-10)
   await action.click()
   expect(await page.evaluate(()=>(window as any).testCommands.some((c:any)=>c.cmd==='show_settings'))).toBe(true)
+})
+
+test('long detail cards fit the monitor and scroll independently for each account', async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 460 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.evaluate(() => {
+    const w = window as any
+    const workArea = { left: -1440, top: -720, right: 0, bottom: -30 }
+    w.testEmit('edge-changed', 'bottom')
+    w.testEmit('placement-changed', {
+      dockEdge: 'bottom',
+      railPosition: [-1440, -126],
+      railSpace: { bounds: workArea, workArea, scale: 1.5 },
+    })
+    for (const account of w.testSnapshot.providers.slice(0, 2)) {
+      account.windows = Array.from({ length: 16 }, (_, index) => ({
+        id: String(index),
+        label: `限额 ${index + 1}`,
+        percentUsed: 50,
+      }))
+      account.error = '刷新超时'
+    }
+    w.testEmit('usage-updated', structuredClone(w.testSnapshot))
+  })
+  await expect(page.locator('.rail')).toHaveCSS('width', '678px')
+  const frameRequests = () => page.evaluate(() =>
+    (window as any).testCommands.filter((command: any) => command.cmd === 'set_panel_metrics'),
+  )
+  const frames = await frameRequests()
+  expect(frames.at(-1).args.height).toBeLessThanOrEqual(460)
+
+  await page.evaluate(() => (window as any).testEmit('hover-changed', 'entry:codex'))
+  const content = page.locator('.card__content')
+  await expect(content).toBeVisible()
+  const card = (await page.locator('.card').boundingBox())!
+  const rail = (await page.locator('.rail').boundingBox())!
+  expect(card.y).toBeGreaterThanOrEqual(0)
+  expect(card.y + card.height).toBeLessThan(rail.y)
+  expect(rail.y + rail.height).toBeLessThanOrEqual(460)
+  expect(await content.evaluate(element => element.scrollHeight)).toBeGreaterThan(
+    await content.evaluate(element => element.clientHeight),
+  )
+  await expect(content).toHaveCSS('scrollbar-width', 'none')
+  await content.hover({ position: { x: 80, y: 80 } })
+  await page.mouse.wheel(0, 255)
+  await expect.poll(() => content.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
+  await content.focus()
+  await page.keyboard.press('End')
+  const retry = page.getByRole('button', { name: '重新检查', exact: true })
+  await expect(retry).toBeInViewport()
+  await retry.click()
+  expect(await page.evaluate(() => (window as any).testCommands.filter((c: any) =>
+    c.cmd === 'refresh_provider').map((c: any) => c.args.provider))).toEqual(['codex'])
+
+  await page.evaluate(() => (window as any).testEmit('hover-changed', 'entry:claude-code'))
+  await expect(page.locator('.card__title')).toHaveText('claude-code')
+  expect(await content.evaluate(element => element.scrollTop)).toBe(0)
+  expect(await frameRequests()).toHaveLength(frames.length)
+})
+
+test('a right rail near the top does not put its long card above the work area', async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 460 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.evaluate(() => {
+    const w = window as any
+    const workArea = { left: -1440, top: -690, right: 0, bottom: 0 }
+    w.testPrefs.enabledProviders = ['codex']
+    w.testEmit('preferences-changed', structuredClone(w.testPrefs))
+    w.testEmit('placement-changed', {
+      dockEdge: 'right',
+      railPosition: [-96, -690],
+      railSpace: { workArea, scale: 1.5 },
+    })
+    const next = structuredClone(w.testSnapshot)
+    next.providers[1].windows = Array.from({ length: 16 }, (_, index) => ({
+      id: String(index),
+      label: `限额 ${index + 1}`,
+      percentUsed: 50,
+    }))
+    w.testEmit('usage-updated', next)
+  })
+  await expect(page.locator('.rail__item')).toHaveCount(1)
+  await expect(page.locator('.panel__dock')).toHaveCSS('top', '0px')
+  await page.evaluate(() => (window as any).testEmit('hover-changed', 'entry:codex'))
+  await expect(page.locator('.card__row')).toHaveCount(16)
+  const card = (await page.locator('.card').boundingBox())!
+  expect(card.y).toBeGreaterThanOrEqual(0)
+  expect(card.y + card.height).toBeLessThanOrEqual(460)
+})
+
+test('same-edge dragging refreshes the card budget and ignores obsolete position reads', async ({ page }) => {
+  await page.evaluate(() => {
+    const w = window as any
+    const workArea = { left: 0, top: 0, right: 960, bottom: 460 }
+    w.testPlacementAt = (y: number) => ({
+      dockEdge: null,
+      railPosition: [0, y],
+      railSpace: { workArea, scale: 1 },
+    })
+    w.testEmit('edge-changed', 'top')
+    w.testEmit('placement-changed', w.testPlacementAt(0))
+  })
+  const metricsHeight = () => page.evaluate(() => (window as any).testCommands
+    .filter((command: any) => command.cmd === 'set_panel_metrics').at(-1).args.height)
+  await expect.poll(metricsHeight).toBe(460)
+  await page.evaluate(() => {
+    const w = window as any
+    // Rust refreshes the retained origin during drag. No orientation change
+    // means there need not be a placement event when the drag finishes.
+    w.testPlacement = w.testPlacementAt(240)
+    w.testEmit('drag-changed', true)
+    w.testEmit('drag-changed', false)
+  })
+  await expect.poll(metricsHeight).toBe(220)
+
+  const placementReads = () => page.evaluate(() => (window as any).testCommands
+    .filter((command: any) => command.cmd === 'panel_placement').length)
+  const readsBefore = await placementReads()
+  await page.evaluate(() => {
+    const w = window as any
+    w.testPlacement = new Promise(resolve => { w.finishPlacementRead = resolve })
+    w.testEmit('drag-changed', true)
+    w.testEmit('drag-changed', false)
+  })
+  await expect.poll(placementReads).toBe(readsBefore + 1)
+  await page.evaluate(() => {
+    const w = window as any
+    w.testEmit('placement-changed', w.testPlacementAt(275))
+    w.finishPlacementRead(w.testPlacementAt(20))
+  })
+  await expect.poll(metricsHeight).toBe(185)
+
+  await page.evaluate(() => {
+    const w = window as any
+    w.testPlacement = new Promise(resolve => { w.finishPlacementRead = resolve })
+    w.testEmit('drag-changed', true)
+    w.testEmit('drag-changed', false)
+  })
+  await expect.poll(placementReads).toBe(readsBefore + 2)
+  await page.evaluate(async () => {
+    const w = window as any
+    w.testEmit('drag-changed', true)
+    w.finishPlacementRead(w.testPlacementAt(50))
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+  })
+  expect(await metricsHeight()).toBe(185)
+  await page.evaluate(() => {
+    const w = window as any
+    w.testPlacement = w.testPlacementAt(300)
+    w.testEmit('drag-changed', false)
+  })
+  await expect.poll(metricsHeight).toBe(160)
 })
 
 test('cached Codex quota shows the failed refresh and retries only its account',async({page})=>{
@@ -361,4 +551,43 @@ test('two Codex accounts keep separate rings, cards and refresh targets',async({
   await page.locator('.rail__item').nth(1).click({position:{x:21,y:18}})
   expect(await page.evaluate(()=>(window as any).testCommands.filter((x:any)=>x.cmd==='refresh_provider').map((x:any)=>x.args.provider))).toEqual(['codex--account-ab'])
   await page.locator('.rail').screenshot({path:'test-results/assistant-multi-account.png'})
+})
+
+test('OpenCode Go card shows reported charges under a different estimate currency', async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 1100 })
+  await page.evaluate(() => {
+    const w = window as any
+    const prefs = w.testPrefs
+    const now = new Date()
+    const day = (offset: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset).toLocaleDateString('sv-SE')
+    const charge = (offset: number, cost: number | null, input: number) => ({
+      agent: 'opencode-go', model: 'fixture-model', modelName: null, day: day(offset), hour: 0,
+      session: 'fixture', project: null, tally: { input, output: 0, cacheWrite: 0, cacheRead: 0 },
+      cost, costBreakdown: null, aggregateTiming: true,
+    })
+    const invoke = w.__TAURI_INTERNALS__.invoke
+    w.__TAURI_INTERNALS__.invoke = async (command: string, args: any) => {
+      if (command === 'get_exchange_rates') return { currency: 'cny', rates: { CNY: 7 }, manual: {}, updatedAt: null }
+      if (command === 'opencode_card_history') return { status: 'ready', snapshot: {
+        scannedAt: now.toISOString(), records: [charge(0, 0, 4), charge(1, 1.25, 0), charge(2, null, 20)],
+        sources: [], notes: [], pricesAt: null, pricingStatus: 'console',
+        consoleBilling: { currency: 'USD', daysWithMissingCharges: [day(2)] },
+      } }
+      return invoke(command, args)
+    }
+    const id = 'opencode-go'
+    const provider = { ...w.testSnapshot.providers[0], id, name: 'OpenCode Go' }
+    prefs.enabledProviders = [id]
+    prefs.providerOrder = [id]
+    prefs.accountAppearance = { [id]: { detailedCard: true, cardParts: ['figures'] } }
+    w.testSnapshot.providers = [provider]
+    w.testEmit('preferences-changed', prefs)
+    w.testEmit('usage-updated', w.testSnapshot)
+    w.testEmit('hover-changed', `entry:${id}`)
+  })
+  const history = page.getByRole('region', { name: '控制台用量记录' })
+  await expect(history.getByLabel('今天')).toContainText('$0.00')
+  await expect(history.getByLabel('7天')).toContainText('$1.25 *')
+  await expect(history).toContainText('控制台实际扣费（USD）。账单可能不完整。')
+  await expect(history).not.toContainText('API 价格估算')
 })

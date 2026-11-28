@@ -368,7 +368,12 @@ async fn collect_from(ctx: Arc<Ctx>, enabled: &[String], providers: Vec<Arc<dyn 
             let id = p.id();
             let name = p.name();
             Box::pin(async move {
-                let stored = match crate::settings::read_credential_checked(id) {
+                let credential_id = if id == minimax::ID {
+                    minimax::credential_id(&crate::preferences::load().minimax_site)
+                } else {
+                    id
+                };
+                let stored = match crate::settings::read_credential_checked(credential_id) {
                     Ok(stored) => stored,
                     Err(error) => return ProviderUsage::failed(id, name, error.to_string()),
                 };

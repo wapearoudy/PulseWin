@@ -131,11 +131,13 @@ export function saveProviderCredential(
   provider: string,
   apiKey: string | null,
   baseUrl: string | null,
+  minimaxSite?: 'international' | 'china',
 ): Promise<void> {
   return invoke('save_provider_credential', {
     provider,
     apiKey: apiKey?.trim() ? apiKey.trim() : null,
     baseUrl: baseUrl?.trim() ? baseUrl.trim() : null,
+    ...(minimaxSite ? { minimaxSite } : {}),
   })
 }
 
@@ -154,7 +156,14 @@ export function beginDrag(): Promise<void> {
   return invoke('begin_drag')
 }
 
-export interface PanelPlacement { dockEdge: PanelEdgeName | null; railPosition: [number, number] | null }
+export interface PanelPlacement {
+  dockEdge: PanelEdgeName | null
+  railPosition: [number, number] | null
+  railSpace?: {
+    scale: number
+    workArea: { left: number; top: number; right: number; bottom: number }
+  } | null
+}
 export const panelPlacement = () => invoke<PanelPlacement>('panel_placement')
 export const onPlacementChanged = (handler: (p: PanelPlacement) => void) => listen<PanelPlacement>('placement-changed', e => handler(e.payload))
 export const onDragChanged = (handler: (dragging: boolean) => void) => listen<boolean>('drag-changed', e => handler(e.payload))

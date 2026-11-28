@@ -1,0 +1,60 @@
+.account-usage-bars {
+  --panel-track: rgba(0, 0, 0, .13);
+  --account-usage-divider: #ececef;
+  --account-usage-secondary: #6a6a73;
+  padding-inline: 15px;
+}
+
+.account-usage-row {
+  --account-usage-tint: var(--account-usage-tint-light);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 7px;
+  padding-block: 12px;
+  overflow-wrap: anywhere;
+}
+
+.account-usage-row + .account-usage-row {
+  border-top: 1px solid var(--account-usage-divider);
+}
+
+.account-usage-row > strong {
+  font-weight: 500;
+}
+
+.account-usage-row .usage-bar {
+  overflow: hidden;
+}
+
+.account-usage-row small {
+  color: var(--account-usage-secondary);
+}
+
+.account-usage-labels {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.account-usage-exhausted {
+  color: var(--account-usage-tint);
+}
+
+@media (prefers-color-scheme: dark) {
+  .account-usage-bars {
+    --panel-track: rgba(255, 255, 255, .13);
+    --account-usage-divider: #45454a;
+    --account-usage-secondary: #a7a7b0;
+  }
+
+  .account-usage-row {
+    --account-usage-tint: var(--account-usage-tint-dark);
+  }
+
+  .account-usage-exhausted {
+    color: #ff777a;
+  }
+}

@@ -10,6 +10,7 @@ import {
   onMenuChanged,
   onRefreshChanged,
   panelPlacement,
+  type PanelPlacement,
   onPlacementChanged,
   onDragChanged,
   onLiquidDrag,
@@ -25,15 +26,17 @@ import {
   setPanelMetrics,
 } from './api'
 import { dockLayout, type PanelEdge } from './panel/berthShape'
-import { BotMark } from './panel/botmark/BotMark'
-import { quietSince, resolveMood, windowIsSpent } from './panel/botmark/mood'
+import { RobotAvatar } from './panel/avatar/RobotAvatar'
+import { spreadRobotFigures } from './panel/avatar/catalog'
+import { windowIsSpent } from './panel/botmark/mood'
+import { resolveRobotMood } from './panel/avatar/playback'
 import { brandColour, deal } from './panel/botmark/tint'
 import { railHeight, Rail, type RailEntry } from './panel/Rail'
 import { cardBox, detailCardLayout } from './panel/cardLayout'
+import { visibleCardParts } from './panel/cardParts'
 import { cardMetricTrends } from './metricTrend'
 import { cardSurfaceRegion, cardTrackingRegion, railSurfaceRegion, sliverTrackingRegion, type ShapeHitRegion } from './panel/hitRegions'
 import { ProviderIcon } from './panel/ProviderIcon'
-import { personaAt } from './panel/botmark/programme'
 import {
   defaultAccountAppearance,
   groupsShown,
@@ -119,7 +122,8 @@ export default function App() {
    */
   const [region, setRegion] = useState<string | null>(null)
   /** Which edge the rail is fused to. Rust owns this; the rail is drawn from it. */
-  const [isDocked, setDocked] = useState(true)
+  const [placement, setPlacement] = useState<PanelPlacement | null>(null)
+  const isDocked = placement?.dockEdge != null || !placement?.railPosition
   const [dragging, setDragging] = useState(false)
   /** 0 while the rail is at rest; grows as a docked rail is pulled away. */
   const [liquidPull, setLiquidPull] = useState(0)
@@ -154,12 +158,39 @@ export default function App() {
     let unlistenHover: (() => void) | undefined
     let unlistenEdge: (() => void) | undefined
     const extra: (() => void)[] = []
-    const keep = (fn: () => void) => mounted.current ? extra.push(fn) : fn()
-    panelPlacement().then(p => mounted.current && setDocked(p.dockEdge !== null || !p.railPosition)).catch(() => undefined)
-    onPlacementChanged(p => { setDocked(p.dockEdge !== null || !p.railPosition); setCardId(null) }).then(keep)
+    let disposed = false
+    const keep = (fn: () => void) => !disposed ? extra.push(fn) : fn()
+    let placementRevision = 0
+    const readPlacement = async () => {
+      const revision = ++placementRevision
+      try {
+        const next = await panelPlacement()
+        if (!disposed && placementRevision === revision) setPlacement(next)
+      } catch { /* Older preview harnesses may not provide panel placement. */ }
+    }
+    onPlacementChanged(p => {
+      if (disposed) return
+      placementRevision++
+      setPlacement(p)
+      setCardId(null)
+    }).then(stop => {
+      keep(stop)
+      if (!disposed && placementRevision === 0) void readPlacement()
+    }).catch(() => undefined)
     onRefreshChanged(event=>setRefreshingIds(old=>{const next=new Set(old);event.ids.forEach(id=>event.refreshing?next.add(id):next.delete(id));return next})).then(keep).catch(()=>undefined)
     onMenuChanged(setMenuOpen).then(keep).catch(() => undefined)
-    onDragChanged(d => { setDragging(d); if(d) setCardId(null); else setLiquidPull(0) }).then(keep)
+    onDragChanged(active => {
+      if (disposed) return
+      setDragging(active)
+      if (active) {
+        placementRevision++
+        setCardId(null)
+      } else {
+        setLiquidPull(0)
+        // A drag that stays on the same edge need not emit placement-changed.
+        void readPlacement()
+      }
+    }).then(keep).catch(() => undefined)
     onLiquidDrag(p => mounted.current && setLiquidPull(p)).then(keep).catch(() => undefined)
     // A launch is a day of use, which is what the one request for a star counts
     // — not days since it was installed.
@@ -207,6 +238,7 @@ export default function App() {
       .catch(() => undefined)
 
     return () => {
+      disposed = true
       mounted.current = false
       unlisten?.()
       unlistenHover?.()
@@ -260,6 +292,11 @@ export default function App() {
     () => deal(providers.map((p) => brandColour(p.id))),
     [providers],
   )
+  const robotByAccount = useMemo(() => {
+    const accounts = providers.filter(provider => preferences.accountAppearance[provider.id]?.animatedMark)
+    const figures = spreadRobotFigures(accounts.map(provider => preferences.accountAppearance[provider.id]?.robotFigure))
+    return new Map(accounts.map((provider, index) => [provider.id, figures[index]]))
+  }, [providers, preferences.accountAppearance])
 
   // A split account draws one slot per model group, so the rail's slots and the
   // snapshot's accounts are not the same list. Each slot keeps the account's
@@ -300,6 +337,7 @@ export default function App() {
         const account = slot.provider
         const index = providers.indexOf(account)
         const appearance={...defaultAccountAppearance,...preferences.accountAppearance[account.id]}
+        const figure = robotByAccount.get(account.id)
         const refreshing=refreshingIds.has(account.id)||refreshingIds.has('*')
         const headline = headlineWindow(p, preferences.pinnedWindows[slot.id])
         const second = secondWindow(p, preferences.pinnedWindows[slot.id])
@@ -325,35 +363,32 @@ export default function App() {
         hasReading,
         chosenTint: appearance.ringColour,
         showsBotMark: appearance.animatedMark,
-        icon: appearance.animatedMark ? (
-          <BotMark
-            persona={personaAt(appearance.persona,index)}
-            body={appearance.body}
-            gaze={edge}
-            isPointedAt={cardId===slot.id}
-            isQuiet={quietSince(activity.lastWrite,now)}
-            pointer={region===null?null:undefined}
+        icon: figure ? (
+          <RobotAvatar
+            figure={figure}
+            material={appearance.robotMaterial}
+            active={expanded}
+            accountId={account.id}
+            fallback={<ProviderIcon provider={account.id} />}
             finishedAt={activity.finishedAt[account.id]}
             resetAt={resets[account.id]}
             resetCelebrationAllowed={preferences.resetCelebration}
-            mood={resolveMood({
-              isBusy: activity.running.includes(account.id),
-              isRefreshing: refreshing,
+            mood={resolveRobotMood({
+              isBusy: preferences.animateActivity && activity.running.includes(account.id),
+              isRefreshing: preferences.animateActivity && refreshing,
               isSpent: windowIsSpent(headline),
               hasReading,
             })}
-            colour={appearance.markColour ?? markColours[index] ?? markColours[0] ?? 'oklch(0.78 0.13 0deg)'}
+            colour={appearance.markColour ?? markColours[index] ?? '#8e9dff'}
           />
         ) : <ProviderIcon provider={account.id} />,
       })}),
-    [slots, accountOf, providers, refreshingIds, activity, resets, markColours, preferences.accountAppearance, preferences.warningThreshold, preferences.showSecondRing, preferences.resetCelebration, edge, cardId, region, preferences.pinnedWindows, preferences.showResetClock, preferences.clockRemaining, now],
+    [slots, accountOf, providers, refreshingIds, activity, resets, markColours, robotByAccount, expanded, preferences.accountAppearance, preferences.warningThreshold, preferences.showSecondRing, preferences.resetCelebration, preferences.animateActivity, preferences.pinnedWindows, preferences.showResetClock, preferences.clockRemaining, now],
   )
 
   // ---- geometry -----------------------------------------------------------
   const activeIndex = dragging ? -1 : entries.findIndex((e) => e.id === cardId)
   const activeProvider = activeIndex >= 0 && slots[activeIndex] ? accountOf(slots[activeIndex]) : undefined
-  const detailed = !!(activeProvider && preferences.accountAppearance[activeProvider.id]?.detailedCard)
-  const hasDetailed = providers.some(p=>preferences.accountAppearance[p.id]?.detailedCard)
   // Every length below is a budget taken from the original's layout constants.
   // Nothing here measures the DOM: the panel's frame has to be known *before*
   // anything is drawn in it, which is what lets a card open without a resize.
@@ -361,8 +396,15 @@ export default function App() {
     () => dockLayout({ scale: PANEL_SIZE, spacing: RAIL_SPACING, usesRoundEnds: preferences.roundEnds }),
     [PANEL_SIZE, RAIL_SPACING, preferences.roundEnds],
   )
-  const cardLayout = useMemo(() => detailCardLayout(PANEL_SIZE < 1 ? 'small' : PANEL_SIZE > 1 ? 'large' : 'standard', preferences.showForecast, detailed, preferences.usageBarStyle), [PANEL_SIZE, preferences.showForecast,detailed,preferences.usageBarStyle])
-  const maximumCardLayout = useMemo(() => detailCardLayout(PANEL_SIZE < 1 ? 'small' : PANEL_SIZE > 1 ? 'large' : 'standard', preferences.showForecast, hasDetailed, preferences.usageBarStyle), [PANEL_SIZE, preferences.showForecast,hasDetailed,preferences.usageBarStyle])
+  const cardScale = PANEL_SIZE < 1 ? 'small' : PANEL_SIZE > 1 ? 'large' : 'standard'
+  const { accountAppearance, showForecast, tokenSpendEnabled, usageBarStyle } = preferences
+  const baseCardLayout = useMemo(() => detailCardLayout(cardScale, undefined, usageBarStyle), [cardScale, usageBarStyle])
+  const cardLayouts = useMemo(() => new Map(providers.map(provider => [provider.id, detailCardLayout(
+    cardScale,
+    visibleCardParts(provider.id, accountAppearance[provider.id], showForecast, tokenSpendEnabled),
+    usageBarStyle,
+  )])), [providers, cardScale, accountAppearance, showForecast, tokenSpendEnabled, usageBarStyle])
+  const cardLayout = cardLayouts.get(activeProvider?.id ?? '') ?? baseCardLayout
 
   const railW = layout.width
   /** The rail's length along the edge it is docked to. */
@@ -371,34 +413,46 @@ export default function App() {
 
   // The largest card any provider could open, so the frame never has to grow
   // while one is opening.
-  const maxRows = useMemo(
-    () => providers.reduce((most, p) => Math.max(most, p.windows.length), 6),
-    [providers],
-  )
-  // An extension's figures are not limits, but they are drawn in the same card,
-  // so the frame has to hold the tallest combination any account could open.
-  const maxMetrics = useMemo(
-    () => providers.reduce((most, p) => Math.max(most, p.metrics?.length ?? 0), 0),
-    [providers],
-  )
-  const maxTrends = useMemo(
-    () => providers.reduce((most, p) => Math.max(most, cardMetricTrends(p.metrics).filter(Boolean).length), 0),
-    [providers],
-  )
-  const tallest = useMemo(() => cardBox(edge, maximumCardLayout, maxRows, false, true, true, maxMetrics, maxTrends), [edge, maximumCardLayout, maxRows, maxMetrics, maxTrends])
+  const tallest = useMemo(() => {
+    const frame = cardBox(edge, baseCardLayout, 6, false, true, true)
+    return providers.reduce((largest, provider) => {
+      const layout = cardLayouts.get(provider.id) ?? baseCardLayout
+      const box = cardBox(edge, layout, provider.windows.length, balanceOnly(provider), !!provider.stale,
+        !!provider.error, provider.metrics?.length ?? 0, cardMetricTrends(provider.metrics).filter(Boolean).length)
+      return box.height > largest.height ? box : largest
+    }, frame)
+  }, [edge, baseCardLayout, cardLayouts, providers])
 
   const isTop = edge === 'top' || edge === 'bottom'
   const gap = cardLayout.horizontalGap
+  // Placement reports physical desktop pixels, including the DPI of the
+  // actual display. Express the work area in CSS pixels relative to the rail.
+  const workArea = placement?.railSpace?.workArea
+  const scale = placement?.railSpace?.scale
+  const railY = placement?.railPosition?.[1]
+  const hasWorkArea = workArea && railY !== undefined && scale && scale > 0
+  const workTop = hasWorkArea ? (workArea.top - railY) / scale : -Infinity
+  const workBottom = hasWorkArea ? (workArea.bottom - railY) / scale : Infinity
+  const topCardStart = Math.max(railW + gap, workTop)
+  const heightBudget = edge === 'top' ? workBottom - topCardStart
+    : edge === 'bottom' ? -workTop - gap
+    : workBottom - workTop
+  const cardHeightBudget = clamp(heightBudget, 0, tallest.height)
 
   // The frame has to hold the rail plus an open card, on whichever axis the
   // rail was docked: a side rail grows across the screen, a top rail grows down
   // it. Nothing here measures the DOM — the frame is known before anything is
   // drawn in it, which is what lets a card open without a resize.
   const frameW = isTop ? Math.max(railLength, tallest.width) : railW + gap + tallest.width
-  const frameH = isTop ? railW + gap + tallest.height : Math.max(railLength, tallest.height)
+  const frameH = isTop ? (edge === 'top' ? topCardStart : railW + gap) + cardHeightBudget
+    : Math.max(railLength, cardHeightBudget)
 
   const railLeft = isTop ? (frameW - railLength) / 2 : edge === 'right' ? frameW - railW : 0
-  const railTop = isTop ? edge==='bottom' ? frameH-railW : 0 : (frameH - railLength) / 2
+  const extraHeight = Math.max(0, frameH - railLength)
+  const maxRailTop = clamp(-workTop, 0, extraHeight)
+  const minRailTop = clamp(frameH - workBottom, 0, maxRailTop)
+  const railTop = isTop ? edge === 'bottom' ? frameH - railW : 0
+    : clamp(extraHeight / 2, minRailTop, maxRailTop)
   useEffect(() => {
     if (frameW <= 0 || frameH <= 0) return
     setPanelMetrics(frameW, frameH, railLeft, railTop, isTop ? railLength : railW, isTop ? railW : railLength,edge).catch(() => undefined)
@@ -413,10 +467,17 @@ export default function App() {
     [isTop, railLeft, railTop, layout, endPadding],
   )
 
-  const cardSize = useMemo(
+  const naturalCardSize = useMemo(
     () => cardBox(edge, cardLayout, activeProvider?.windows.length ?? 0, balanceOnly(activeProvider),!!activeProvider?.stale,!!activeProvider?.error, activeProvider?.metrics?.length ?? 0, cardMetricTrends(activeProvider?.metrics).filter(Boolean).length),
     [edge, cardLayout, activeProvider],
   )
+  const minCardTop = Math.max(0, workTop + railTop)
+  const maxCardBottom = Math.min(frameH, workBottom + railTop)
+  const maxCardHeight = isTop ? cardHeightBudget : Math.max(0, maxCardBottom - minCardTop)
+  const cardHeight = Math.min(naturalCardSize.height, maxCardHeight)
+  const cardWidth = naturalCardSize.width
+  const cardFits = cardHeight >= cardLayout.headerHeight + cardLayout.padding * 2
+    + (isTop ? cardLayout.pointerWidth : 0)
 
   /** Where the hovered ring's centre sits, along the rail. */
   const anchor = activeIndex >= 0 ? slotStart(activeIndex) + layout.ringDiameter/2 + (preferences.labelAbove && (isTop ? preferences.topShowPercentages : preferences.showPercentages) ? layout.percentTextHeight + layout.ringToTextSpacing : 0) : 0
@@ -424,10 +485,10 @@ export default function App() {
   // Along the rail the card is centred on its ring; across it the card sits
   // just off the rail, on the side away from the edge.
   const cardTop = isTop
-    ? edge==='bottom' ? railTop-gap-cardSize.height : railW + gap
-    : clamp(anchor - cardSize.height / 2, 0, Math.max(0, frameH - cardSize.height))
+    ? edge === 'bottom' ? railTop - gap - cardHeight : topCardStart
+    : clamp(anchor - cardHeight / 2, minCardTop, Math.max(minCardTop, maxCardBottom - cardHeight))
   const cardLeft = isTop
-    ? clamp(anchor - cardSize.width / 2, 0, Math.max(0, frameW - cardSize.width))
+    ? clamp(anchor - cardWidth / 2, 0, Math.max(0, frameW - cardWidth))
     : edge === 'right'
       ? 0
       : railW + gap
@@ -448,7 +509,7 @@ export default function App() {
     // Original isOverContent retains the rectangular rail and the card's
     // full cross-window band. PanelSurface.contentShape alone claims presses.
     const out: ShapeHitRegion[] = [{ id: 'rail', hoverOnly:true, x: railLeft, y: railTop, w: isTop ? railLength : railW, h: isTop ? railW : railLength }]
-    const card=activeProvider?cardSurfaceRegion({edge,left:cardLeft,top:cardTop,width:cardSize.width,height:cardSize.height,pointerCentre,layout:cardLayout,usesRoundEnds:preferences.roundEnds}):null
+    const card=activeProvider&&cardFits?cardSurfaceRegion({edge,left:cardLeft,top:cardTop,width:cardWidth,height:cardHeight,pointerCentre,layout:cardLayout,usesRoundEnds:preferences.roundEnds}):null
     if(card)out.push(cardTrackingRegion(edge,frameW,frameH,card))
     out.push(railSurfaceRegion(geometry))
     entries.forEach((entry, index) => {
@@ -481,7 +542,9 @@ export default function App() {
     activeProvider,
     cardLeft,
     cardTop,
-    cardSize,
+    cardWidth,
+    cardHeight,
+    cardFits,
     cardLayout,
     pointerCentre,
     preferences.roundEnds,
@@ -544,21 +607,25 @@ export default function App() {
         />
       </div>
 
-      {activeProvider ? (
+      {activeProvider && cardFits ? (
         <div
           className="panel__card"
           style={{
             position: 'absolute',
             top: cardTop,
             left: cardLeft,
-            width: cardSize.width,
-            height: cardSize.height,
+            width: cardWidth,
+            height: cardHeight,
           }}
         >
           <UsageCard
+            key={cardId}
             light={preferences.panelColour==='light'}
             provider={activeProvider}
             layout={cardLayout}
+            width={cardWidth}
+            height={cardHeight}
+            scrollable={cardHeight < naturalCardSize.height}
             edge={edge}
             pointerCentre={pointerCentre}
             top={0}

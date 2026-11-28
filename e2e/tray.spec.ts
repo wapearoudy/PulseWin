@@ -138,3 +138,27 @@ test('a slow refresh never blocks closing the usage popup',async({page})=>{
   await expect.poll(()=>page.evaluate(()=>(window as any).trayCommands.filter((c:any)=>c.cmd==='hide_usage_dashboard').length)).toBe(1)
   await page.evaluate(()=>(window as any).releaseRefresh())
 })
+
+test('tray keeps amount-only DeepSeek charges and the console currency', async ({ page }) => {
+  await page.evaluate(() => {
+    const w = window as any
+    const now = new Date()
+    const invoke = w.__TAURI_INTERNALS__.invoke
+    w.__TAURI_INTERNALS__.invoke = async (command: string, args: any) => {
+      if (command === 'deepseek_card_history') return { status: 'ready', snapshot: {
+        scannedAt: now.toISOString(), records: [{ agent: 'deepseek', model: 'console', modelName: null,
+          day: now.toLocaleDateString('sv-SE'), hour: 0, session: 'fixture', project: null,
+          tally: { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 }, cost: 12.5, costBreakdown: null, aggregateTiming: true }],
+        sources: [], notes: [], pricesAt: null, pricingStatus: 'console',
+        consoleBilling: { currency: 'CNY', daysWithMissingCharges: [] },
+      } }
+      return invoke(command, args)
+    }
+  })
+  await page.getByRole('tab', { name: 'DeepSeek', exact: true }).click()
+  const history = page.locator('.tray-spend')
+  await expect(history.getByRole('heading', { name: '控制台用量' })).toBeVisible()
+  await expect(history.getByText('¥12.50', { exact: true })).toHaveCount(3)
+  await expect(history).toContainText('控制台实际扣费（CNY）。')
+  await expect(history).not.toContainText('API 价格估算')
+})

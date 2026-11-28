@@ -10,9 +10,9 @@
 //!
 //! **Where the binary is looked for.** `agy` is the CLI's own name; the editor's
 //! `antigravity` command is a different program and is never asked. On Windows
-//! an install lands on `PATH` (npm, mise, scoop), in the per-user programs
-//! folder, or in `~/.local/bin`; Gemini's own copy sits in `~/.gemini/bin`. A
-//! copy found in any of them is asked the same way.
+//! the official installer puts it in `%LOCALAPPDATA%\agy\bin`; package
+//! managers may put it on `PATH` or in `~/.local/bin`. Gemini's own copy sits in
+//! `~/.gemini/bin`. A copy found in any of them is asked the same way.
 //!
 //! **A version is read before the question is put.** `agy` answers `/usage`
 //! itself from 1.1.11; older builds print a turn instead, which reads as a
@@ -89,26 +89,30 @@ fn binary_names() -> &'static [&'static str] {
 /// The folders looked in, in order.
 ///
 /// `PATH` first, because that is what the reader's own shell would run, then the
-/// places a per-user install lands without ever touching `PATH`: the programs
-/// folder npm and the Windows installer use, `~/.local/bin` where mise and pipx
-/// put shims, mise's own shim folder, and Gemini's bundled copy under
-/// `~/.gemini/bin`.
+/// per-user locations, including the official Windows installer directory when
+/// the desktop app inherited an older `PATH`, plus package manager shims and
+/// Gemini's bundled copy under `~/.gemini/bin`.
 pub fn search_dirs() -> Vec<PathBuf> {
-    let mut dirs: Vec<PathBuf> = std::env::var_os("PATH")
+    search_dirs_from(|name| std::env::var_os(name))
+}
+
+fn search_dirs_from(var: impl Fn(&str) -> Option<OsString>) -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = var("PATH")
         .map(|path| std::env::split_paths(&path).collect())
         .unwrap_or_default();
 
-    if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+    if let Some(local) = var("LOCALAPPDATA").filter(|value| !value.is_empty()) {
         let local = PathBuf::from(local);
+        dirs.push(local.join("agy").join("bin"));
         dirs.push(local.join("Programs"));
         dirs.push(local);
     }
-    if let Some(roaming) = std::env::var_os("APPDATA") {
+    if let Some(roaming) = var("APPDATA") {
         let roaming = PathBuf::from(roaming);
         dirs.push(roaming.join("Programs"));
         dirs.push(roaming);
     }
-    if let Some(home) = std::env::var_os("USERPROFILE") {
+    if let Some(home) = var("USERPROFILE") {
         let home = PathBuf::from(home);
         dirs.push(home.join(".local").join("bin"));
         dirs.push(home.join(".local").join("share").join("mise").join("shims"));
@@ -794,6 +798,29 @@ mod tests {
         assert_eq!(
             locate_in(&dirs, &|path: &Path| wanted.contains(&path.to_path_buf())),
             Some(first)
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn official_windows_install_is_found_even_without_a_fresh_path() {
+        let path_dir = Path::new(r"C:\tools");
+        let local = Path::new(r"C:\Users\me\AppData\Local");
+        let dirs = search_dirs_from(|name| match name {
+            "PATH" => Some(path_dir.as_os_str().to_owned()),
+            "LOCALAPPDATA" => Some(local.as_os_str().to_owned()),
+            _ => None,
+        });
+        let installed = local.join("agy").join("bin").join("agy.exe");
+        assert_eq!(
+            locate_in(&dirs, &|path| path == installed),
+            Some(installed.clone()),
+        );
+
+        let on_path = path_dir.join("agy.cmd");
+        assert_eq!(
+            locate_in(&dirs, &|path| path == installed || path == on_path),
+            Some(on_path),
         );
     }
 

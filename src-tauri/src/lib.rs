@@ -134,7 +134,6 @@ pub struct AppState {
     pub refresh_schedule: std::sync::Mutex<adaptive_refresh::Schedule>,
     pub refresh_wake: Arc<tokio::sync::Notify>,
     pub power_events: Arc<power_state::SystemEvents>,
-    pub placement_layout_ready: std::sync::atomic::AtomicBool,
     pub usage_cache: std::sync::Mutex<usage_cache::UsageCache>,
     pub alert_memory: std::sync::Mutex<alerts::AlertMemory>,
     pub resets: std::sync::Mutex<std::collections::HashMap<String,i64>>,
@@ -159,6 +158,8 @@ pub struct AppState {
     pub placement: std::sync::Mutex<settings::PanelSettings>,
     pub placement_updates: std::sync::Mutex<()>,
     pub rail_metrics: std::sync::Mutex<(f64, f64, f64, f64)>,
+    /// Last complete frame requested by the webview, in CSS pixels.
+    panel_frame: std::sync::Mutex<Option<tauri::LogicalSize<f64>>>,
     /// Set while the rail is being dragged off the edge. See `watch_pointer`.
     pub drag: std::sync::Mutex<Option<Drag>>,
     /// The resets the window starter has noted and not yet acted on, keyed
@@ -178,11 +179,21 @@ impl AppState {
         let edge = saved.dock_edge.or(saved.facing_edge).unwrap_or_default();
         let refresh_wake=Arc::new(tokio::sync::Notify::new());
         let power_events=Arc::new(power_state::SystemEvents::new(Arc::clone(&refresh_wake)));
+        let mut prefs = preferences::load_before_provider_migrations();
+        if let Some(directory) = settings::directory() {
+            if let Err(error) = providers::minimax::migrate_credentials(&directory, &prefs) {
+                eprintln!("MiniMax credential migration failed: {error}");
+            }
+        }
+        prefs.normalize(&providers::registry().iter().map(|p| p.id().to_string()).collect::<Vec<_>>());
+        let mut snapshot = usage_cache::stored_snapshot(&prefs.enabled_providers);
+        for reading in &mut snapshot.providers {
+            if let Some(label) = prefs.account_labels.get(&reading.id) { reading.name = label.clone(); }
+        }
         Self {
             refresh_schedule: std::sync::Mutex::new(adaptive_refresh::Schedule::default()),
             refresh_wake,
             power_events,
-            placement_layout_ready: std::sync::atomic::AtomicBool::new(false),
             usage_cache: std::sync::Mutex::new(usage_cache::UsageCache::load()),
             alert_memory: std::sync::Mutex::new(alerts::AlertMemory::load()),
             resets: Default::default(),
@@ -193,20 +204,9 @@ impl AppState {
             usage_anchor: Default::default(),
             menu_open: std::sync::atomic::AtomicBool::new(false),
             generation: std::sync::atomic::AtomicU64::new(0),
-            preferences: std::sync::Mutex::new({
-                // A key saved under the retired `minimax-cn` name has to reach
-                // the live file before anything reads it.
-                preferences::move_minimax_credential();
-                let mut prefs = preferences::load();
-                prefs.normalize(&providers::registry().iter().map(|p| p.id().to_string()).collect::<Vec<_>>());
-                prefs
-            }),
+            preferences: std::sync::Mutex::new(prefs),
             ctx: std::sync::RwLock::new(Arc::new(ctx)),
-            snapshot: Mutex::new({
-                let prefs=preferences::load();let mut snapshot=usage_cache::stored_snapshot(&prefs.enabled_providers);
-                for p in &mut snapshot.providers{if let Some(label)=prefs.account_labels.get(&p.id){p.name=label.clone();}}
-                snapshot
-            }),
+            snapshot: Mutex::new(snapshot),
             refreshing: Mutex::new(()),
             account_mutations: Mutex::new(()),
             hit_regions: Mutex::new(Vec::new()),
@@ -214,6 +214,7 @@ impl AppState {
             placement: std::sync::Mutex::new(settings::load()),
             placement_updates: std::sync::Mutex::new(()),
             rail_metrics: std::sync::Mutex::new((0.0, 0.0, 64.0, 100.0)),
+            panel_frame: Default::default(),
             drag: std::sync::Mutex::new(None),
             primer_resets: std::sync::Mutex::new(std::collections::BTreeMap::new()),
             primer_busy: std::sync::atomic::AtomicBool::new(false),
@@ -714,10 +715,18 @@ async fn save_network_settings(app:AppHandle,state:State<'_,AppState>,mut value:
 async fn apply_preferences(app: AppHandle, state: &AppState, mut value: preferences::Preferences) -> Result<(), String> {
     value.normalize(&providers::registry().iter().map(|p| p.id().to_string()).collect::<Vec<_>>());
     let previous = state.preferences.lock().unwrap().clone();
+    let mut changed_sources = Vec::new();
+    if value.minimax_site != previous.minimax_site { changed_sources.push(providers::minimax::ID); }
+    if value.antigravity_usage_source != previous.antigravity_usage_source { changed_sources.push("antigravity"); }
+    let refresh_guard = if changed_sources.is_empty() { None } else { Some(state.refreshing.lock().await) };
     let network_changed=value.network_proxy!=previous.network_proxy;
     let replacement=if network_changed{Some(Arc::new(Ctx::with_network(&value.network_proxy).map_err(|_|"无法应用代理设置，已保留原设置。")?))}else{None};
     preferences::save(&value)?;
     *state.preferences.lock().unwrap() = value.clone();
+    for provider in &changed_sources {
+        discard_account_usage(&app, state, provider).await;
+    }
+    drop(refresh_guard);
     state.refresh_schedule.lock().unwrap().primary.retain(|id,_|value.enabled_providers.contains(id));
     state.refresh_wake.notify_one();
     if value.enabled_providers != previous.enabled_providers || value.accounts != previous.accounts || network_changed {
@@ -773,6 +782,19 @@ async fn apply_preferences(app: AppHandle, state: &AppState, mut value: preferen
             let state = app.state::<AppState>();
             refresh(&app, &state).await;
         });
+    } else {
+        if providers::codex::reset_credits_enabled(&value) && !providers::codex::reset_credits_enabled(&previous) {
+            changed_sources.push("codex");
+        }
+        if changed_sources.is_empty() { return Ok(()); }
+        tauri::async_runtime::spawn(async move {
+            let state = app.state::<AppState>();
+            let _guard = state.refreshing.lock().await;
+            for provider in changed_sources {
+                let enabled = state.preferences.lock().unwrap().enabled_providers.iter().any(|id| id == provider);
+                if enabled { refresh_locked(&app, &state, Some(provider)).await; }
+            }
+        });
     }
     Ok(())
 }
@@ -821,7 +843,10 @@ fn hint_paths(provider: &str) -> Vec<String> {
         "opencode-go" => providers::open_code_go::auth_paths(),
         _ => Vec::new(),
     };
-    if let Some(file) = settings::credential_file(provider) {
+    let credential_id = if provider == providers::minimax::ID {
+        providers::minimax::credential_id(&preferences::load().minimax_site)
+    } else { provider };
+    if let Some(file) = settings::credential_file(credential_id) {
         paths.push(file);
     }
     paths
@@ -864,13 +889,17 @@ struct ProviderSetting {
 fn provider_settings(state: State<'_,AppState>) -> Vec<ProviderSetting> {
     let prefs=state.preferences.lock().unwrap().clone();
     let mut entries=providers::registry().into_iter().map(|provider| {
-        let id=provider.id().to_owned();let stored=settings::read_credential_checked(&id);
+        let id = provider.id().to_owned();
+        let credential_id = if id == providers::minimax::ID {
+            providers::minimax::credential_id(&prefs.minimax_site)
+        } else { &id };
+        let stored = settings::read_credential_checked(credential_id);
         let error=stored.as_ref().err().map(|_|"保存的凭据无法解密，请使用原 Windows 账户。".to_string());
         let stored=stored.unwrap_or_default();
         ProviderSetting {credential_error:error,provider_id:id.clone(),additional:false,
             name:prefs.account_labels.get(&id).cloned().unwrap_or_else(||provider.name().into()),
             configured:stored.api_key.is_some()||provider.is_configured(),stored:stored.api_key.is_some()||stored.base_url.is_some(),
-            credential_path:settings::credential_file(&id).map(|p|p.display().to_string()),hints:hint_paths(&id),id}
+            credential_path:settings::credential_file(credential_id).map(|p|p.display().to_string()),hints:hint_paths(&id),id}
     }).collect::<Vec<_>>();
     for account in &prefs.accounts {
         let result=settings::read_credential_document(&account.id);
@@ -886,6 +915,26 @@ fn provider_settings(state: State<'_,AppState>) -> Vec<ProviderSetting> {
             configured:stored,stored,credential_error:error,credential_path:path.clone(),hints:path.into_iter().collect()});
     }
     entries
+}
+
+/// A changed account or source must not fall back to the previous one's quota.
+/// The caller holds `refreshing` so an old check cannot restore the reading.
+async fn discard_account_usage(app: &AppHandle, state: &AppState, provider: &str) {
+    {
+        let mut cache = state.usage_cache.lock().unwrap();
+        cache.readings.remove(provider);
+        let _ = cache.save();
+    }
+    {
+        let mut alerts = state.alert_memory.lock().unwrap();
+        alerts.accounts.remove(provider);
+        let _ = alerts.save();
+    }
+    state.resets.lock().unwrap().remove(provider);
+    let mut snapshot = state.snapshot.lock().await;
+    snapshot.providers.retain(|reading| reading.id != provider);
+    let _ = app.emit(EVENT_USAGE_UPDATED, &*snapshot);
+    update_tray(app, &snapshot);
 }
 
 #[tauri::command]
@@ -930,6 +979,7 @@ async fn save_provider_credential(
     api_key: Option<String>,
     base_url: Option<String>,
     import_local: Option<bool>,
+    minimax_site: Option<String>,
 ) -> Result<(), String> {
     let state=app.state::<AppState>();let _account_guard=state.account_mutations.lock().await;
     let additional=state.preferences.lock().unwrap().accounts.iter().find(|a|a.id==provider).cloned();
@@ -950,9 +1000,18 @@ async fn save_provider_credential(
         if state.preferences.lock().unwrap().enabled_providers.contains(&provider){refresh_locked(&app,&state,Some(&provider)).await;}
         return Ok(());
     }
-    let stored = settings::read_credential_checked(&provider).map_err(|_|"保存的凭据无法解密或迁移，请使用原 Windows 账户并检查文件权限。".to_string())?;
+    let is_minimax = provider == providers::minimax::ID;
+    let credential_id = if is_minimax {
+        let prefs = state.preferences.lock().unwrap();
+        if minimax_site.as_deref().is_some_and(|site| site != prefs.minimax_site) {
+            return Err("MiniMax 站点已切换。请确认当前站点后重新填写密钥。".into());
+        }
+        providers::minimax::credential_id(&prefs.minimax_site)
+    } else { &provider };
+    let guard = if is_minimax { Some(state.refreshing.lock().await) } else { None };
+    let stored = settings::read_credential_checked(credential_id).map_err(|_|"保存的凭据无法解密或迁移，请使用原 Windows 账户并检查文件权限。".to_string())?;
     settings::write_credential(
-        &provider,
+        credential_id,
         &settings::Credential {
             api_key: api_key.or(stored.api_key),
             base_url: base_url.or(stored.base_url),
@@ -960,8 +1019,8 @@ async fn save_provider_credential(
     )
     .map_err(|e| e.to_string())?;
 
-    let state = app.state::<AppState>();
-    let _guard = state.refreshing.lock().await;
+    let _guard = match guard { Some(guard) => guard, None => state.refreshing.lock().await };
+    if is_minimax { discard_account_usage(&app, &state, &provider).await; }
     let enabled = state.preferences.lock().unwrap().enabled_providers.contains(&provider);
     if enabled { refresh_locked(&app, &state, Some(&provider)).await; }
     Ok(())
@@ -1138,6 +1197,16 @@ async fn show_panel_menu(app: AppHandle) -> Result<(), String> {
     result
 }
 
+fn fit_panel_frame(window: &tauri::WebviewWindow, frame: tauri::LogicalSize<f64>) -> tauri::Result<bool> {
+    let wanted = frame.to_physical::<u32>(window.scale_factor()?);
+    let actual = window.inner_size()?;
+    if actual.width.abs_diff(wanted.width) <= 1 && actual.height.abs_diff(wanted.height) <= 1 {
+        return Ok(false);
+    }
+    window.set_size(wanted)?;
+    Ok(true)
+}
+
 /// Resize the panel to the rail's measured size and re-place it.
 /// The original stores the *rail's* position rather than the window's, because
 /// the window is much wider than the rail. Here the same split holds: the
@@ -1154,18 +1223,10 @@ async fn set_panel_metrics(app: AppHandle, width: f64, height: f64, rail_x: f64,
         .get_webview_window("main")
         .ok_or_else(|| "no main window".to_string())?;
 
-    *app.state::<AppState>().rail_metrics.lock().unwrap() = (rail_x, rail_y, rail_width, rail_height);
-    app.state::<AppState>().placement_layout_ready.store(true,std::sync::atomic::Ordering::Release);
-    let wanted = tauri::LogicalSize::new(width.max(1.0), height.max(1.0));
-    let outer = window
-        .outer_size()
-        .map_err(|e| e.to_string())?
-        .to_logical::<f64>(window.scale_factor().unwrap_or(1.0));
-    // Only touch the window when the frame really has to change: a redundant
-    // resize re-runs the webview's layout and is visible as a flicker.
-    if (outer.width - wanted.width).abs() > 0.5 || (outer.height - wanted.height).abs() > 0.5 {
-        let _ = window.set_size(wanted);
-    }
+    *state.rail_metrics.lock().unwrap() = (rail_x, rail_y, rail_width, rail_height);
+    let frame = tauri::LogicalSize::new(width.max(1.0), height.max(1.0));
+    *state.panel_frame.lock().unwrap() = Some(frame);
+    let _ = fit_panel_frame(&window, frame);
     let dragging=state.drag.lock().unwrap().is_some_and(|d|d.moved);
     if dragging {
         if let Some(drag)=state.drag.lock().unwrap().as_mut(){drag.awaiting_metrics=false;}
@@ -1250,7 +1311,7 @@ fn place_panel(app: &AppHandle) {
     let flare=if prefs.round_ends{32.}else{24.}*prefs.panel_size;
     let rail=desktop::rail_for_memory((rw,rh),old_edge,placement.dock_edge.is_some(),&memory,flare);
     let origin=desktop::layout_origin(&placement,&memory,&display,rail);
-    if !state.placement_layout_ready.load(std::sync::atomic::Ordering::Acquire) {
+    if state.panel_frame.lock().unwrap().is_none() {
         // The startup tuple is only a placeholder. Place roughly before
         // showing, but migrate old absolute pixels only after the frontend
         // supplies the actual rail size and its offset inside the frame.
@@ -1472,6 +1533,15 @@ fn watch_desktop(app:AppHandle) {
             if state.drag.lock().unwrap().is_some()||state.menu_open.load(std::sync::atomic::Ordering::SeqCst){continue}
             let suppressed=state.fullscreen_hidden.load(std::sync::atomic::Ordering::SeqCst);
             if !visible&&!suppressed{continue}
+            // The native frame can change without the CSS rail changing, so
+            // the webview won't send new metrics when the rail is clipped.
+            if visible && !window.is_minimized().unwrap_or(false) {
+                let resized = if let Ok(_guard) = state.placement_updates.try_lock() {
+                    let frame = *state.panel_frame.lock().unwrap();
+                    frame.is_some_and(|frame| fit_panel_frame(&window, frame).unwrap_or(false))
+                } else { false };
+                if resized { place_panel(&app); }
+            }
             let Ok(monitors)=window.available_monitors() else{continue};
             let geometry=monitors.iter().map(monitor_display).collect::<Vec<_>>();
             let signature=format!("{geometry:?}");
@@ -1787,9 +1857,12 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            // Reopening the app remains a way back to Settings even if the
-            // floating panel has been hidden.
-            let _=argv;open_settings(app);
+            if let Some(link) = argv.iter().skip(1).find_map(|arg| parse_deep_link(arg)) {
+                let app = app.clone();
+                tauri::async_runtime::spawn_blocking(move || open_deep_link(&app, &link));
+            } else {
+                open_settings(app);
+            }
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())

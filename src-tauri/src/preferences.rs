@@ -141,8 +141,8 @@ impl Preferences {
     /// record of where that key came from once the ids are one, so the site is
     /// set from it and the rest is folded over.
     ///
-    /// Pure, and idempotent: the credential file move is [`move_minimax_credential`],
-    /// which runs once at startup where a failure can only mean "nothing to do".
+    /// Pure and idempotent. The credential migration is handled separately,
+    /// using the original DPAPI identity of each file.
     pub fn migrate_minimax_cn(&mut self) {
         let retired = crate::providers::minimax::RETIRED_ID;
         let live = crate::providers::minimax::ID;
@@ -301,25 +301,6 @@ fn fold_map<V>(map: &mut std::collections::HashMap<String, V>, retired: &str, li
     }
 }
 
-/// Give a mainland key the live provider's file name, once, at startup.
-///
-/// The key store is one file per provider id, so a key saved under `minimax-cn`
-/// would never be read again after the fold unless its file is renamed. A file
-/// already sitting under the live id is newer and is left alone.
-pub fn move_minimax_credential() {
-    let retired = crate::providers::minimax::RETIRED_ID;
-    let live = crate::providers::minimax::ID;
-    let Some(from) = crate::settings::credential_file(retired) else { return };
-    if !from.exists() {
-        return;
-    }
-    let Some(to) = crate::settings::credential_file(live) else { return };
-    if to.exists() {
-        return;
-    }
-    let _ = std::fs::rename(&from, &to);
-}
-
 /// A fortnight of use and a week of separate days before the one request for a
 /// star, and never for a copy that was installed and forgotten.
 pub const STAR_MINIMUM_AGE_MS: i64 = 14 * 24 * 60 * 60 * 1000;
@@ -376,6 +357,12 @@ fn day_of(now_ms: i64) -> String {
 }
 
 pub fn load() -> Preferences {
+    let mut prefs = load_before_provider_migrations();
+    prefs.migrate_minimax_cn();
+    prefs
+}
+
+pub fn load_before_provider_migrations() -> Preferences {
     crate::settings::directory().and_then(|d| std::fs::read_to_string(d.join("preferences.json")).ok())
         .and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
 }
@@ -539,17 +526,34 @@ mod tests {
 #[serde(rename_all = "camelCase", default)]
 pub struct AccountAppearance {
     pub detailed_card: bool,
+    /// None keeps the current default; Some(empty) means the limits alone.
+    pub card_parts: Option<Vec<String>>,
     pub animated_mark: bool,
+    pub robot_figure: Option<String>,
+    pub robot_material: String,
     pub persona: String,
     pub body: String,
     pub mark_colour: Option<String>,
     pub ring_colour: Option<String>,
 }
 impl Default for AccountAppearance {
-    fn default() -> Self { Self { detailed_card: false, animated_mark: false, persona: "automatic".into(), body: "blob".into(), mark_colour: None, ring_colour: None } }
+    fn default() -> Self { Self { detailed_card: false, card_parts: None, animated_mark: false, robot_figure: None, robot_material: "flat".into(), persona: "automatic".into(), body: "blob".into(), mark_colour: None, ring_colour: None } }
 }
 impl AccountAppearance {
     fn normalize(&mut self) {
+        const PARTS: [&str; 12] = ["plan", "updated", "forecast", "value", "amounts", "figures", "chart", "topModel", "cacheHitRate", "promptCache", "lastStep", "resetCredits"];
+        if let Some(parts) = &mut self.card_parts {
+            let selected = PARTS.iter().filter(|part| parts.iter().any(|p| p == **part));
+            *parts = selected.map(|part| (*part).to_owned()).collect();
+        }
+        if self.robot_figure.as_deref().is_some_and(|figure| ![
+            "mug", "ghost", "cat", "lightbulb", "chat", "cloud", "egg", "controller",
+            "bunny", "star", "rocket", "book", "camera", "shield", "sprout", "brain",
+            "bull", "palette", "magnifier", "witch-hat", "paint-brush", "barbell", "watering-can",
+        ].contains(&figure)) {
+            self.robot_figure = None;
+        }
+        if self.robot_material != "fluffy" { self.robot_material = "flat".into(); }
         if !["automatic","calm","eager","steady","curious","sleepy","playful","stoic","proud"].contains(&self.persona.as_str()) { self.persona = "automatic".into(); }
         if !["blob","pebble","bean","egg","squircle","tablet","capsule","cylinder","hex","gem","crystal","wedge","shield","dome","arch","cloud","teardrop","leaf"].contains(&self.body.as_str()) { self.body = "blob".into(); }
         for colour in [&mut self.mark_colour, &mut self.ring_colour] {
@@ -568,6 +572,32 @@ impl AccountAppearance {
         let mut p=Preferences::default();p.account_appearance.insert("codex".into(),AccountAppearance{animated_mark:true,persona:"curious".into(),body:"gem".into(),..Default::default()});
         let saved:Preferences=serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
         assert_eq!(saved,p);assert!(saved.enabled_providers.is_empty());
+    }
+    #[test]
+    fn card_parts_keep_default_and_explicit_empty_distinct() {
+        let legacy: AccountAppearance = serde_json::from_str(r#"{"detailedCard":false}"#).unwrap();
+        assert_eq!(legacy.card_parts, None);
+        let mut compact: AccountAppearance = serde_json::from_str(r#"{"cardParts":[]}"#).unwrap();
+        compact.normalize();
+        assert_eq!(compact.card_parts, Some(vec![]));
+        let mut custom: AccountAppearance = serde_json::from_str(r#"{"cardParts":["chart","plan","chart","removed"]}"#).unwrap();
+        custom.normalize();
+        assert_eq!(custom.card_parts, Some(vec!["plan".into(), "chart".into()]));
+    }
+
+    #[test]
+    fn legacy_robots_keep_enablement_and_colour_with_automatic_flat_figure() {
+        let mut legacy: AccountAppearance = serde_json::from_str(r##"{"animatedMark":true,"body":"gem","markColour":"#334455"}"##).unwrap();
+        legacy.normalize();
+        assert!(legacy.animated_mark);
+        assert_eq!(legacy.mark_colour.as_deref(), Some("#334455"));
+        assert_eq!(legacy.robot_figure, None);
+        assert_eq!(legacy.robot_material, "flat");
+        legacy.robot_figure = Some("cat".into());
+        legacy.robot_material = "fluffy".into();
+        legacy.normalize();
+        assert_eq!(legacy.robot_figure.as_deref(), Some("cat"));
+        assert_eq!(legacy.robot_material, "fluffy");
     }
 }
 

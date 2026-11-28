@@ -1,5 +1,5 @@
 import { chromium } from '@playwright/test'
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import assert from 'node:assert/strict'
@@ -111,7 +111,7 @@ try {
     const ids=['claude-code','codex','cursor','copilot','deepseek','kiro','glm-coding']
     const prefs=await invoke('get_preferences')
     await invoke('save_preferences',{value:{...prefs,roundEnds:false}})
-    await invoke('plugin:event|emit',{event:'preferences-changed',payload:{...prefs,roundEnds:false,enabledProviders:ids,providerOrder:ids,accountAppearance:Object.fromEntries(ids.map((id,i)=>[id,{animatedMark:true,persona:['calm','eager','steady','curious','sleepy','playful','stoic'][i],body:'blob'}]))}})
+    await invoke('plugin:event|emit',{event:'preferences-changed',payload:{...prefs,roundEnds:false,enabledProviders:ids,providerOrder:ids,accountAppearance:Object.fromEntries(ids.map(id=>[id,{animatedMark:true,robotFigure:id==='codex'?'cat':null,robotMaterial:id==='codex'?'fluffy':'flat'}]))}})
     await invoke('plugin:event|emit',{event:'usage-updated',payload:{providers:ids.map((id,i)=>({id,name:id,windows:[{label:'5h',percentUsed:[24,13,2,1,0,0,0][i]}],configured:true,error:null})),fetchedAt:new Date().toISOString()}})
     await invoke('plugin:window|show',{label:'main'})
   })
@@ -127,6 +127,46 @@ try {
   const scale=await main.evaluate(()=>devicePixelRatio)
   assert(Math.abs(position.x+rail.x*scale-720)<=2,'Native rail must restore its X, not window X')
   assert(Math.abs(position.y+rail.y*scale-80)<=2,`Native rail must restore its Y: ${JSON.stringify({position,rail,scale,placement:await main.evaluate(()=>window.__TAURI_INTERNALS__.invoke('panel_placement'))})}`)
+  // Reproduce the frame shrinking underneath the right-hand rail at 150% DPI.
+  // Only the isolated fixture's HWND is resized and its webview stays loaded.
+  const shrink = spawnSync('python', ['-c', `
+import ctypes as c, sys
+from ctypes import wintypes as w
+u = c.WinDLL('user32', use_last_error=True)
+u.SetProcessDpiAwarenessContext(c.c_void_p(-4))
+callback = c.WINFUNCTYPE(w.BOOL, w.HWND, w.LPARAM)
+windows = []
+def find(hwnd, _):
+    owner = w.DWORD()
+    u.GetWindowThreadProcessId(hwnd, c.byref(owner))
+    title = c.create_unicode_buffer(100)
+    u.GetWindowTextW(hwnd, title, 100)
+    if owner.value == int(sys.argv[1]) and title.value == 'PulseWin' and u.IsWindowVisible(hwnd):
+        windows.append(hwnd)
+    return True
+u.EnumWindows(callback(find), 0)
+assert len(windows) == 1
+hwnd = windows[0]
+frame = w.RECT()
+assert u.GetWindowRect(hwnd, c.byref(frame))
+assert u.SetWindowPos(hwnd, 0, 0, 0, int(sys.argv[2]), frame.bottom-frame.top, 0x16), c.get_last_error()
+`, String(child.pid), String(Math.floor(rail.x * scale))], { encoding: 'utf8', windowsHide: true })
+  assert.equal(shrink.status, 0, shrink.stderr || shrink.error?.message)
+  await main.waitForFunction(() => document.querySelector('.rail')?.getBoundingClientRect().right <= innerWidth + 1, undefined, { timeout: 2500 })
+  await main.waitForFunction(() => {
+    const bots = Array.from(document.querySelectorAll('.rail .robot-avatar'))
+    return bots.length === 7 && bots.every(bot => {
+      if (bot.getAttribute('data-ready') !== 'true') return false
+      const canvas = bot.querySelector('canvas')
+      if (!canvas) return Boolean(bot.querySelector('.robot-avatar__drawing svg'))
+      const context = canvas.getContext('2d')
+      if (!context || !canvas.width || !canvas.height) return false
+      return context.getImageData(0, 0, canvas.width, canvas.height).data.some((value, index) => index % 4 === 3 && value > 0)
+    })
+  }, undefined, { timeout: 10000 })
+  const nativeRobotMaterial = await main.locator('.rail .robot-avatar[data-figure="cat"]').first().getAttribute('data-material')
+  assert(['flat', 'fluffy'].includes(nativeRobotMaterial), 'Native robot must paint a supported material')
+  console.log(`Native WebView2 robot drew material: ${nativeRobotMaterial}`)
   await main.locator('.rail').screenshot({path:path.join(root,'test-results/native-assistant.png')})
   // Real native placement/preferences, with synthetic display-only readings.
   // This exercises IPC, work-area geometry and on-disk persistence without
@@ -163,9 +203,16 @@ try {
   assert.equal(docked.dockEdge,'bottom')
   await assert.rejects(main.evaluate(()=>window.__TAURI_INTERNALS__.invoke('set_panel_metrics',{width:342,height:630,railX:278,railY:0,railWidth:64,railHeight:630,expectedEdge:'right'})),/orientation changed/)
   assert.equal((await main.evaluate(()=>window.__TAURI_INTERNALS__.invoke('panel_placement'))).dockEdge,'bottom','Obsolete metrics must not undo the selected orientation')
+  const area=docked.railSpace.workArea
+  const waitForBottomRail = () => main.waitForFunction(async ({ bottom, scale }) => {
+    const rail = document.querySelector('.rail')?.getBoundingClientRect()
+    if (!rail || Math.abs(rail.bottom - innerHeight) > 2) return false
+    const position = await window.__TAURI_INTERNALS__.invoke('plugin:window|outer_position', { label: 'main' })
+    return Math.abs(position.y + rail.bottom * scale - bottom) <= 2
+  }, { bottom: area.bottom, scale })
+  await waitForBottomRail()
   const bottomBox=await main.locator('.rail').boundingBox()
   const bottomWindow=await main.evaluate(()=>window.__TAURI_INTERNALS__.invoke('plugin:window|outer_position',{label:'main'}))
-  const area=docked.railSpace.workArea
   assert(Math.abs(bottomWindow.y+(bottomBox.y+bottomBox.height)*scale-area.bottom)<=2,'Bottom rail must attach to the Windows work area')
   await main.evaluate(()=>window.__TAURI_INTERNALS__.invoke('plugin:event|emit',{event:'hover-changed',payload:'entry:codex'}))
   await main.locator('.card').waitFor()
@@ -173,6 +220,36 @@ try {
   const card=await main.locator('.card').boundingBox()
   assert(card.y+card.height<bottomBox.y && bottomBox.y-card.y-card.height<=12,'Bottom card tail must point down next to the rail')
   await main.screenshot({path:path.join(root,'test-results/native-assistant-bottom-light.png')})
+  // Fill more rows than this monitor can show. Keep collection disabled and
+  // exercise the actual work-area metrics, clip path and WebView2 scrolling.
+  const rowCount = Math.ceil((area.bottom - area.top) / scale / 60) + 8
+  await main.evaluate(async count => {
+    const timestamp = new Date().toISOString()
+    const ids = ['claude-code', 'codex', 'cursor', 'copilot', 'deepseek', 'kiro', 'glm-coding']
+    await window.__TAURI_INTERNALS__.invoke('plugin:event|emit', {
+      event: 'usage-updated',
+      payload: { fetchedAt: timestamp, providers: ids.map(id => ({
+        id, name: id, configured: true, fetchedAt: timestamp,
+        windows: Array.from({ length: id === 'codex' ? count : 1 }, (_, index) => ({
+          id: String(index), label: `Synthetic quota ${index + 1}`, percentUsed: 50,
+        })),
+      })) },
+    })
+  }, rowCount)
+  await main.waitForFunction(count => document.querySelectorAll('.card__row').length === count, rowCount)
+  await waitForBottomRail()
+  await main.locator('.panel__card').evaluate(async element => {
+    await Promise.allSettled(element.getAnimations().map(animation => animation.finished))
+  })
+  const longCard = await main.locator('.card').boundingBox()
+  const longWindow = await main.evaluate(() => window.__TAURI_INTERNALS__.invoke('plugin:window|outer_position', { label: 'main' }))
+  assert(longWindow.y + longCard.y * scale >= area.top - 2, 'Long card must start inside the native work area')
+  assert(longWindow.y + (longCard.y + longCard.height) * scale <= area.bottom + 2, 'Long card must end inside the native work area')
+  const content = main.locator('.card__content')
+  assert(await content.evaluate(element => element.scrollHeight > element.clientHeight), 'Long card must scroll inside its clipped surface')
+  await content.hover({ position: { x: 80, y: 70 } })
+  await main.mouse.wheel(0, 240)
+  await main.waitForFunction(() => document.querySelector('.card__content')?.scrollTop > 0)
   const horizontal=await main.evaluate(()=>window.__TAURI_INTERNALS__.invoke('set_panel_position',{position:'free-horizontal'}))
   assert.equal(horizontal.dockEdge,null);assert.equal(horizontal.facingEdge,'bottom')
   await main.waitForFunction(()=>document.querySelector('.rail')?.getBoundingClientRect().height===64&&document.querySelector('.rail')?.getBoundingClientRect().width===630)
@@ -184,10 +261,10 @@ try {
   assert.equal(await main.evaluate(()=>window.__TAURI_INTERNALS__.invoke('panel_edge')),'bottom')
   assert.deepEqual((await main.evaluate(()=>window.__TAURI_INTERNALS__.invoke('get_preferences'))).enabledProviders,[])
   await writeFile(path.join(root, 'test-results/native-smoke.json'), JSON.stringify({
-    passed: true, checks: ['native startup', 'no automatic collection', 'settings IPC permission', 'preferences persistence', 'shared panel preferences', 'floating rail restoration', 'native capsule geometry', 'floating stays expanded', 'disabled additional accounts never collect', 'per-account encrypted credentials', 'stale window preserves account metadata', 'account rename persists', 'removal preserves primary credentials','light appearance persistence','bottom work-area dock and card','obsolete layout metrics rejected','horizontal floating persistence after reload'],
+    passed: true, checks: ['native startup', 'no automatic collection', 'settings IPC permission', 'preferences persistence', 'shared panel preferences', 'floating rail restoration', 'DPI-aware recovery when the native frame clips the rail', 'native capsule geometry', 'floating stays expanded', 'disabled additional accounts never collect', 'per-account encrypted credentials', 'stale window preserves account metadata', 'account rename persists', 'removal preserves primary credentials','light appearance persistence','bottom work-area dock and card','long card scrolls inside the native work area','obsolete layout metrics rejected','horizontal floating persistence after reload'],
     profile, testedAt: new Date().toISOString(),
   }, null, 2))
-  console.log('PASS: native light appearance, bottom docking, horizontal restoration and obsolete-layout rejection; accounts remain isolated and collection stays disabled.')
+  console.log('PASS: native frame recovery, light appearance, bottom docking, long-card scrolling, horizontal restoration and obsolete-layout rejection. Test accounts stayed isolated.')
   if(process.env.PULSEWIN_TEST_KEEP_OPEN==='1') {
     await page.evaluate(()=>window.__TAURI_INTERNALS__.invoke('plugin:window|hide',{label:'settings'}))
     console.log('NATIVE_READY: isolated assistant available for real input validation')

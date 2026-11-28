@@ -207,11 +207,13 @@ fn extract_windows(json: &Value) -> Vec<UsageWindow> {
             continue;
         }
 
-        out.push(
-            UsageWindow::new(label_for(key), percent_used)
-                .with_reset(resets_at)
-                .with_detail(detail),
-        );
+        let mut window = UsageWindow::new(label_for(key), percent_used)
+            .with_reset(resets_at)
+            .with_detail(detail);
+        if let Some((remaining, limit)) = remaining.zip(entitlement) {
+            window = window.with_quota_amounts(limit - remaining, limit);
+        }
+        out.push(window);
     }
 
     // Stable order: premium first, then chat, then completions.

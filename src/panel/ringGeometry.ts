@@ -12,12 +12,9 @@
 /** Gap between the progress ring and the dark disc it encircles. */
 export const CENTRE_GAP = 4
 
-/** The icon's share of that dark disc. */
-export const ICON_SCALE = 0.8
-export const BOT_SCALE = 1.4
-
 /** How much the icon's disc shrinks to make room for the second ring, per side. */
 export const SECOND_RING_SQUEEZE = 2
+const SECOND_RING_GAP = 1
 
 export const HALO_RADIUS = 10
 
@@ -37,7 +34,6 @@ export interface RingGeometryInput {
    * with one limit keeps the icon it had."
    */
   hasSecondRing: boolean
-  secondRingDiameter: number
 }
 
 export interface RingGeometry {
@@ -51,6 +47,10 @@ export interface RingGeometry {
   ringRadius: number
   /** Radius the second ring is stroked along. */
   secondRingRadius: number
+  /** Size of the avatar box, including the room for turning inside it. */
+  robotDiameter: number
+  /** Circle that clips the avatar's hops and effects behind the adjacent ring. */
+  robotRoom: number
   /**
    * Half the widest ink the whole ring produces, including the clock arc.
    *
@@ -66,7 +66,6 @@ export function ringGeometry({
   lineWidth,
   scale,
   hasSecondRing,
-  secondRingDiameter,
 }: RingGeometryInput): RingGeometry {
   const squeeze = hasSecondRing ? SECOND_RING_SQUEEZE * scale : 0
 
@@ -88,11 +87,14 @@ export function ringGeometry({
     diameter + lineWidth + (CLOCK_GAP + CLOCK_LINE_WIDTH / 2) * 2 * scale
 
   const ringRadius = diameter / 2
-  const secondRingRadius = secondRingDiameter / 2
+  // Keep the same ink width and a one-point gap between the strokes.
+  const secondRingRadius = Math.max(0, ringRadius - lineWidth - SECOND_RING_GAP * scale)
+  const robotDiameter = centreDiameter * (hasSecondRing ? 1.1 : 1.35)
+  const robotRoom = Math.max(0, (hasSecondRing ? secondRingRadius * 2 : diameter) - lineWidth * 2)
 
   // The clock arc is an overlay drawn outside the ring's frame, and it is the
   // widest thing here, so it sets the viewBox.
-  const inkHalf = Math.max(ringRadius + lineWidth / 2, clockDiameter / 2 + CLOCK_LINE_WIDTH / 2)
+  const inkHalf = Math.max(ringRadius + lineWidth / 2, clockDiameter / 2 + CLOCK_LINE_WIDTH * scale / 2)
 
   return {
     centreDiameter,
@@ -100,6 +102,8 @@ export function ringGeometry({
     clockDiameter,
     ringRadius,
     secondRingRadius,
+    robotDiameter,
+    robotRoom,
     inkHalf,
   }
 }

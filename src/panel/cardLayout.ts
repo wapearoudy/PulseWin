@@ -1,4 +1,5 @@
 import { PANEL_SCALE, type PanelEdge, type PanelSizeName } from './berthShape'
+import { historyParts, type CardPart } from './cardParts'
 
 /**
  * Port of the original's `DetailCardLayout`.
@@ -11,12 +12,11 @@ import { PANEL_SCALE, type PanelEdge, type PanelSizeName } from './berthShape'
  * type did not, and at Small a 205pt card truncated its own title.
  */
 export interface DetailCardLayout {
-  detailed: boolean
+  parts: ReadonlySet<CardPart>
   activityHeight: number
   activitySpacing: number
   footnoteHeight: number
   headerLineSpacing: number
-  showForecast: boolean
   width: number
   padding: number
   /** The rings' own curve: the outer edge of a ring's stroke. */
@@ -44,12 +44,14 @@ export interface DetailCardLayout {
 /** The ring's outer edge: one circle sets every curve on the panel. */
 export const RING_OUTER_RADIUS = (36 + 4) / 2
 
-export function detailCardLayout(size: PanelSizeName = 'standard', showForecast=false, detailed=false, usageBarStyle: 'continuous' | 'segmented' = 'continuous'): DetailCardLayout {
+export function detailCardLayout(size: PanelSizeName = 'standard', parts: ReadonlySet<CardPart> = new Set(), usageBarStyle: 'continuous' | 'segmented' = 'continuous'): DetailCardLayout {
   const s = PANEL_SCALE[size]
   const segmented = usageBarStyle === 'segmented'
+  // Budget the selected history blocks at their largest rendered height.
+  const historyRows = historyParts.filter(part => parts.has(part)).map(part => part === 'figures' ? 47 : part === 'chart' ? 30 : 14)
+  const activityHeight = historyRows.length ? (47 + historyRows.reduce((sum, height) => sum + height + 10, 0)) * s : 0
   return {
-    detailed, activityHeight: 231 * s, activitySpacing: 10 * s, footnoteHeight: 13 * s, headerLineSpacing: 4 * s,
-    showForecast,
+    parts, activityHeight, activitySpacing: 10 * s, footnoteHeight: 13 * s, headerLineSpacing: 4 * s,
     width: 250 * s,
     padding: 18 * s,
     cornerRadius: RING_OUTER_RADIUS * s,
@@ -81,13 +83,17 @@ export function detailCardLayout(size: PanelSizeName = 'standard', showForecast=
  */
 export function detailCardHeight(layout: DetailCardLayout, rows: number, metrics = 0, trends = 0): number {
   const rowHeight =
-    layout.rowTextLineHeight * 2 + layout.rowInternalSpacing * 2 + layout.progressBarHeight + (layout.showForecast ? layout.rowTextLineHeight + layout.rowInternalSpacing : 0) + (layout.detailed ? layout.rowTextLineHeight + layout.rowInternalSpacing : 0)
+    layout.rowTextLineHeight * 2 + layout.rowInternalSpacing * 2 + layout.progressBarHeight
+    + ['forecast', 'value', 'amounts'].filter(part => layout.parts.has(part as CardPart)).length * (layout.rowTextLineHeight + layout.rowInternalSpacing)
   const children = rows + metrics
   const body = children > 0
     ? rows * rowHeight + metrics * layout.rowTextLineHeight + Math.max(children - 1, 0) * layout.contentSpacing
       + trends * (layout.metricChartHeight + layout.rowInternalSpacing)
     : 0
-  return layout.padding * 2 + layout.headerHeight + (layout.detailed ? layout.headerLineSpacing + layout.footnoteHeight : 0) + (body > 0 ? layout.contentSpacing + body : 0) + (layout.detailed ? layout.contentSpacing + layout.activityHeight : 0)
+  const update = layout.parts.has('updated') ? layout.headerLineSpacing + layout.footnoteHeight : 0
+  const history = layout.activityHeight > 0 ? layout.contentSpacing + layout.activityHeight : 0
+  const extraRows = (Number(layout.parts.has('promptCache')) + Number(layout.parts.has('resetCredits'))) * (layout.contentSpacing + layout.rowTextLineHeight)
+  return layout.padding * 2 + layout.headerHeight + update + (body > 0 ? layout.contentSpacing + body : 0) + history + extraRows
 }
 
 /**

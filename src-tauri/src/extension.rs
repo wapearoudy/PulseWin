@@ -640,6 +640,7 @@ impl ExtensionReport {
                 percent_used: Some(percent),
                 resets_at: limit.resets_at.as_deref().and_then(|text| parse_reset(&Value::String(text.to_owned()))),
                 detail: None,
+                quota_amounts: None,
             });
         }
 

@@ -27,6 +27,27 @@ describe('detailed card measured history',()=>{
     expect(result.figures[0].cost).toBeNull();expect(result.figures[0].tokens).toBe(205)
     expect(result.cacheHitRate).toBeNull()
   })
+  it('keeps console charges, explicit zero and partial coverage without pricing buckets', () => {
+    const billed = (day: string, cost: number | null, hasTokens = true): SpendRecord => ({
+      ...row(now / 1000, day), cost, costBreakdown: null, aggregateTiming: true,
+      ...(hasTokens ? {} : { tally: { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 } }),
+    })
+    const history: SpendSnapshot = {
+      ...snapshot([billed('2026-10-03', 0), billed('2026-10-02', 9.42, false), billed('2026-10-01', null)]),
+      pricingStatus: 'console',
+      consoleBilling: { currency: 'CNY', daysWithMissingCharges: ['2026-10-01'] },
+    }
+    const result = cardActivity(history, new Date(now))
+    expect(result.figures.map(figure => figure.charge)).toEqual([
+      { currency: 'CNY', amount: 0, partial: false },
+      { currency: 'CNY', amount: 9.42, partial: true },
+      { currency: 'CNY', amount: 9.42, partial: true },
+    ])
+    expect(result.figures[2].costBreakdown).toBeNull()
+    expect(result.figures[2].cost).toBeNull()
+    expect(result.figures[2].tokens).toBe(360)
+    expect(cardActivity(history, new Date(2026, 9, 1)).figures[0].charge).toEqual({ currency: 'CNY', amount: null, partial: true })
+  })
   it('estimates only a supported account-wide window with sufficient history',()=>{
     const reset=now+3600*1000,opened=now/1000-4*3600
     const history=snapshot([row(opened-900),row(now/1000-60)])

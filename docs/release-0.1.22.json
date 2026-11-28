@@ -1,0 +1,25 @@
+{
+ "version": "0.1.22",
+ "status": "release-verified",
+ "authorization": "提交发布（2026-11-28）",
+ "changes": [
+  "Recover an assistant frame clipped by the Windows window bounds and preserve the placement.",
+  "Align double-ring widths and gap, and offer 23 robot figures with flat and fluffy materials.",
+  "Save detail card choices per account and share quota bar styles with Settings.",
+  "Keep actual DeepSeek and OpenCode Go console amounts and currencies, distinguishing zero, missing and partial data.",
+  "Detect custom Antigravity desktop installs and the official Windows agy CLI directory. Automatic mode diagnoses the newer desktop and reads quota from an available agy.",
+  "Keep MiniMax site credentials and readings separate. Route account links to a running app."
+ ],
+ "tests": {
+  "frontend": { "passed": 299, "files": 30 },
+  "browser": { "passed": 92, "note": "Windows Edge with simulated IPC." },
+  "rust": { "passed": 1324, "failed": 0, "ignored": 2, "note": "cargo test --all-targets on Windows." },
+  "windowsRelease": "PASS: TypeScript and Vite build, x64 NSIS and MSI signed with the key trusted by installed clients, native assistant and IPC suites, Antigravity 2.36 process recognition with fixture CLI fallback, and read-only CLI checks.",
+  "updater": "PASS: isolated 0.1.21 downloaded the actual signed 0.1.22 NSIS installer from a test feed and verified the signature and bound version. Synthetic tampered packages and forged versions were rejected. No installer executed."
+ },
+ "fullParity": false,
+ "limitations": [
+  "Actual console billing, the signed-in agy account's quota and Codex reset credits were exercised with fixtures. These require signed-in accounts for live validation.",
+  "Pending original-Pulse and Windows acceptance items remain in release-progress.json."
+ ]
+}

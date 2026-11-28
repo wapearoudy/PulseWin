@@ -349,7 +349,7 @@ pub async fn opencode_card_history(app: AppHandle, state: State<'_, crate::AppSt
     if saved_cookie().is_none() { return Ok(crate::token_spend::card_history("unavailable", None)); }
     let history = read_opencode_history(app, state, None).await?;
     Ok(crate::token_spend::card_history("ready", Some(crate::token_spend::console_snapshot(
-        "opencode-go", "OpenCode Go console", history.card_days(), history.card_notes(), history.checked_at().unwrap_or_default()))))
+        "opencode-go", "OpenCode Go console", history.card_days(), Some("USD".into()), history.card_notes(), history.checked_at().unwrap_or_default()))))
 }
 pub(crate) fn saved_cookie() -> Option<String> { cookie() }
 #[derive(Clone, Default, Serialize)]
@@ -363,6 +363,8 @@ pub struct Day {
     tokens: String,
     cost: Option<f64>,
     unpriced_tokens: String,
+    #[serde(skip)]
+    missing_charge: bool,
     models: BTreeMap<String, String>,
 }
 #[derive(Clone, Serialize)]
@@ -378,7 +380,16 @@ pub struct History {
 impl History {
     pub(crate) fn card_days(&self) -> Vec<crate::token_spend::CardDay> {
         let number = |text: &str| text.parse::<u64>().unwrap_or(0);
-        self.days.iter().map(|day| crate::token_spend::CardDay{date:day.date.clone(),input:number(&day.input),output:number(&day.output),cache_write:number(&day.cache_write),cache_read:number(&day.cache_read),cost:day.cost,models:day.models.iter().map(|(name,tokens)|(name.clone(),number(tokens))).collect()}).collect()
+        self.days.iter().map(|day| crate::token_spend::CardDay {
+            date: day.date.clone(),
+            input: number(&day.input),
+            output: number(&day.output),
+            cache_write: number(&day.cache_write),
+            cache_read: number(&day.cache_read),
+            cost: day.cost,
+            missing_charge: day.missing_charge,
+            models: day.models.iter().map(|(name,tokens)|(name.clone(),number(tokens))).collect(),
+        }).collect()
     }
     pub(crate) fn card_notes(&self) -> Vec<String> { self.notes.clone() }
     pub(crate) fn checked_at(&self) -> Option<String> { self.checked_at.clone() }
@@ -419,6 +430,7 @@ fn history(
             let mut unpriced = 0u128;
             let mut cost = 0.;
             let mut priced = items.is_empty() && saved.complete;
+            let mut missing_charge = false;
             let mut models = BTreeMap::<String, u128>::new();
             for item in items {
                 let tally = [
@@ -435,7 +447,8 @@ fn history(
                     cost += value;
                     priced = true
                 } else {
-                    unpriced += tokens
+                    unpriced += tokens;
+                    missing_charge = true;
                 }
                 if let Some(model) = item.model.as_ref() {
                     *models.entry(model.clone()).or_default() += tokens;
@@ -450,6 +463,7 @@ fn history(
                 tokens: kinds.iter().sum::<u128>().to_string(),
                 cost: priced.then_some(cost),
                 unpriced_tokens: unpriced.to_string(),
+                missing_charge,
                 models: models
                     .into_iter()
                     .map(|(m, n)| (m, n.to_string()))
@@ -789,5 +803,33 @@ mod tests {
         assert_eq!(d.cost, None);
         assert_eq!(d.unpriced_tokens, d.tokens);
         assert!(!h.partial);
+    }
+
+    #[test]
+    fn card_ledger_keeps_partial_amount_even_without_reported_tokens() {
+        let now = chrono::Local::now();
+        let make = |id: &str, cost| Item {
+            id: id.into(),
+            started_at: now.timestamp_millis() as f64,
+            product: Some("go".into()),
+            model: None,
+            input_tokens: None,
+            output_tokens: None,
+            cache_read_tokens: None,
+            cache_write_tokens: None,
+            cost,
+        };
+        let saved = Saved { items: vec![make("known", Some(1.25)), make("unknown", None)], complete: true, ..Default::default() };
+        let workspace = Workspace { id: "fixture-workspace".into(), name: None };
+        let h = history(&saved, &workspace, now, vec![]);
+        let snapshot = crate::token_spend::console_snapshot(
+            "opencode-go", "OpenCode Go console", h.card_days(), Some("USD".into()), h.card_notes(), h.checked_at().unwrap_or_default());
+        let today = snapshot.records.last().unwrap();
+        assert_eq!(today.tally.total(), 0);
+        assert_eq!(today.cost, Some(1.25));
+        assert_eq!(snapshot.records[0].cost, Some(0.));
+        let day = today.day.clone();
+        let payload = serde_json::to_value(snapshot).unwrap();
+        assert_eq!(payload["consoleBilling"], serde_json::json!({"currency":"USD","daysWithMissingCharges":[day]}));
     }
 }

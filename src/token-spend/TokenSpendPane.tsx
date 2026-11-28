@@ -49,7 +49,7 @@ const spans: [SpendSpan, string][] = spanGroups.flat()
 const exportHelp: Record<string, string> = {
   dsh: '自动读取 DeepSeek Harness 的 sessions 会话目录（默认 ~/.dsh，可通过 DSH_HOME 指定）。支持普通、版本化及 Zstandard 压缩 JSONL，分别统计输入、输出和缓存；分叉历史与迁移副本去重。CLI 与当前桌面版共享此目录。',
   cursor: '需要事先导出 Cursor usageEventsDisplay JSON 或带四类计数列的 CSV。不会读取 Cursor 原生日志或自动登录；CSV 只用于日统计。',
-  antigravity: '需要同步工具事先生成语言服务器用量缓存 JSONL；Antigravity CLI 与 IDE 的原生数据库读取均未移植。不会自行连接或同步。',
+  antigravity: '此来源读取同步工具事先生成的语言服务器用量缓存 JSONL。CLI 和 IDE 的本机记录在各自的来源中读取。',
   hindsight: '需要事先镜像服务 llm-requests 为 JSONL 用量账本；不会直接访问服务。',
   mcode: '需要事先捕获 mcode exec --output-format stream-json 输出为 JSONL；不会运行客户端。',
 }
@@ -164,10 +164,10 @@ export function TokenSpendPane({ enabled, onEnabledChange, span: savedSpan, onSp
         {model && <h2>{model}</h2>}
         {agent && !model && <h2>{agentName(agent)}</h2>}
         <div className="spend-headline">
-          <Metric label="Token 总量" value={shortTokens(summary.tokens)} help={summary.tokens.toLocaleString('zh-CN')} />
+          <Metric label="Token 总量" value={shortTokens(summary.tokens)} help={exactTokenText(summary.tokens, summary.exactTokens)} />
           <Metric label={summary.unpricedTokens && summary.cost !== null ? '部分 API 金额估算' : 'API 金额估算'} value={formatCost(summary.cost)} help={summary.cost === null ? '无公开价格' : money.exactEstimate(summary.cost)} />
           {oneDay
-            ? <Metric label="活跃小时" value={`${summary.activeHours} / 24`} />
+            ? <Metric label="活跃小时" value={summary.hasAggregateTiming ? '—' : `${summary.activeHours} / 24`} />
             : <Metric label="活跃天数" value={`${summary.activeDays} / ${Math.max(summary.days.length, 1)}`} />}
           {oneDay
             ? <Metric label="最活跃时段" value={summary.hasAggregateTiming || summary.peakHour === null ? '—' : `${summary.peakHour}:00`} />

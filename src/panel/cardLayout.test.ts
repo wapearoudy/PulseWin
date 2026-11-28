@@ -19,7 +19,7 @@ describe('detailCardLayout', () => {
 
   it('doubles the bar and its frame budget when segmented', () => {
     const continuous = detailCardLayout('standard')
-    const segmented = detailCardLayout('standard', false, false, 'segmented')
+    const segmented = detailCardLayout('standard', undefined, 'segmented')
     expect(segmented.progressBarHeight).toBe(12)
     expect(segmented.usageBarStyle).toBe('segmented')
     expect(detailCardHeight(segmented, 2) - detailCardHeight(continuous, 2)).toBeCloseTo(12, 6)
@@ -50,11 +50,13 @@ describe('detailCardHeight', () => {
   it('is padding and a header when there are no limits to show', () => {
     expect(detailCardHeight(l, 0)).toBe(l.padding * 2 + l.headerHeight)
   })
-  it('reserves the original detailed header, value rows and history before hover',()=>{
-    const basic=detailCardLayout('standard'), detailed=detailCardLayout('standard',false,true)
-    expect(detailed.activityHeight).toBe(231)
-    expect(detailCardHeight(detailed,3)-detailCardHeight(basic,3)).toBe(17+3*21+14+231)
-    expect(cardBox('top',detailed,3,false,true).height).toBe(detailCardHeight(detailed,3)+20+27)
+  it('budgets the selected card content before hover', () => {
+    const basic = detailCardLayout('standard')
+    const chart = detailCardLayout('standard', new Set(['chart']))
+    const details = detailCardLayout('standard', new Set(['updated','value','chart','figures']))
+    expect(detailCardHeight(chart,3) - detailCardHeight(basic,3)).toBe(14 + chart.activityHeight)
+    expect(detailCardHeight(details,3) - detailCardHeight(chart,3)).toBe(17 + 3*21 + details.activityHeight - chart.activityHeight)
+    expect(cardBox('top',details,3,false,true).height).toBe(detailCardHeight(details,3)+20+27)
   })
 
   it('adds a row per limit plus the gaps between them', () => {

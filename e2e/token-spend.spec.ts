@@ -130,6 +130,19 @@ test('retained history stays visible after source files disappear',async({page})
   await expect(page.getByRole('heading',{name:'每日明细',exact:true})).toBeVisible()
 })
 
+test('a day with day-only imports leaves hourly totals unknown', async ({ page }) => {
+  await page.evaluate(() => {
+    const data = (window as any).spendTestData
+    data.records = [data.records[0], { ...data.records[1], agent: 'cursor', aggregateTiming: true }]
+  })
+  await page.getByRole('switch', { name: '读取本机 Token 用量记录' }).check()
+  await page.getByRole('button', { name: '今天', exact: true }).click()
+  const activeHours = page.locator('.spend-headline > div').filter({ hasText: '活跃小时' })
+  await expect(activeHours).toHaveText('活跃小时—', { timeout: 2000 })
+  await expect(page.getByText(/小时分布与活跃小时不可用/)).toBeVisible()
+  await expect(page.getByRole('heading', { name: '每日 Token', exact: true })).toBeVisible()
+})
+
 test('Harness source, cache buckets, model drilldown and unpriced amounts appear together', async ({page}) => {
   await page.evaluate(() => {
     const w = window as any, day = w.spendTestData.records[0].day

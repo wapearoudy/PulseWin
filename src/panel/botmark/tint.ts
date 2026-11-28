@@ -67,6 +67,11 @@ export function brandColour(providerId: string): string | null {
   return hex === undefined ? null : toCss(fromHex(hex))
 }
 
+export function brandColourHex(providerId: string): string | null {
+  const colour = BRAND[providerId.split('--account-')[0]]
+  return colour === undefined ? null : `#${colour.toString(16).padStart(6, '0')}`
+}
+
 /**
  * The wheel's size. **Prime on purpose** — `deal` walks the wheel with a stride
  * coprime to its size so every colour is visited once, and a prime size means

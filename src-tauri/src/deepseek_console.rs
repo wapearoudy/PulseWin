@@ -127,7 +127,7 @@ pub async fn deepseek_card_history(state: State<'_, crate::AppState>) -> Result<
     if token().is_none() { return Ok(crate::token_spend::card_history("unavailable", None)); }
     let history = read_deepseek_history(state, None).await?;
     Ok(crate::token_spend::card_history("ready", Some(crate::token_spend::console_snapshot(
-        "deepseek", "DeepSeek console", history.card_days(), history.card_notes(), history.checked_at().to_string()))))
+        "deepseek", "DeepSeek console", history.card_days(), history.currency.clone(), history.card_notes(), history.checked_at().to_string()))))
 }
 /// The Chromium browsers whose stored profile Windows will not let this
 /// process read.
@@ -334,6 +334,8 @@ pub struct Day {
     cache_read: u64,
     tokens: String,
     cost: Option<f64>,
+    #[serde(skip)]
+    missing_charge: bool,
     models: BTreeMap<String, u64>,
 }
 #[derive(Clone, Serialize)]
@@ -349,7 +351,16 @@ pub struct History {
 }
 impl History {
     pub(crate) fn card_days(&self) -> Vec<crate::token_spend::CardDay> {
-        self.days.iter().map(|day| crate::token_spend::CardDay{date:day.date.clone(),input:day.input,output:day.output,cache_write:0,cache_read:day.cache_read,cost:day.cost,models:day.models.clone()}).collect()
+        self.days.iter().map(|day| crate::token_spend::CardDay {
+            date: day.date.clone(),
+            input: day.input,
+            output: day.output,
+            cache_write: 0,
+            cache_read: day.cache_read,
+            cost: day.cost,
+            missing_charge: day.missing_charge,
+            models: day.models.clone(),
+        }).collect()
     }
     pub(crate) fn card_notes(&self) -> Vec<String> { self.notes.clone() }
     pub(crate) fn checked_at(&self) -> &str { &self.checked_at }
@@ -448,16 +459,14 @@ fn ledger(
         .or_else(|| purses.first());
     let currency = purse.and_then(|p| p["currency"].as_str().map(str::to_owned));
     if let Some(purse) = purse {
-        for day in days.values_mut() {
-            day.cost = Some(0.)
-        }
         for series in purse["series"].as_array().into_iter().flatten() {
             for bucket in series["buckets"].as_array().into_iter().flatten() {
-                if let (Some(day), Some(cost)) = (
-                    date(&bucket["time"]).and_then(|d| days.get_mut(&d)),
-                    figure(&bucket["cost"]),
-                ) {
-                    day.cost = Some(day.cost.unwrap_or(0.) + cost)
+                if let Some(day) = date(&bucket["time"]).and_then(|d| days.get_mut(&d)) {
+                    if let Some(cost) = figure(&bucket["cost"]) {
+                        day.cost = Some(day.cost.unwrap_or(0.) + cost);
+                    } else {
+                        day.missing_charge = true;
+                    }
                 }
             }
         }
@@ -761,5 +770,26 @@ mod tests {
         );
         let no_money = ledger(&amount, &json!({}), None, now);
         assert!(no_money.days.last().unwrap().cost.is_none())
+    }
+
+    #[test]
+    fn card_ledger_keeps_actual_charges_without_token_counts() {
+        let now = chrono::Local::now();
+        let stamp = chrono::Local
+            .from_local_datetime(&now.date_naive().and_hms_opt(0, 0, 0).unwrap())
+            .earliest().unwrap().timestamp();
+        let amount = json!({"series":[]});
+        let cost = json!({"data":[{"currency":"CNY","series":[{"buckets":[
+            {"time":stamp,"cost":2.35}, {"time":stamp,"cost":"unavailable"}
+        ]}]}]});
+        let history = ledger(&amount, &cost, None, now);
+        let snapshot = crate::token_spend::console_snapshot(
+            "deepseek", "DeepSeek console", history.card_days(), history.currency.clone(), history.card_notes(), history.checked_at().into());
+        assert_eq!(snapshot.records.len(), 1);
+        assert_eq!(snapshot.records[0].tally.total(), 0);
+        assert_eq!(snapshot.records[0].cost, Some(2.35));
+        assert_eq!(snapshot.records[0].cost_breakdown, None);
+        let payload = serde_json::to_value(snapshot).unwrap();
+        assert_eq!(payload["consoleBilling"], json!({"currency":"CNY","daysWithMissingCharges":[history.days.last().unwrap().date]}));
     }
 }

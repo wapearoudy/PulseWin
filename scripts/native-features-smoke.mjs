@@ -46,7 +46,8 @@ const prices=Object.fromEntries(['gpt-5.6','claude-sonnet-4.5'].map(model=>[mode
 await writeFile(path.join(cache,'prices-1.json'),JSON.stringify({version:3,fetched_at:Math.floor(now/1000),prices}))
 const environment=Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.startsWith('PULSEWIN_')))
 Object.assign(environment,{CRUSH_GLOBAL_DATA:path.join(home,'.crush'),HERMES_HOME:path.join(home,'.hermes'),GOOSE_PATH_ROOT:path.join(home,'.goose'),XDG_DATA_HOME:path.join(home,'.local/share'),DSH_HOME:path.join(home,'.dsh'),APPDATA:profile,LOCALAPPDATA:path.join(data,'smoke-local'),CODEX_HOME:path.join(home,'.codex'),CLAUDE_CONFIG_DIR:path.join(home,'.claude'),GEMINI_CLI_HOME:path.join(home,'.gemini'),KIMCHI_CODING_AGENT_DIR:path.join(home,'.config/kimchi/harness'),TOKSCALE_CONFIG_DIR:path.join(home,'.config/tokscale'),HINDSIGHT_HOME:path.join(home,'.hindsight'),WEBVIEW2_USER_DATA_FOLDER:path.join(profile,'WebView2'),WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:'--remote-debugging-port=19474 --remote-debugging-address=127.0.0.1'})
-const child=spawn(path.join(root,'src-tauri/target/release/pulsewin.exe'),['--settings','--native-smoke'],{cwd:root,windowsHide:true,stdio:['ignore','pipe','pipe'],env:environment})
+const executable = path.join(root, 'src-tauri/target/release/pulsewin.exe')
+const child=spawn(executable,['--settings','--native-smoke'],{cwd:root,windowsHide:true,stdio:['ignore','pipe','pipe'],env:environment})
 let browser,page,stderr='';child.stderr.on('data',b=>stderr=(stderr+b.toString()).slice(-4000))
 try{
  for(let i=0;i<60;i++){if(child.exitCode!==null)throw Error(`Native startup failed ${stderr}`);try{browser=await chromium.connectOverCDP('http://127.0.0.1:19474',{timeout:1000});break}catch{await new Promise(r=>setTimeout(r,250))}}
@@ -60,7 +61,16 @@ try{
   assert.equal(await page.getByLabel('账号显示名称',{exact:true}).count(),1,`Native ${name}: exactly one account identity`)
   assert.equal(await page.getByLabel('账号显示名称',{exact:true}).inputValue(),name)
  }
+ const titlebar = await page.locator('.settings-titlebar').boundingBox()
+ const firstGroup = await page.getByRole('heading',{name:'账号',exact:true}).boundingBox()
+ assert(titlebar && firstGroup && firstGroup.y >= titlebar.y + titlebar.height, 'The Settings title bar must leave the first group visible')
  await page.screenshot({path:path.join(root,'test-results/native-account-switch.png')})
+ const link = spawn(executable, ['--native-smoke', 'pulsewin://account/codex'], { cwd:root, windowsHide:true, stdio:'ignore', env:environment })
+ try {
+  await page.getByRole('heading',{name:'Codex',exact:true}).waitFor({timeout:4000})
+  await page.getByRole('button',{name:'后退',exact:true}).click()
+  await page.getByRole('heading',{name:'Grok',exact:true}).waitFor({timeout:4000})
+ } finally { link.kill() }
  assert.deepEqual((await invoke('get_preferences')).enabledProviders,[])
  assert.equal((await invoke('get_opencode_console_connection')).connected,false);await assert.rejects(invoke('get_opencode_console_history'),/启用 OpenCode Go/);await assert.rejects(invoke('finish_opencode_console_login'),/先打开控制台/);
  assert.equal((await invoke('get_deepseek_console_connection')).connected,false);await assert.rejects(invoke('get_deepseek_console_history'),/启用 DeepSeek/);await assert.rejects(invoke('finish_deepseek_console_login'),/先打开控制台/)
@@ -69,20 +79,25 @@ try{
  await page.getByRole('button',{name:'Token 消耗',exact:true}).click();await page.getByRole('switch',{name:'读取本机 Token 用量记录'}).click();await page.waitForFunction(()=>document.querySelector('[aria-label="读取本机 Token 用量记录"]')?.checked)
  await page.getByRole('button',{name:'月度 / 年度回顾'}).waitFor({timeout:15000})
  assert.equal(await page.locator('.spend-sources').getByText('尚未移植',{exact:false}).count(),0)
- assert.equal(await page.locator('.spend-sources').getByText('Grok Build',{exact:false}).count(),0)
+ assert.equal(await page.locator('.spend-sources > div').getByText('Grok Build',{exact:true}).count(),1)
  const scan=await page.evaluate(async()=>{const id=await window.__TAURI_INTERNALS__.invoke('spend_begin_scan',{enabled:true,force:false});for(let i=0;i<100;i++){const r=await window.__TAURI_INTERNALS__.invoke('spend_get_scan',{scanId:id});if(r.status==='completed')return r;if(r.status==='error')throw Error(r.error);await new Promise(r=>setTimeout(r,100))}throw Error('scan timeout')})
- assert.equal(scan.snapshot.sources.length,41);assert(['roocode','kilocode','cline','cherrystudio','commandcode','opencodereview','zcode','unsloth','mux','codebuff','jcode','augment','gjc','junie','fx','lmstudio','reasonix'].every(id=>scan.snapshot.sources.some(source=>source.id===id)));assert.equal(scan.snapshot.records.length,13);assert(scan.snapshot.records.every(r=>r.sourceTimestamp>1e9&&r.sourceTimestamp<1e10));assert.deepEqual(scan.snapshot.notes,[]);assert.equal((await invoke('spend_kept_snapshot')).records.length,13)
+ const sources = new Set(scan.snapshot.sources.map(source => source.id))
+ assert.equal(sources.size,54)
+ for (const id of ['roocode','kilocode','cline','cherrystudio','commandcode','opencodereview','zcode','unsloth','mux','codebuff','jcode','augment','gjc','junie','fx','lmstudio','reasonix','grok','devin-cli','codebuddy','workbuddy','antigravity-cli','antigravity-ide','devin-desktop','trae','warp','copilot','senpi','prime-agent','freebuff']) {
+  assert(sources.has(id), `Expected registered Token source: ${id}`)
+ }
+ assert.equal(scan.snapshot.records.length,13);assert(scan.snapshot.records.every(r=>r.sourceTimestamp>1e9&&r.sourceTimestamp<1e10));assert.deepEqual(scan.snapshot.notes,[]);assert.equal((await invoke('spend_kept_snapshot')).records.length,13)
  const codex=scan.snapshot.records.find(r=>r.agent==='codex');assert.equal(codex.replyTiming.seconds,4);assert.equal(codex.replyTiming.firstTokenSeconds,1.5)
  const signals=await invoke('get_codex_signals',{span:'month'});assert.equal(signals.sessions,1);assert.equal(signals.judgedSessions,1);assert.equal(signals.models[0].hits,1);assert.equal(signals.models[0].suspicious,false)
  const codexCache=await invoke('get_prompt_cache',{provider:'codex'}),claudeCache=await invoke('get_prompt_cache',{provider:'claude-code'});assert.equal(codexCache.live.length,1);assert.equal(codexCache.live[0].lifetime,1800);assert.equal(claudeCache.live[0].lifetime,3600)
  await page.getByRole('complementary',{name:'设置导航'}).getByRole('button',{name:'Codex',exact:true}).click();await page.getByRole('region',{name:'Codex 本地分析'}).getByText('样本不足',{exact:true}).waitFor();await page.screenshot({path:path.join(root,'test-results/native-local-evidence.png')})
- await page.getByRole('button',{name:'Token 消耗',exact:true}).click();await page.getByRole('button',{name:'月度 / 年度回顾'}).click();const recap=page.getByRole('region',{name:'月度与年度回顾'});await recap.getByRole('img').waitFor()
+ await page.getByRole('button',{name:'Token 消耗',exact:true}).click();await page.getByRole('button',{name:'月度 / 年度回顾'}).click();const recap=page.getByRole('region',{name:'工作回顾'});await recap.getByRole('img').waitFor()
  const png=await recap.getByRole('img').getAttribute('src');const exported=await invoke('recap_export',{cards:[{name:'pulse-recap-native-poster.png',png:png.split(',')[1]}],action:'smoke'});assert.equal(exported,'saved')
  const bytes=await readFile(path.join(data,'pulse-recap-native-poster.png'));assert.equal(bytes.readUInt32BE(16),1080);assert.equal(bytes.readUInt32BE(20),1920);await writeFile(path.join(root,'test-results/native-recap-poster.png'),bytes)
  const prefs=await invoke('get_preferences');await invoke('save_preferences',{value:{...prefs,recapMonthlyPrice:20,recapHidesProjects:true,spendActivityView:'weekly'}})
  const persisted=JSON.parse(await readFile(path.join(data,'preferences.json'),'utf8'));assert.equal(persisted.recapMonthlyPrice,20);assert.equal(persisted.recapHidesProjects,true);assert.equal(persisted.spendActivityView,'weekly')
  const update=await invoke('get_update_status');await invoke('save_update_settings',{settings:{...update.settings,automatic:false,backupAutomatic:false,notesLanguage:'ja'}});const saved=JSON.parse(await readFile(path.join(data,'updates.json'),'utf8'));assert.equal(saved.backupAutomatic,false);assert.equal(saved.notesLanguage,'ja')
  await invoke('save_preferences',{value:{...prefs,tokenSpendEnabled:false}});assert.equal(await invoke('spend_kept_snapshot'),null);await assert.rejects(invoke('get_codex_signals',{span:'month'}),/本机 Token/);await assert.rejects(invoke('get_prompt_cache',{provider:'codex'}),/未开启/)
- const result={passed:true,profile,testedAt:new Date().toISOString(),sources:scan.snapshot.sources.map(s=>({id:s.id,records:s.records})),checks:['account switches remove prior identities and drafts','isolated fixture-only home and cache','opt-in and opt-out native guards','forty-one registered token sources with thirteen fixture-backed reader records including Kiro/Kimi and four SQLite/legacy stores','counter timestamps in seconds','Codex measured speed and TTFT','Codex evidence and insufficient-sample threshold','Claude and Codex cache TTL','full-size real canvas PNG export through native decoder and atomic writer','recap and activity preference persistence','backup and release-note language persistence'],notRun:['real account billing','clipboard and interactive file dialogs','official status outage delivery','full original recap visual parity','online backup assets blocked by public API rate limit']}
+ const result={passed:true,profile,testedAt:new Date().toISOString(),sources:scan.snapshot.sources.map(s=>({id:s.id,records:s.records})),checks:['account switches remove prior identities and drafts','isolated fixture-only home and cache','opt-in and opt-out native guards','54 registered Token sources and 13 fixture-backed usage records','counter timestamps in seconds','Codex measured speed and TTFT','Codex evidence and insufficient-sample threshold','Claude and Codex cache TTL','full-size real canvas PNG export through native decoder and atomic writer','recap and activity preference persistence','backup and release-note language persistence'],notRun:['real account billing','clipboard and interactive file dialogs','official status outage delivery','full original recap visual parity','online backup assets blocked by public API rate limit']}
  await writeFile(path.join(root,'test-results/native-features-smoke.json'),JSON.stringify(result,null,2));console.log('PASS: native feature IPC, fixture counters, opt-out, PNG export and settings persistence')
 }catch(e){await page?.screenshot({path:path.join(root,'test-results/native-features-failure.png')}).catch(()=>undefined);throw e}finally{await browser?.close().catch(()=>undefined);child.kill()}

@@ -10,14 +10,19 @@ export interface SpendRecord {
   aggregateTiming?: boolean
   cost: number | null; costBreakdown: [number, number, number, number] | null
   cacheSavings?:number|null
-  replyTiming?:{outputTokens:number;seconds:number;replies:number;firstTokenSeconds:number;firstTokenTurns:number}|null
+  replyTiming?:{outputTokens:number;seconds:number;replies:number;firstTokenSeconds:number;firstTokenTurns:number;finishedAt?:number|null}|null
   exactTally?: {input:string;output:string;cacheWrite:string;cacheRead:string}
   exactUnclassifiedTokens?:string
 }
 export interface SpendSource { id: string; name: string; status: 'counted' | 'no-data' | 'not-detected'; files: number; cachedFiles: number; records: number; retainedRecords?:number; origin?: 'native' | 'export'; roots?: string[] }
+export interface ConsoleBilling {
+  currency: string | null
+  daysWithMissingCharges: string[]
+}
 export interface SpendSnapshot {
   scannedAt: string; records: SpendRecord[]; sources: SpendSource[]; notes: string[]
-  pricesAt: string | null; pricingStatus: 'cached' | 'fresh' | 'stale' | 'unavailable'
+  pricesAt: string | null; pricingStatus: 'cached' | 'fresh' | 'stale' | 'unavailable' | 'console'
+  consoleBilling?: ConsoleBilling
 }
 export interface SpendScan {
   id: string; status: 'running' | 'completed' | 'cancelled' | 'error'; currentSource: string | null

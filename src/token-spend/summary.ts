@@ -65,10 +65,14 @@ export function spanIsOneDay(span: SpendSpan, custom?: CustomDays | null): boole
  */
 export function spanDayList(bounds: SpanBounds, now = new Date(), records: readonly SpendRecord[] = []): string[] {
   const today = startOfDay(now)
-  const newest = records.reduce((last, record) => record.day > last ? record.day : last, '')
+  let oldest = '', newest = ''
+  for (const { day } of records) {
+    if (!oldest || day < oldest) oldest = day
+    if (day > newest) newest = day
+  }
   const newestDay = parseDay(newest)
   const from = bounds.from === null ? null : parseDay(bounds.from)
-  const first = from ?? newestDay ?? today
+  const first = from ?? parseDay(oldest) ?? today
   const last = bounds.until !== null ? addDays(parseDay(bounds.until) ?? today, -1) : newestDay && newestDay > today ? newestDay : today
   const end = last < first ? first : last
   // A decade of history keeps its most recent days, not its oldest.

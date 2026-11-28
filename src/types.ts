@@ -12,6 +12,7 @@ export interface UsageWindow {
   /** RFC3339 timestamp of the next reset. */
   resetsAt: string | null
   detail: string | null
+  quotaAmounts?: { used: number; limit: number }
 }
 
 /**
@@ -38,6 +39,7 @@ export interface UsageMetric {
 }
 
 export interface ProviderUsage {
+  resetCredits?: { available: number; nextExpiry: string | null }
   stale?: boolean
   source?: string | null
   creditRemaining?: { amount: number; currency: string } | null

@@ -509,6 +509,7 @@ fn usage_from(bytes: &[u8], now: i64) -> Result<ProviderUsage, String> {
                     .and_then(Value::as_str)
                     .and_then(rfc3339),
                 detail: Some(amounts.detail("")),
+                quota_amounts: None,
             });
         }
     }
@@ -592,6 +593,7 @@ fn bucket_window(bucket: &Value, id: &str, kind: WindowKind, now: i64) -> Option
         percent_used: Some(amounts.percent),
         resets_at: None,
         detail: Some(detail),
+        quota_amounts: None,
     })
 }
 
@@ -660,6 +662,7 @@ fn token_windows(bucket: &Value, parent: &str, now: i64) -> Vec<UsageWindow> {
             percent_used: Some(amounts.percent),
             resets_at: reset_at,
             detail: None,
+            quota_amounts: None,
         });
     }
 

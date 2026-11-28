@@ -8,6 +8,17 @@ pub enum WindowKind { #[default] Other, Limit, Balance, TopUp, Credits, SharedCr
 #[serde(rename_all = "camelCase")]
 pub struct CreditRemaining { pub amount: f64, pub currency: String }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct QuotaAmounts { pub used: f64, pub limit: f64 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResetCredits {
+    pub available: u64,
+    pub next_expiry: Option<String>,
+}
+
 /// One quota window within a provider, e.g. Claude's 5-hour window or a weekly window.
 ///
 /// `percent_used` is 0..=100. Pulse's original UI is built around "how much is LEFT",
@@ -36,6 +47,9 @@ pub struct UsageWindow {
     pub resets_at: Option<String>,
     /// Free-form secondary line, e.g. "1,234 / 5,000 requests".
     pub detail: Option<String>,
+    /// Exact amounts derived only from the service's reported counters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quota_amounts: Option<QuotaAmounts>,
 }
 
 impl UsageWindow {
@@ -64,6 +78,7 @@ impl UsageWindow {
             percent_used,
             resets_at: None,
             detail: None,
+            quota_amounts: None,
         }
     }
 
@@ -89,6 +104,13 @@ impl UsageWindow {
 
     pub fn with_detail(mut self, detail: Option<String>) -> Self {
         self.detail = detail;
+        self
+    }
+
+    pub fn with_quota_amounts(mut self, used: f64, limit: f64) -> Self {
+        if used.is_finite() && used >= 0.0 && limit.is_finite() && limit > 0.0 {
+            self.quota_amounts = Some(QuotaAmounts { used, limit });
+        }
         self
     }
 }
@@ -134,6 +156,9 @@ pub struct ProviderUsage {
     pub source: Option<String>,
     #[serde(default)]
     pub credit_remaining: Option<CreditRemaining>,
+    /// One-off early reset credits read by the primary Codex CLI.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reset_credits: Option<ResetCredits>,
     pub id: String,
     pub name: String,
     /// Subscription tier as reported by the provider, e.g. "Max", "Pro".
@@ -166,7 +191,7 @@ pub struct ProviderUsage {
 impl ProviderUsage {
     pub fn ok(id: &str, name: &str, windows: Vec<UsageWindow>) -> Self {
         Self {
-            stale: false, source: None, credit_remaining: None,
+            stale: false, source: None, credit_remaining: None, reset_credits: None,
             id: id.to_string(),
             name: name.to_string(),
             plan: None,
@@ -181,7 +206,7 @@ impl ProviderUsage {
 
     pub fn failed(id: &str, name: &str, error: impl Into<String>) -> Self {
         Self {
-            stale: false, source: None, credit_remaining: None,
+            stale: false, source: None, credit_remaining: None, reset_credits: None,
             id: id.to_string(),
             name: name.to_string(),
             plan: None,
@@ -201,7 +226,7 @@ impl ProviderUsage {
     /// twenty-six requests at services the reader does not use.
     pub fn unconfigured(id: &str, name: &str, reason: impl Into<String>) -> Self {
         Self {
-            stale: false, source: None, credit_remaining: None,
+            stale: false, source: None, credit_remaining: None, reset_credits: None,
             id: id.to_string(),
             name: name.to_string(),
             plan: None,

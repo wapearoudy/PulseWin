@@ -79,28 +79,11 @@ A rail capsule fused to one screen edge — **left, right or top**. Every explic
   a ring that has gone quiet is the one being looked for — and its card says what went wrong and
   how to open its connection settings.
 
-## BotMark
+## Ring robots
 
-`src/panel/botmark/`. The mascot that stands where a provider's logo stood.
+Each account can replace its provider mark with one of 23 [Open Bot Avatar](https://github.com/DominikScholz/open-bot-avatar) figures, or let PulseWin choose a different figure for neighbouring robots. The flat and fluffy finishes use the project's MIT-licensed renderer. Fluffy uses WebGL2 and the preview explains when it falls back to flat.
 
-- **18 bodies and 25 eye expressions**, ported verbatim from the original's own `bot-data.json`
-  (39 states in all). The file is copied unchanged: transcribing a drawing by hand would have been a
-  paraphrase of it.
-- **Five moods** — idle, working, fetching, spent, unavailable — resolved in `mood.ts` from facts
-  the rail already has, each mapped onto one of the original's states. Busy outranks spent: a spent
-  limit will still be true in a minute, a CLI turning is happening now. This is the only place a
-  Pulse fact becomes a bot state — if the mark is doing something, a reading somewhere says why.
-- **Idle and working animation**: breath, rock, blink, a change of expression and a gaze that
-  follows the pointer, written straight onto the SVG nodes from one `requestAnimationFrame` loop per
-  mark rather than through React state. This runs inside a ring that is already being repainted, and
-  a re-render per frame per ring would be the panel's whole budget.
-- **Colour is identity, never status.** `botmark/tint.ts` is a literal port of the original's brand
-  table, and providers whose logo is monochrome by design are dealt a colour from a wheel so that no
-  two neighbouring marks look alike. How close a limit is stays the ring's job (`panel/tint.ts`).
-- Original per-persona playlists, spring state, face fitting, solid yaw, task morphs, front/back
-  particle ribbons, random gestures and full reset celebrations are implemented. Completion beats
-  require witnessed work ending, and reset celebrations require a fresh reset event. Reduced-motion
-  mode shows a settled frame. Formula and timing tests do not prove frame-by-frame visual identity.
+Robots show working, refreshing, spent and unavailable states. A fresh reset or witnessed completion plays one gesture. Collapsed rails and reduced-motion mode use still poses. Profiles saved with the older robot keep their enablement and colours and use automatic figures unless a new figure is chosen.
 
 ## The settings window
 
@@ -261,8 +244,8 @@ order a provider tries them:
 
 1. **The environment.** `PULSEWIN_<ID>_KEY`, `PULSEWIN_<ID>_TOKEN` or `PULSEWIN_<ID>_COOKIE`, with
    the id upper-cased and `-` written as `_` — `PULSEWIN_CLAUDE_CODE_TOKEN`. The generic
-   `PULSEWIN_KEY` and `PULSEWIN_TOKEN` are a fallback for any provider. An exported variable wins,
-   because someone who exported one meant that one to be used.
+   `PULSEWIN_KEY` and `PULSEWIN_TOKEN` are fallbacks where supported. MiniMax uses
+   `PULSEWIN_MINIMAX_KEY` for the international site and `PULSEWIN_MINIMAX_CN_KEY` for mainland China.
 2. **`%APPDATA%\PulseWin\<id>.json`** — the current-user encrypted credential envelope written by
    Settings. Legacy plaintext files are migrated when read.
 3. **The tool's own login file**, where the tool keeps one. PulseWin reads those files and never
