@@ -1,6 +1,6 @@
 {
  "version": "0.1.22",
- "status": "release-verified",
+ "status": "published",
  "authorization": "提交发布（2026-11-28）",
  "changes": [
   "Recover an assistant frame clipped by the Windows window bounds and preserve the placement.",
@@ -11,9 +11,20 @@
   "Keep MiniMax site credentials and readings separate. Route account links to a running app."
  ],
  "tests": {
-  "frontend": { "passed": 299, "files": 30 },
-  "browser": { "passed": 92, "note": "Windows Edge with simulated IPC." },
-  "rust": { "passed": 1324, "failed": 0, "ignored": 2, "note": "cargo test --all-targets on Windows." },
+  "frontend": {
+   "passed": 299,
+   "files": 30
+  },
+  "browser": {
+   "passed": 92,
+   "note": "Windows Edge with simulated IPC."
+  },
+  "rust": {
+   "passed": 1324,
+   "failed": 0,
+   "ignored": 2,
+   "note": "cargo test --all-targets on Windows."
+  },
   "windowsRelease": "PASS: TypeScript and Vite build, x64 NSIS and MSI signed with the key trusted by installed clients, native assistant and IPC suites, Antigravity 2.36 process recognition with fixture CLI fallback, and read-only CLI checks.",
   "updater": "PASS: isolated 0.1.21 downloaded the actual signed 0.1.22 NSIS installer from a test feed and verified the signature and bound version. Synthetic tampered packages and forged versions were rejected. No installer executed."
  },
@@ -21,5 +32,54 @@
  "limitations": [
   "Actual console billing, the signed-in agy account's quota and Codex reset credits were exercised with fixtures. These require signed-in accounts for live validation.",
   "Pending original-Pulse and Windows acceptance items remain in release-progress.json."
- ]
+ ],
+ "releaseCommit": "a96b4ac6383523a8f80ddeeef5d75235887cbcdc",
+ "publicVerification": {
+  "releaseId": 461253715,
+  "publishedAt": "2026-11-28T02:49:59Z",
+  "passed": true,
+  "testedAt": "2026-11-28T02:50:37.226Z",
+  "repository": "wapearoudy/PulseWin",
+  "release": "https://github.com/wapearoudy/PulseWin/releases/tag/v0.1.22",
+  "version": "0.1.22",
+  "anonymousAssets": [
+   {
+    "name": "latest.json",
+    "bytes": 2830,
+    "sha256": "0649c9cf0f076059169e0b79deaf918da268a05ea1c4e5f28e76585a402a18f6"
+   },
+   {
+    "name": "PulseWin_0.1.22_x64-setup.exe",
+    "bytes": 3614737,
+    "sha256": "698325fc4f900202c40accc98c6874749d8ad460df57396e33049032bce46a12"
+   },
+   {
+    "name": "PulseWin_0.1.22_x64-setup.exe.sig",
+    "bytes": 440,
+    "sha256": "5017679a3665590ee07eca7fd3bf1ebcf9d79f6af68af5d1832c06e2ebf4edd0"
+   },
+   {
+    "name": "PulseWin_0.1.22_x64_en-US.msi",
+    "bytes": 5709824,
+    "sha256": "a609fbd252f467bea6e5939ddcf4c0bcde4949bfe6a78a09a8b5a48ad1564c94"
+   },
+   {
+    "name": "PulseWin_0.1.22_x64_en-US.msi.sig",
+    "bytes": 440,
+    "sha256": "e4aaa2737a3d583e74c88d1f37381ff56d1d9f3274c9f58de369f96dbda040bc"
+   }
+  ],
+  "nativeCheck": {
+   "phase": "current",
+   "source": "https://github.com/wapearoudy/PulseWin/releases/latest/download/latest.json",
+   "currentVersion": "0.1.22"
+  },
+  "installationExecuted": false,
+  "signedUpgradeDownload": {
+   "from": "0.1.21",
+   "to": "0.1.22",
+   "passed": true,
+   "actualPublishedPackage": true
+  }
+ }
 }

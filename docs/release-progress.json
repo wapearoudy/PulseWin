@@ -1,10 +1,10 @@
 {
  "version": "0.1.22",
- "status": "release-preparation",
- "releaseHold": false,
- "reason": "The user authorized publication of the verified Windows changes for 0.1.22 on 2026-11-28. The remaining original-Pulse and real-account acceptance items stay open.",
+ "status": "interim-published",
+ "releaseHold": true,
+ "reason": "The user-authorized 0.1.22 incremental release is public. The parity hold applies to the remaining original-Pulse and real-account acceptance items.",
  "upstream": "1.13.0",
- "publishedVersion": "0.1.21",
+ "publishedVersion": "0.1.22",
  "implementedVerified": [
   "Light assistant surfaces, rings and detail cards",
   "Horizontal floating, bottom docking and orientation-aware detail cards",
@@ -65,13 +65,13 @@
   "A detailed card longer than its bubble scrolls with its title held at the top; settings groups carry a small symbol; the About pane gained Star and afdian entries plus the one-time request after a fortnight of real use."
  ],
  "verification": {
-  "rust": "1310 passed, 0 failed, 2 explicitly ignored real-account checks (1312 total) on this Windows machine, including the new DimAgent, MiniMax-merge, Antigravity-CLI, Xiaomi balance, extension icon, ego lite, renewal-failure, Z.ai re-read, Command Code, star-request and activity tests.",
-  "frontendUnit": "287 passed in 28 files; tsc --noEmit and vite build clean.",
-  "browser": "81 passed in the full browser suite on the 0.1.20 working tree; browser IPC responses are synthetic.",
-  "native": "The 0.1.21 artifact was built and signed on GitHub Actions windows-latest (.github/workflows/release-windows.yml run 45032638207 at 45e85c7): cargo test --all-targets passed with 2 explicitly ignored, 28 frontend files passed, tsc --noEmit clean, and the build produced a signed NSIS setup and MSI. No installer was executed and no isolated native updater run was performed.",
-  "localUpdateFeed": "latest.json inside the published v0.1.21 release reports version 0.1.21 with NSIS and MSI entries, so installed clients following the GitHub latest.json see 0.1.21.",
-  "buildBlocker": "None for 0.1.19. The updater signing key is a repository secret (TAURI_SIGNING_PRIVATE_KEY, key id 218D1940E2C4F3DC) and .github/workflows/release-windows.yml builds, signs and publishes.",
-  "publicRelease": "PASS for the published 0.1.21 release: the release is public (not a draft or prerelease) with five uploaded assets, and the published latest.json reports 0.1.21 with three platform entries and signatures. Asset digests were read from the GitHub API rather than compared against a local rebuild, and the signed old-client upgrade download was not re-run for this version.",
+  "rust": "1324 passed, 0 failed and 2 real-account checks ignored in cargo test --all-targets on Windows.",
+  "frontendUnit": "299 passed in 30 files. TypeScript and Vite production build passed.",
+  "browser": "92 passed in the full Windows Edge suite with simulated application IPC.",
+  "native": "The 0.1.22 release binary passed Windows WebView2 assistant, settings, CLI and Antigravity discovery tests, including rendering the fluffy avatar and reading fixture quota through the default agy path.",
+  "localUpdateFeed": "The local and GitHub update feeds point to 0.1.22. The real updater verified the signature and bound version of the 0.1.22 package through both a local feed and the public GitHub feed.",
+  "buildBlocker": "None for 0.1.22. The x64 NSIS and MSI installers were built locally on Windows and signed with the updater key trusted by installed clients.",
+  "publicRelease": "PASS: release v0.1.22 is public and latest. Five anonymous downloads matched their local SHA-256 hashes. An isolated 0.1.21 client verified the actual published package and preferences stayed intact. See release-0.1.22.json.",
   "externalLimitations": [
    "44 status pages verified against fixtures only; gemini-cli, command-code and hugging-face timed out from this network (curl times out too) and stay unverified",
    "Exchange-rate endpoint, offline and 429 behaviour not exercised against the real service",
@@ -79,10 +79,10 @@
    "Real Harness read-only integrity check failed because source logs changed during its 57.8-second scan; no stable live-source acceptance",
    "Raycast and Sketchybar status-line helpers are macOS-only and have no Windows equivalent; the developer kit exports PowerShell and POSIX status-line helpers with the same read-only commands."
   ],
-  "windows": "PASS on GitHub Actions windows-latest run 45032638207 at 45e85c7: cargo test --all-targets 1310 passed, 0 failed, 2 ignored; vitest 28 files passed; tsc --noEmit clean; signed NSIS and MSI produced."
+  "windows": "PASS for the locally built 0.1.22 release candidate and for the published update download. No installer was executed."
  },
  "pending": [
-  "Execute an installer and upgrade one installed client to 0.1.19 to accept the install and in-app update paths; neither was exercised for this release.",
+  "Verify installation and restart on an installed client. The isolated 0.1.21 to 0.1.22 download and signature check passed.",
   "Acceptance of the 44 official status pages against real responses; outage notification needs a real outage",
   "Acceptance of hide-from-capture under real Windows capture and recording tools",
   "Exchange-rate endpoint returned 166 rates live on 2026-10-31; offline fallback and 429 behaviour remain unexercised",
@@ -96,10 +96,9 @@
   "Window starter real CLI send and Windows no-window launch acceptance",
   "User extensions acceptance with a real installed extension program",
   "Stable real Harness source integrity acceptance",
-  "Live acceptance of the 1.12.5-1.13.0 ports remains: a real `dim` CLI account, a real Xiaomi prepaid account, a machine with only Gemini.app for the agy route, a real multi-group Antigravity account, a real extension shipping a PNG icon and a real Command Code turn are needed to accept them beyond fixtures.",
-  "Re-run the signed old-client update download against the published 0.1.20 assets and run the 0.1.20 native smoke suites on an installed build"
+  "Live acceptance of the 1.12.5-1.13.0 ports remains: a real `dim` CLI account, a real Xiaomi prepaid account, a machine with only Gemini.app for the agy route, a real multi-group Antigravity account, a real extension shipping a PNG icon and a real Command Code turn are needed to accept them beyond fixtures."
  ],
- "checkpointDate": "2026-11-22",
+ "checkpointDate": "2026-11-28",
  "reference": "Pulse v1.13.0 tag objects, alongside the unchanged old checkout",
  "implementedPartial": [
   "DeepSeek independent encrypted console login, 30-day actual billing and 60-second cache; interactive live read passed, browser renewal/import and the console ledger card are implemented, live detailed-card acceptance pending",
