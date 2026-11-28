@@ -454,7 +454,7 @@ fn environment(binary: &Path) -> Vec<(OsString, OsString)> {
 
     crate::preferences::load()
         .network_proxy
-        .process_environment(environment)
+        .agy_process_environment(environment)
 }
 
 /// Whether this machine has an `agy` at all, without asking it anything. The

@@ -78,8 +78,8 @@ export function detailCardLayout(size: PanelSizeName = 'standard', parts: Readon
  *
  * `metrics` are an extension's figures, which are not limits and have no bar:
  * each is one line of text, and `trends` of them carry the series behind the
- * figure as well. Nothing else changes size — the frame is still worked out
- * before a card opens, so the numbers here are the whole story.
+ * figure as well. This reserves space for the selected optional sections
+ * before a card opens. The rendered bubble only needs space for its contents.
  */
 export function detailCardHeight(layout: DetailCardLayout, rows: number, metrics = 0, trends = 0): number {
   const rowHeight =

@@ -1,8 +1,8 @@
 {
- "version": "0.1.23",
- "status": "interim-published",
- "releaseHold": true,
- "reason": "The user-authorized 0.1.23 incremental release is public. The parity hold applies to the remaining original-Pulse and real-account acceptance items.",
+ "version": "0.1.24",
+ "status": "release-preparation",
+ "releaseHold": false,
+ "reason": "The user authorized 0.1.24 after live Antigravity acceptance. The system proxy regression check and card layout tests passed. Remaining parity and real-account checks stay open.",
  "upstream": "1.13.0",
  "publishedVersion": "0.1.23",
  "implementedVerified": [
@@ -64,15 +64,17 @@
   "Devin usage that comes through Oh My Pi is folded into the Oh My Pi card instead of being counted twice.",
   "A detailed card longer than its bubble scrolls with its title held at the top; settings groups carry a small symbol; the About pane gained Star and afdian entries plus the one-time request after a fortnight of real use.",
   "Account settings group monitored and available providers, expose connection status, and move usage and connection details up. Tray shows scoped quota bars and reset status.",
-  "Antigravity 2.36 on Windows returned the same Gemini and Claude/GPT five-hour and weekly allowances as the official agy 1.5.18 CLI at startup and on a timed refresh. The model page stayed closed."
+  "Antigravity 2.36 on Windows returned the same Gemini and Claude/GPT five-hour and weekly allowances as the official agy 1.5.18 CLI at startup and on a timed refresh. The model page stayed closed.",
+  "Antigravity agy quota queries follow the enabled Windows system proxy without inherited proxy variables or a PulseWin manual endpoint. Two real automatic refreshes matched all four official quota readings on this machine.",
+  "Assistant cards size to visible content, hide empty or failed optional history, and preserve the native frame, long-card scrolling and quota retry actions."
  ],
  "verification": {
-  "rust": "1331 passed, 0 failed and 2 real-account checks ignored in cargo test --locked --all-targets on Windows.",
+  "rust": "1333 passed, 0 failed, and 2 real-account cases ignored in cargo test --locked --all-targets on Windows, using isolated PulseWin preferences.",
   "frontendUnit": "299 passed in 30 files. TypeScript and Vite production build passed.",
-  "browser": "94 passed in the full Windows Edge suite with simulated application IPC.",
-  "native": "The 0.1.23 release binary passed native WebView2 assistant and read-only CLI tests. The live Antigravity 2.36 quota test matched the official CLI twice with no manual refresh.",
-  "localUpdateFeed": "The local and GitHub feeds point to 0.1.23. The real updater verified the signature and bound version of the 0.1.23 package using both feeds.",
-  "buildBlocker": "None for 0.1.23. x64 NSIS and MSI packages were built and signed on Windows.",
+  "browser": "95 passed in the full Windows Edge suite with simulated IPC.",
+  "native": "0.1.24 passed native WebView2 and read-only CLI checks, plus two real Antigravity quota refreshes with Windows system proxy and no inherited proxy environment.",
+  "localUpdateFeed": "An isolated 0.1.21 client verified the actual signed 0.1.24 NSIS package in a local test feed.",
+  "buildBlocker": "None for 0.1.24. x64 NSIS and MSI packages were signed on Windows.",
   "publicRelease": "PASS. v0.1.23 is public and latest. Five anonymous downloads matched the local SHA-256 hashes. An isolated 0.1.21 client verified the actual published package and retained its preferences. See release-0.1.23.json.",
   "externalLimitations": [
    "44 status pages verified against fixtures only; gemini-cli, command-code and hugging-face timed out from this network (curl times out too) and stay unverified",
@@ -81,10 +83,10 @@
    "Real Harness read-only integrity check failed because source logs changed during its 57.8-second scan; no stable live-source acceptance",
    "Raycast and Sketchybar status-line helpers are macOS-only and have no Windows equivalent; the developer kit exports PowerShell and POSIX status-line helpers with the same read-only commands."
   ],
-  "windows": "PASS for the locally built 0.1.23 release and for the published update download. No installer was executed."
+  "windows": "PASS for the 0.1.24 Windows candidate. The native updater verified a signed package without executing an installer."
  },
  "pending": [
-  "Verify installation and restart on an installed client. The isolated 0.1.21 to 0.1.23 download and signature check passed via both the local and public feeds.",
+  "Verify installation and restart on an installed client. The actual signed 0.1.24 installer passed the download and signature check from an isolated 0.1.21 client.",
   "Acceptance of the 44 official status pages against real responses; outage notification needs a real outage",
   "Acceptance of hide-from-capture under real Windows capture and recording tools",
   "Exchange-rate endpoint returned 166 rates live on 2026-10-31; offline fallback and 429 behaviour remain unexercised",
@@ -109,5 +111,5 @@
   "Prompt-cache hover card is implemented on the Token split and DeepSeek/OpenCode console ledgers feed detailed cards; live per-model TTFT and real console-detail acceptance remain pending",
   "OpenCode encrypted independent login, workspace resolution and adaptive pager; 20,364 unique live Go IDs, zero pending ranges, restart recovery and account disable cancellation passed. Renewal and the console ledger card are implemented, live detailed-card acceptance pending."
  ],
- "interimReleaseAuthorization": "提交发版（2026-11-28）"
+ "interimReleaseAuthorization": "验证通过后发版（2026-11-28）"
 }

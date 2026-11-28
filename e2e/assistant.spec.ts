@@ -273,8 +273,99 @@ test('forecast is opt-in, evidence-based and stays inside the card',async({page}
   expect(row.y+row.height).toBeLessThanOrEqual(card.y+card.height-10)
   const count=await page.evaluate(()=>(window as any).testCommands.filter((c:any)=>c.cmd==='set_panel_metrics').length)
   await page.evaluate(()=>(window as any).testEmit('hover-changed','entry:claude-code'))
-  await expect(page.locator('.card__forecast')).toHaveText('')
+  await expect(page.locator('.card__forecast')).toHaveCount(0)
   expect(await page.evaluate(()=>(window as any).testCommands.filter((c:any)=>c.cmd==='set_panel_metrics').length)).toBe(count)
+})
+
+test('detail cards pack quota rows and reserve space only for visible history', async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 1100 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.evaluate(() => {
+    const w = window as any
+    const invoke = w.__TAURI_INTERNALS__.invoke
+    w.__TAURI_INTERNALS__.invoke = (command: string, args: unknown) => {
+      if (command === 'opencode_card_history') {
+        return new Promise(resolve => {
+          w.finishConsoleHistory = () => resolve({ status: 'ready', snapshot: {
+            scannedAt: new Date().toISOString(), records: [], sources: [],
+            notes: [], pricesAt: null, pricingStatus: 'console',
+          } })
+        })
+      }
+      if (command === 'deepseek_card_history') return Promise.reject(new Error('Ledger unavailable'))
+      if (command !== 'spend_card_history') return invoke(command, args)
+      const now = new Date()
+      return Promise.resolve({ status: 'ready', snapshot: {
+        scannedAt: now.toISOString(),
+        records: [{
+          agent: 'antigravity', model: 'gemini', modelName: 'Gemini test model',
+          day: now.toLocaleDateString('sv-SE'), hour: now.getHours(), session: 'synthetic',
+          project: null, tally: { input: 1000, output: 42, cacheWrite: 0, cacheRead: 0 },
+          unclassifiedTokens: 0, cost: 0.5, costBreakdown: [0.4, 0.1, 0, 0],
+        }],
+        sources: [], notes: [], pricesAt: null, pricingStatus: 'unavailable',
+      } })
+    }
+    const now = Date.now()
+    const resetAt = (seconds: number) => new Date(now + seconds * 1000).toISOString()
+    const quota = (label: string, percentUsed: number, scope?: string, remainingSeconds?: number, windowSeconds?: number) =>
+      ({ label, scope, percentUsed, windowSeconds, resetsAt: remainingSeconds ? resetAt(remainingSeconds) : null })
+    const account = (id: string, name: string, windows: unknown[]) =>
+      ({ id, name, windows, configured: true, error: null, fetchedAt: new Date(now).toISOString() })
+    w.testPrefs.enabledProviders = ['antigravity', 'opencode-go', 'deepseek']
+    w.testPrefs.providerOrder = w.testPrefs.enabledProviders
+    w.testPrefs.tokenSpendEnabled = true
+    w.testPrefs.showForecast = true
+    w.testEmit('preferences-changed', w.testPrefs)
+    w.testEmit('usage-updated', { fetchedAt: new Date(now).toISOString(), providers: [
+      account('antigravity', 'Antigravity', [
+        quota('5h', 0, 'Gemini', 17940, 18000), quota('7d', 23, 'Gemini', 518400, 604800),
+        quota('5h', 0, 'Claude and GPT'), quota('7d', 0, 'Claude and GPT'),
+      ]),
+      account('opencode-go', 'OpenCode Go', [quota('5h', 18), quota('7d', 12)]),
+      account('deepseek', 'DeepSeek', [quota('7d', 42)]),
+    ] })
+  })
+  await expect(page.locator('.rail__item')).toHaveCount(3)
+  const normalFrame = () => page.evaluate(() =>
+    (window as any).testCommands.filter((command: any) => command.cmd === 'set_panel_metrics').length,
+  )
+  const frameCount = await normalFrame()
+  const rows = page.locator('.card__row')
+  const card = page.locator('.card')
+  await page.evaluate(() => (window as any).testEmit('hover-changed', 'entry:antigravity'))
+  await expect(rows).toHaveCount(4)
+  await expect(page.locator('.card__forecast')).toHaveCount(1)
+  await expect(page.locator('.card__forecast')).toContainText('预计在重置前用尽')
+  await expect(page.locator('.card__estimate')).toHaveCount(0)
+  await expect(page.getByRole('img', { name: '最近31天 Token 消耗' })).toBeVisible()
+  await expect(page.getByText('Gemini test model · 100%')).toBeVisible()
+  const first = (await rows.first().boundingBox())!
+  const second = (await rows.nth(1).boundingBox())!
+  const history = (await page.locator('.card__activity').boundingBox())!
+  const filledCard = (await card.boundingBox())!
+  expect(first.height).toBeLessThanOrEqual(49)
+  expect(second.y - first.y - first.height).toBeLessThanOrEqual(15)
+  expect(filledCard.y + filledCard.height - history.y - history.height).toBeLessThanOrEqual(19)
+  await page.locator('.panel__card').screenshot({ path: 'test-results/assistant-compact-antigravity.png' })
+
+  await page.evaluate(() => (window as any).testEmit('hover-changed', 'entry:opencode-go'))
+  await expect(page.getByText('正在读取用量记录…')).toBeVisible()
+  const loadingHeight = (await card.boundingBox())!.height
+  await page.evaluate(() => (window as any).finishConsoleHistory())
+  await expect(page.locator('.card__activity')).toHaveCount(0)
+  await expect(rows).toHaveCount(2)
+  await expect.poll(async () => (await card.boundingBox())!.height).toBeLessThan(loadingHeight - 20)
+  const emptyCard = (await card.boundingBox())!
+  const lastRow = (await rows.last().boundingBox())!
+  expect(emptyCard.y + emptyCard.height - lastRow.y - lastRow.height).toBeLessThanOrEqual(19)
+  expect(await normalFrame()).toBe(frameCount)
+  await page.locator('.panel__card').screenshot({ path: 'test-results/assistant-compact-opencode.png' })
+  await page.evaluate(() => (window as any).testEmit('hover-changed', 'entry:deepseek'))
+  await expect(rows).toHaveCount(1)
+  await expect(rows.first()).toContainText('42%')
+  await expect(page.locator('.card__activity')).toHaveCount(0)
+  console.log(`Measured card height: Antigravity ${filledCard.height}px, OpenCode Go ${loadingHeight}px while loading and ${emptyCard.height}px with no history. Quota spacing: ${second.y - first.y - first.height}px.`)
 })
 
 test('a failed reading keeps its message and connection action within the card',async({page})=>{

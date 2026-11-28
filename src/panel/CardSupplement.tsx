@@ -50,15 +50,16 @@ export function QoderCardHistory({ layout, now }: { layout: DetailCardLayout; no
   const today = new Date(now)
   const start = (days: number) => dayKey(new Date(today.getFullYear(), today.getMonth(), today.getDate() - days + 1))
   const days = (value ?? []).filter(day => day.date >= start(31) && day.date <= dayKey(today))
+  if (failed || (value && days.length === 0)) return null
   function totals(count: number): Pick<QoderCreditDay, 'used' | 'charged'> {
     return days.filter(day => day.date >= start(count)).reduce((sum, day) => ({ used: sum.used + day.used, charged: sum.charged + day.charged }), { used: 0, charged: 0 })
   }
   const s = layout.width / 250
   const maximum = Math.max(1, ...days.map(day => day.used))
-  return <section className="card__activity" aria-label="Qoder 积分历史" style={{ gap: layout.activitySpacing, height: layout.activityHeight, fontSize: layout.footnoteFontSize }}>
+  return <section className="card__activity" aria-label="Qoder 积分历史" style={{ gap: layout.activitySpacing, fontSize: layout.footnoteFontSize }}>
     <div className="card__divider" style={{ height: 1 }} />
     <div className="card__muted" style={{ height: 13*s }}>Qoder 积分</div>
-    {failed ? <div className="card__muted">无法读取积分历史。</div> : value === null ? <div className="card__muted">正在读取积分历史…</div> : !days.length ? <div className="card__muted">暂无积分历史。</div> : <>
+    {value === null ? <div className="card__muted">正在读取积分历史…</div> : <>
       {layout.parts.has('figures') && <div className="card__figures" style={{ height: 47*s, gap: 8*s }}>
         {([['今天', 1], ['7天', 7], ['31天', 31]] as const).map(([label, count]) => {
           const sum = totals(count)

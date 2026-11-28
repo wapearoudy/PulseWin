@@ -1,4 +1,4 @@
-import { memo, useEffect, useId, useMemo, useState } from 'react'
+import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { bubblePath, bubbleTransform } from './bubbleShape'
 import type { PanelEdge } from './berthShape'
 import type { DetailCardLayout } from './cardLayout'
@@ -24,10 +24,8 @@ import './panel.css'
 /**
  * The hover bubble: one provider's limits, opened beside its ring.
  *
- * The card is an **overlay**, never a resize. The original is explicit about
- * this — the panel's frame does not change while a card opens, and card and
- * rail are never stacked in the same layout — which is also why every length
- * here comes from `DetailCardLayout` rather than from anything measured.
+ * The card is an overlay in the panel's preallocated native frame. Size the
+ * bubble to the visible content, including history that arrives after hover.
  */
 
 export interface UsageCardProps {
@@ -47,6 +45,7 @@ export interface UsageCardProps {
   usesRoundEnds?: boolean
   showsRemaining?: boolean
   tokenSpendEnabled?: boolean
+  onContentHeight: (height: number) => void
   onRetry: (provider: string) => Promise<void>
   refreshing?: boolean
 }
@@ -65,6 +64,7 @@ function UsageCardImpl({
   showsRemaining = false,
   usesRoundEnds = false,
   tokenSpendEnabled = false,
+  onContentHeight,
   onRetry,
   refreshing = false,
 }: UsageCardProps) {
@@ -84,6 +84,17 @@ function UsageCardImpl({
   const metricTrends = cardMetricTrends(metrics)
   const tail = layout.pointerWidth
   const viewBox = `0 0 ${width} ${height}`
+  const body = useRef<HTMLDivElement>(null)
+  const verticalInset = layout.padding * 2 + (edge === 'top' || edge === 'bottom' ? tail : 0)
+  useLayoutEffect(() => {
+    const content = body.current
+    if (!content) return
+    const report = () => onContentHeight(Math.ceil(content.getBoundingClientRect().height + verticalInset))
+    const observer = new ResizeObserver(report)
+    observer.observe(content)
+    report()
+    return () => observer.disconnect()
+  }, [onContentHeight, verticalInset])
 
   const transform = bubbleTransform(edge, height, width)
 
@@ -138,10 +149,10 @@ function UsageCardImpl({
         aria-label={scrollable ? `${provider.name} 用量详情` : undefined}
         style={{
           padding: layout.padding,
-          gap: layout.contentSpacing,
           ...contentInset,
         }}
       >
+        <div className="card__body" ref={body} style={{ gap: layout.contentSpacing }}>
         <div><header
           className="card__header"
           style={{ height: layout.headerHeight, gap: 8, fontSize: layout.titleFontSize }}
@@ -183,6 +194,8 @@ function UsageCardImpl({
             const tint = tintColour(usageTint({ usedFraction: fraction, isExhausted: spent, warningAt,elapsedFraction:provider.stale || provider.error?null:quotaTimeFraction(w,Date.now()) }),light)
             const reset = formatReset(w.resetsAt, new Date(now))
             const displayed = fraction === null ? null : showsRemaining ? Math.max(0, 1 - fraction) : fraction
+            const estimate = parts.has('value') && history.snapshot ? budgetEstimate(w, history.snapshot, now) : null
+            const forecast = parts.has('forecast') && !spent ? forecastText(w, now) : null
 
             return (
               <section
@@ -220,8 +233,8 @@ function UsageCardImpl({
                   ) : null}
                 </div>
                 {parts.has('amounts') && w.quotaAmounts && <div className="card__muted card__estimate" style={{height:layout.rowTextLineHeight,fontSize:layout.footnoteFontSize,lineHeight:`${layout.rowTextLineHeight}px`}}>{formatQuotaAmounts(w.quotaAmounts, showsRemaining)}</div>}
-                {parts.has('value')&&<div className="card__estimate card__muted" style={{height:layout.rowTextLineHeight,fontSize:layout.footnoteFontSize,lineHeight:`${layout.rowTextLineHeight}px`}}>{(()=>{const estimate=history.snapshot?budgetEstimate(w,history.snapshot,now):null;return estimate?`估算额度 ≈${formatCost(estimate.full)} · 已用 ≈${formatCost(estimate.spent)}`:''})()}</div>}
-                {parts.has('forecast') && <div className="card__forecast" style={{height:layout.rowTextLineHeight,fontSize:layout.footnoteFontSize,lineHeight:`${layout.rowTextLineHeight}px`,color:light?'var(--panel-muted)':'rgba(255,255,255,.55)'}}>{spent?'':forecastText(w,now)}</div>}
+                {estimate && <div className="card__estimate card__muted" style={{height:layout.rowTextLineHeight,fontSize:layout.footnoteFontSize,lineHeight:`${layout.rowTextLineHeight}px`}}>{`估算额度 ≈${formatCost(estimate.full)} · 已用 ≈${formatCost(estimate.spent)}`}</div>}
+                {forecast && <div className="card__forecast" style={{height:layout.rowTextLineHeight,fontSize:layout.footnoteFontSize,lineHeight:`${layout.rowTextLineHeight}px`,color:light?'var(--panel-muted)':'rgba(255,255,255,.55)'}}>{forecast}</div>}
               </section>
             )
           })
@@ -239,7 +252,7 @@ function UsageCardImpl({
           ? <QoderCardHistory layout={layout} now={now} />
           : <CardActivity history={history} layout={layout} now={now} />)}
         {parts.has('promptCache') && <ClaudeCacheSummary layout={layout} now={now} />}
-      </div></div>
+      </div></div></div>
     </div>
   )
 }
@@ -324,7 +337,7 @@ function WhyNoReading({
 }) {
   return (
     <div className="card__why" style={{gap:layout.rowInternalSpacing}}>
-      <p className={`card__message${onRetry?' card__refresh-error':''}`} title={message} style={{ fontSize: layout.messageFontSize, lineHeight:`${layout.rowTextLineHeight}px`,height:layout.rowTextLineHeight*3,display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical',overflow:'hidden' }}>
+      <p className={`card__message${onRetry?' card__refresh-error':''}`} title={message} style={{ fontSize: layout.messageFontSize, lineHeight:`${layout.rowTextLineHeight}px`,display:'-webkit-box',WebkitLineClamp:3,WebkitBoxOrient:'vertical',overflow:'hidden' }}>
         {message}
       </p>
       <div style={{display:'flex',gap:layout.rowInternalSpacing}}>

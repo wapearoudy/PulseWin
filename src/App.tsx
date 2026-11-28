@@ -144,6 +144,11 @@ export default function App() {
    * could never be read — or clicked.
    */
   const [cardId, setCardId] = useState<string | null>(null)
+  const [measuredCard, setMeasuredCard] = useState<{ id: string; height: number } | null>(null)
+  const onCardContentHeight = useCallback((height: number) => {
+    if (cardId === null) return
+    setMeasuredCard(previous => previous?.id === cardId && previous.height === height ? previous : { id: cardId, height })
+  }, [cardId])
   useEffect(() => {
     if (hovered !== null) setCardId(hovered)
     else if (region === null || region === 'rail') {
@@ -389,9 +394,7 @@ export default function App() {
   // ---- geometry -----------------------------------------------------------
   const activeIndex = dragging ? -1 : entries.findIndex((e) => e.id === cardId)
   const activeProvider = activeIndex >= 0 && slots[activeIndex] ? accountOf(slots[activeIndex]) : undefined
-  // Every length below is a budget taken from the original's layout constants.
-  // Nothing here measures the DOM: the panel's frame has to be known *before*
-  // anything is drawn in it, which is what lets a card open without a resize.
+  // Reserve the native frame before the body of any open card is measured.
   const layout = useMemo(
     () => dockLayout({ scale: PANEL_SIZE, spacing: RAIL_SPACING, usesRoundEnds: preferences.roundEnds }),
     [PANEL_SIZE, RAIL_SPACING, preferences.roundEnds],
@@ -474,7 +477,8 @@ export default function App() {
   const minCardTop = Math.max(0, workTop + railTop)
   const maxCardBottom = Math.min(frameH, workBottom + railTop)
   const maxCardHeight = isTop ? cardHeightBudget : Math.max(0, maxCardBottom - minCardTop)
-  const cardHeight = Math.min(naturalCardSize.height, maxCardHeight)
+  const contentHeight = measuredCard && measuredCard.id === cardId ? measuredCard.height : naturalCardSize.height
+  const cardHeight = Math.min(contentHeight, maxCardHeight)
   const cardWidth = naturalCardSize.width
   const cardFits = cardHeight >= cardLayout.headerHeight + cardLayout.padding * 2
     + (isTop ? cardLayout.pointerWidth : 0)
@@ -625,7 +629,7 @@ export default function App() {
             layout={cardLayout}
             width={cardWidth}
             height={cardHeight}
-            scrollable={cardHeight < naturalCardSize.height}
+            scrollable={cardHeight < contentHeight}
             edge={edge}
             pointerCentre={pointerCentre}
             top={0}
@@ -633,6 +637,7 @@ export default function App() {
             showsRemaining={preferences.showsRemaining}
             usesRoundEnds={preferences.roundEnds}
             tokenSpendEnabled={preferences.tokenSpendEnabled}
+            onContentHeight={onCardContentHeight}
             onRetry={handleRefresh}
             refreshing={refreshingIds.has(activeProvider.id) || refreshingIds.has('*')}
           />

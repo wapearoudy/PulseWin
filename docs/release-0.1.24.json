@@ -1,0 +1,50 @@
+{
+ "version": "0.1.24",
+ "status": "verified-candidate",
+ "authorization": "验证通过后发版（2026-11-28）",
+ "changes": [
+  "When PulseWin follows system proxy settings, pass the enabled Windows proxy to agy when no valid proxy was inherited. Keep explicit manual and direct modes.",
+  "Compact the desktop assistant detail card to fit its visible content. Omit empty estimate and forecast rows and hide unavailable, empty, or failed optional history."
+ ],
+ "tests": {
+  "frontend": {
+   "passed": 299,
+   "files": 30
+  },
+  "browser": {
+   "passed": 95,
+   "note": "Windows Edge with simulated application IPC. Coverage includes compact quota rows, empty or failed history, populated history, and the existing scroll limits."
+  },
+  "rust": {
+   "passed": 1333,
+   "failed": 0,
+   "ignored": 2,
+   "note": "Locked Windows all-target tests with an isolated PulseWin preferences folder."
+  },
+  "native": "PASS. The same 0.1.24 release executable passed WebView2 assistant, window geometry and scrolling, and read-only CLI checks.",
+  "windowsRelease": "PASS. TypeScript and Vite build plus x64 NSIS and MSI packages signed with the trusted updater key.",
+  "antigravity": {
+   "status": "PASS",
+   "desktopVersion": "2.36.0",
+   "cliVersion": "1.5.18",
+   "source": "agy CLI",
+   "networkProxyMode": "system",
+   "windowsProxyEnabled": true,
+   "inheritedProxyEnvironmentVariables": 0,
+   "manualRefreshCount": 0,
+   "modelPageOpened": false,
+   "intervalSeconds": 120,
+   "automaticReads": 2,
+   "comparedQuotaWindows": 4,
+   "candidateSha256": "7019eda179d39bc5f70fc6ac24f9892dddd41b44313c4a38038ffbd85f1281a3",
+   "checkedAt": "2026-11-28T07:25:59.989Z",
+   "baseline": "Installed 0.1.23 had no successful Antigravity reading before the deadline under the same system proxy mode and stripped proxy environment."
+  },
+  "updater": "PASS. An isolated 0.1.21 client verified the actual signed 0.1.24 NSIS package. The 0.1.24 native updater also passed signed download, tampering and forged-version checks. No installer executed."
+ },
+ "fullParity": false,
+ "limitations": [
+  "The real Antigravity check used the Windows system proxy already configured on the test machine. PAC or proxy auto-discovery was outside this test.",
+  "The remaining original-Pulse and real-account acceptance items stay open in release-progress.json."
+ ]
+}

@@ -12,6 +12,7 @@
 //! Windows is configured for a proxy.
 
 use serde::{Deserialize, Serialize};
+use std::ffi::OsString;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all="camelCase",default)]
@@ -61,8 +62,69 @@ impl NetworkProxySettings {
         else{add(&mut base,"ALL_PROXY",&url.replace("socks5h://","socks5://"));}
         add(&mut base,"NO_PROXY","localhost,127.0.0.1,::1");base
     }
+
+    // agy reads proxy environment variables even when WinINET supplies the
+    // effective system proxy. Keep this translation scoped to that process.
+    pub(crate) fn agy_process_environment(&self, base: Vec<(OsString, OsString)>) -> Vec<(OsString, OsString)> {
+        self.agy_process_environment_with_system(base, || {
+            Some((registry_proxy()?, registry_no_proxy()))
+        })
+    }
+
+    fn agy_process_environment_with_system(
+        &self,
+        mut base: Vec<(OsString, OsString)>,
+        system: impl FnOnce() -> Option<(String, Option<String>)>,
+    ) -> Vec<(OsString, OsString)> {
+        if self.mode == "none" || self.endpoint().is_some() {
+            return self.process_environment(base);
+        }
+        if base.iter().any(|(key, value)| {
+            is_proxy_endpoint_key(&key.to_string_lossy())
+                && valid_proxy_endpoint(value.to_str().unwrap_or_default())
+        }) {
+            return base;
+        }
+        let Some((endpoint, system_bypass)) = system() else {
+            return base;
+        };
+        if !valid_proxy_endpoint(&endpoint) {
+            return base;
+        }
+
+        let mut bypass = vec!["localhost".to_owned(), "127.0.0.1".to_owned(), "::1".to_owned()];
+        let inherited_bypass = base.iter().filter_map(|(key, value)| {
+            if key.to_string_lossy().eq_ignore_ascii_case("NO_PROXY") {
+                value.to_str()
+            } else {
+                None
+            }
+        });
+        for entry in inherited_bypass.chain(system_bypass.as_deref()).flat_map(|list| list.split(',')) {
+            let entry = entry.trim();
+            if !entry.is_empty() && !bypass.iter().any(|existing| existing.eq_ignore_ascii_case(entry)) {
+                bypass.push(entry.to_owned());
+            }
+        }
+        base.retain(|(key, _)| !is_proxy_key(&key.to_string_lossy()));
+        base.extend([
+            ("HTTP_PROXY".into(), endpoint.clone().into()),
+            ("HTTPS_PROXY".into(), endpoint.into()),
+            ("NO_PROXY".into(), bypass.join(",").into()),
+        ]);
+        base
+    }
 }
-fn is_proxy_key(key:&str)->bool{["HTTP_PROXY","HTTPS_PROXY","ALL_PROXY","NO_PROXY"].iter().any(|p|key.eq_ignore_ascii_case(p))}
+fn is_proxy_endpoint_key(key: &str) -> bool {
+    ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"].iter().any(|name| key.eq_ignore_ascii_case(name))
+}
+fn is_proxy_key(key: &str) -> bool {
+    is_proxy_endpoint_key(key) || key.eq_ignore_ascii_case("NO_PROXY")
+}
+fn valid_proxy_endpoint(endpoint: &str) -> bool {
+    let endpoint = endpoint.trim();
+    !endpoint.is_empty() && reqwest::Proxy::all(endpoint).is_ok()
+}
 pub fn is_loopback(host:&str)->bool{
     let host=host.trim_matches(['[',']']).trim_end_matches('.');
     host.eq_ignore_ascii_case("localhost")||host.to_ascii_lowercase().ends_with(".localhost")||host.parse::<std::net::IpAddr>().is_ok_and(|ip|ip.is_loopback()||matches!(ip,std::net::IpAddr::V6(v) if v.to_ipv4_mapped().is_some_and(|v|v.is_loopback())))
@@ -235,12 +297,15 @@ pub fn parse_proxy_override(raw: &str) -> Option<String> {
 ///
 /// Returns `None` on non-Windows targets, and whenever an environment proxy is
 /// already set so reqwest's own handling takes precedence.
-#[cfg(windows)]
 pub fn system_proxy() -> Option<String> {
     if env_proxy_present() {
         return None;
     }
+    registry_proxy()
+}
 
+#[cfg(windows)]
+fn registry_proxy() -> Option<String> {
     let hkcu = winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER);
     let key = hkcu.open_subkey(INTERNET_SETTINGS).ok()?;
 
@@ -254,11 +319,15 @@ pub fn system_proxy() -> Option<String> {
 }
 
 /// The `ProxyOverride` no-proxy list, when the system proxy is in use.
-#[cfg(windows)]
 pub fn system_no_proxy() -> Option<String> {
     if env_proxy_present() {
         return None;
     }
+    registry_no_proxy()
+}
+
+#[cfg(windows)]
+fn registry_no_proxy() -> Option<String> {
 
     let hkcu = winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER);
     let key = hkcu.open_subkey(INTERNET_SETTINGS).ok()?;
@@ -273,12 +342,12 @@ pub fn system_no_proxy() -> Option<String> {
 }
 
 #[cfg(not(windows))]
-pub fn system_proxy() -> Option<String> {
+fn registry_proxy() -> Option<String> {
     None
 }
 
 #[cfg(not(windows))]
-pub fn system_no_proxy() -> Option<String> {
+fn registry_no_proxy() -> Option<String> {
     None
 }
 

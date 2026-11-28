@@ -78,6 +78,57 @@ fn helpers_override_only_proxy_keys_and_preserve_cli_path() {
 }
 
 #[test]
+fn agy_system_fallback_uses_wininet_and_merges_bypass_lists() {
+    let base: Vec<(OsString, OsString)> = [
+        ("PATH", "cli-first;system"),
+        ("https_proxy", "http://["),
+        ("no_proxy", "internal.invalid, LOCALHOST"),
+    ].into_iter().map(|(key, value)| (key.into(), value.into())).collect();
+    let expected = [
+        ("PATH", "cli-first;system"),
+        ("HTTP_PROXY", "http://127.0.0.1:8443"),
+        ("HTTPS_PROXY", "http://127.0.0.1:8443"),
+        ("NO_PROXY", "localhost,127.0.0.1,::1,internal.invalid,git.invalid"),
+    ].into_iter().map(|(key, value)| (key.into(), value.into())).collect::<Vec<(OsString, OsString)>>();
+    for mode in ["system", "manual"] {
+        let settings = NetworkProxySettings { mode: mode.into(), ..Default::default() };
+        let actual = settings.agy_process_environment_with_system(base.clone(), || {
+            Some((
+                parse_proxy_server("http=127.0.0.1:8080;https=127.0.0.1:8443")?,
+                parse_proxy_override("localhost;git.invalid;internal.invalid;<local>"),
+            ))
+        });
+        assert_eq!(actual, expected);
+    }
+    let settings = NetworkProxySettings::default();
+    assert_eq!(
+        settings.agy_process_environment_with_system(base.clone(), || Some(("http://[".into(), None))),
+        base
+    );
+    assert_eq!(settings.agy_process_environment_with_system(base.clone(), || None), base);
+}
+
+#[test]
+fn agy_keeps_explicit_and_inherited_proxy_modes() {
+    let settings = NetworkProxySettings::default();
+    for key in ["http_proxy", "HTTPS_PROXY", "ALL_PROXY"] {
+        let base = vec![(key.into(), "http://inherited.invalid:8080".into())];
+        assert_eq!(
+            settings.agy_process_environment_with_system(base.clone(), || panic!("registry would override the inherited proxy")),
+            base
+        );
+    }
+    let base = vec![("HTTPS_PROXY".into(), "http://inherited.invalid:8080".into())];
+    let direct = NetworkProxySettings { mode: "none".into(), ..Default::default() };
+    for settings in [direct, manual("http", 1080), manual("socks5", 1080)] {
+        assert_eq!(
+            settings.agy_process_environment_with_system(base.clone(), || panic!("explicit mode does not need the registry")),
+            settings.process_environment(base.clone())
+        );
+    }
+}
+
+#[test]
 fn direct_mode_ignores_every_proxy_source() {
     // The original's 不使用代理: even a configured system or environment proxy
     // must not be used, and no proxy key is handed to child processes.

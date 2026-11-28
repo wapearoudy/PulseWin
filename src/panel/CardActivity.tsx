@@ -8,19 +8,19 @@ import { lastCodexStep } from './codexLastStep'
 export function CardActivity({history,layout,now}:{history:CardHistory;layout:DetailCardLayout;now:number}) {
   const day=new Date(now).toDateString()
   const activity=useMemo(()=>history.snapshot?cardActivity(history.snapshot,new Date(now)):null,[history.snapshot,day])
-  if(history.status==='disabled'||history.status==='unavailable')return null
+  if(history.status==='disabled'||history.status==='unavailable'||history.status==='failed')return null
   const s=layout.width/250
-  const records=history.snapshot?.records.length??0
+  if(history.status==='ready'&&!history.snapshot?.records.length)return null
   const maximum=activity?activity.chart.reduce((most,day)=>Math.max(most,day.tokens),1):1
   const labels=['今天','7天','31天']
   const consoleHistory = isConsoleHistory(history.snapshot)
   const priced = consoleHistory || (activity?.figures[2].cost ?? 0) > 0
   const parts = layout.parts
   const lastStep = parts.has('lastStep') && history.snapshot ? lastCodexStep(history.snapshot.records, now) : null
-  return <section className="card__activity" aria-label={consoleHistory ? '控制台用量记录' : '本机用量记录'} style={{gap:layout.activitySpacing,height:layout.activityHeight,fontSize:layout.footnoteFontSize}}>
+  return <section className="card__activity" aria-label={consoleHistory ? '控制台用量记录' : '本机用量记录'} style={{gap:layout.activitySpacing,fontSize:layout.footnoteFontSize}}>
     <div className="card__divider" style={{height:1}}/>
     <div className="card__muted" style={{height:13*s}}>{consoleHistory?'控制台记录':activity?.exported?'导入记录':activity?'本机记录':'用量记录'}{activity?.partial?' · 计数可能不完整':''}</div>
-    {history.status==='reading'?<div className="card__muted">正在读取用量记录…</div>:history.status==='failed'?<div className="card__muted">无法读取用量历史。</div>:!records?<div className="card__muted">暂无用量历史。</div>:activity&&<>
+    {history.status==='reading'?<div className="card__muted">正在读取用量记录…</div>:activity&&<>
       {parts.has('figures') && <div className="card__figures" style={{height:(priced?47:32)*s,gap:8*s}}>{activity.figures.map((amount,i)=><div key={labels[i]} aria-label={labels[i]} style={{gap:2*s}}>
         <span className="card__muted" style={{height:13*s}}>{labels[i]}</span>
         <strong style={{height:17*s,fontSize:14*s}}>{shortTokens(amount.tokens)}</strong>

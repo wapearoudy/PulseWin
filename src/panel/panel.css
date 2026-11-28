@@ -166,11 +166,17 @@
   display: none;
 }
 
-.card__content > * {
+.card__body {
+  display: flex;
+  flex-direction: column;
   flex-shrink: 0;
 }
 
-.card__content > div:first-child {
+.card__body > * {
+  flex-shrink: 0;
+}
+
+.card__body > div:first-child {
   position: sticky;
   top: 0;
   z-index: 1;
