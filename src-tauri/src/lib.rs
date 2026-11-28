@@ -231,7 +231,7 @@ async fn refresh(app: &AppHandle, state: &AppState) -> Snapshot {
 }
 
 async fn refresh_locked(app: &AppHandle, state: &AppState, target: Option<&str>) -> Snapshot {
-    refresh_pass(app,state,target,false).await
+    refresh_pass(app, state, target, false, false).await
 }
 
 fn refresh_signals(app:&AppHandle,state:&AppState)->adaptive_refresh::Signals {
@@ -247,7 +247,14 @@ fn refresh_signals(app:&AppHandle,state:&AppState)->adaptive_refresh::Signals {
 
 /// Only the one-shot timer calls with due_only=true. Every user/settings path
 /// asks immediately; the filter and commit set stay identical.
-async fn refresh_pass(app:&AppHandle,state:&AppState,target:Option<&str>,due_only:bool)->Snapshot {
+/// Only the explicit refresh_provider command requests interactive collection.
+async fn refresh_pass(
+    app: &AppHandle,
+    state: &AppState,
+    target: Option<&str>,
+    due_only: bool,
+    interactive: bool,
+) -> Snapshot {
     let generation = state.generation.load(std::sync::atomic::Ordering::SeqCst);
     let prefs = state.preferences.lock().unwrap().clone();
     let selected = prefs.enabled_providers.iter().filter(|id| target.map_or(true, |t| t == id.as_str())).cloned().collect::<Vec<_>>();
@@ -269,7 +276,7 @@ async fn refresh_pass(app:&AppHandle,state:&AppState,target:Option<&str>,due_onl
             .unwrap_or_else(|_|Arc::clone(&state.ctx.read().unwrap()))
     };
     let fetched=tokio::select!{
-        result=providers::collect_accounts(Arc::clone(&ctx),&enabled,&prefs)=>result,
+        result=providers::collect_accounts(Arc::clone(&ctx),&enabled,&prefs,interactive)=>result,
         _=ctx.cancelled.cancelled()=>{
             let _=app.emit("refresh-changed",serde_json::json!({"ids":enabled,"refreshing":false}));
             return state.snapshot.lock().await.clone();
@@ -364,7 +371,7 @@ fn watch_refresh(app:AppHandle) {
                 // not a timer tick, so enabled accounts are asked now even
                 // if their cadence would otherwise keep the old reading.
                 let _guard=state.refreshing.lock().await;
-                refresh_pass(&app,&state,None,false).await;
+                refresh_pass(&app, &state, None, false, false).await;
                 continue;
             }
             let prefs=state.preferences.lock().unwrap().clone();
@@ -373,7 +380,7 @@ fn watch_refresh(app:AppHandle) {
             let wait=match plan{
                 adaptive_refresh::Plan::Ask(_)=>{
                     let _guard=state.refreshing.lock().await;
-                    refresh_pass(&app,&state,None,true).await;
+                    refresh_pass(&app, &state, None, true, false).await;
                     continue;
                 },
                 adaptive_refresh::Plan::Wait(wait)=>wait,
@@ -383,7 +390,7 @@ fn watch_refresh(app:AppHandle) {
                 _=state.refresh_wake.notified()=>continue,
                 _=tokio::time::sleep(wait)=>{
                     let _guard=state.refreshing.lock().await;
-                    refresh_pass(&app,&state,None,true).await;
+                    refresh_pass(&app, &state, None, true, false).await;
                 }
             }
         }
@@ -805,7 +812,7 @@ async fn refresh_provider(app: AppHandle, state: State<'_, AppState>, provider: 
     if !state.preferences.lock().unwrap().enabled_providers.contains(&provider) {
         return Err("This account is not shown in the panel. Enable it before checking usage.".into());
     }
-    Ok(refresh_locked(&app, &state, Some(&provider)).await)
+    Ok(refresh_pass(&app, &state, Some(&provider), false, true).await)
 }
 
 /// Append a frontend error to `%TEMP%\pulsewin-errors.log`.

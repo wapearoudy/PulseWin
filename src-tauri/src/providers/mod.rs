@@ -182,6 +182,10 @@ pub trait Provider: Send + Sync {
     /// Perform one fetch. Implementations must not panic; return
     /// `ProviderUsage::failed` instead.
     fn fetch(&self, ctx: Arc<Ctx>) -> FetchFuture;
+    /// Perform one fetch explicitly requested for this account.
+    fn fetch_interactive(&self, ctx: Arc<Ctx>) -> FetchFuture {
+        self.fetch(ctx)
+    }
 }
 
 /// The providers PulseWin ships with, in the original's declaration order.
@@ -295,12 +299,17 @@ pub async fn collect_all(ctx: Arc<Ctx>) -> Vec<ProviderUsage> {
 /// Selection is checked before discovery, so disabled tools cannot read credentials
 /// or start helper processes through the monitor's refresh routes.
 pub async fn collect_selected(ctx: Arc<Ctx>, enabled: &[String]) -> Vec<ProviderUsage> {
-    collect_from(ctx, enabled, registry()).await
+    collect_from(ctx, enabled, registry(), false).await
 }
 
 /// Additional accounts only receive their own encrypted credential document.
-pub async fn collect_accounts(ctx: Arc<Ctx>, enabled: &[String], prefs: &crate::preferences::Preferences) -> Vec<ProviderUsage> {
-    let primary=collect_selected(Arc::clone(&ctx),enabled);
+pub async fn collect_accounts(
+    ctx: Arc<Ctx>,
+    enabled: &[String],
+    prefs: &crate::preferences::Preferences,
+    interactive: bool,
+) -> Vec<ProviderUsage> {
+    let primary = collect_from(Arc::clone(&ctx), enabled, registry(), interactive);
     let tasks=prefs.accounts.iter().filter(|a|enabled.contains(&a.id)).map(|account| {
         let ctx=Arc::clone(&ctx);let account=account.clone();
         async move {
@@ -356,7 +365,12 @@ pub async fn collect_accounts(ctx: Arc<Ctx>, enabled: &[String], prefs: &crate::
     readings
 }
 
-async fn collect_from(ctx: Arc<Ctx>, enabled: &[String], providers: Vec<Arc<dyn Provider>>) -> Vec<ProviderUsage> {
+async fn collect_from(
+    ctx: Arc<Ctx>,
+    enabled: &[String],
+    providers: Vec<Arc<dyn Provider>>,
+    interactive: bool,
+) -> Vec<ProviderUsage> {
     let futures: Vec<FetchFuture> = providers
         .iter()
         .filter(|p| enabled.iter().any(|id| id == p.id()))
@@ -380,7 +394,8 @@ async fn collect_from(ctx: Arc<Ctx>, enabled: &[String], providers: Vec<Arc<dyn 
                 if !p.is_configured() && stored.api_key.is_none() {
                     return ProviderUsage::unconfigured(id, name, not_configured());
                 }
-                let usage = match tokio::time::timeout(Duration::from_secs(45), p.fetch(ctx)).await {
+                let fetch = if interactive { p.fetch_interactive(ctx) } else { p.fetch(ctx) };
+                let usage = match tokio::time::timeout(Duration::from_secs(45), fetch).await {
                     Ok(usage) => usage,
                     Err(_) => ProviderUsage::failed(id, name, "Usage check timed out. Try again."),
                 };
@@ -826,13 +841,19 @@ mod tests {
             let id = self.id;
             Box::pin(async move { crate::model::ProviderUsage::ok(id, id, vec![crate::model::UsageWindow::new("test", Some(12.0))]) })
         }
+        fn fetch_interactive(&self, _: Arc<super::Ctx>) -> super::FetchFuture {
+            let id = self.id;
+            Box::pin(async move {
+                ProviderUsage::ok(id, id, vec![UsageWindow::new("interactive", Some(12.0))])
+            })
+        }
     }
     #[tokio::test]
     async fn disabled_provider_never_discovers_credentials_or_fetches() {
         let discovered = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let fetched = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let provider = Arc::new(SelectionProbe { id: "test-only-disabled", discovered: discovered.clone(), fetched: fetched.clone() });
-        let result = super::collect_from(Arc::new(super::Ctx::new().unwrap()), &[], vec![provider]).await;
+        let result = super::collect_from(Arc::new(super::Ctx::new().unwrap()), &[], vec![provider], true).await;
         assert!(result.is_empty());
         assert_eq!(discovered.load(std::sync::atomic::Ordering::SeqCst), 0);
         assert_eq!(fetched.load(std::sync::atomic::Ordering::SeqCst), 0);
@@ -841,10 +862,19 @@ mod tests {
     async fn targeted_collection_only_fetches_selected_provider() {
         let discovered = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let fetched = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let items = ["selected", "disabled"].iter().map(|id| Arc::new(SelectionProbe { id, discovered: discovered.clone(), fetched: fetched.clone() }) as Arc<dyn super::Provider>).collect();
-        let result = super::collect_from(Arc::new(super::Ctx::new().unwrap()), &["selected".into()], items).await;
+        let items: Vec<_> = ["selected", "disabled"].iter().map(|id| Arc::new(SelectionProbe { id, discovered: discovered.clone(), fetched: fetched.clone() }) as Arc<dyn super::Provider>).collect();
+        let ctx = Arc::new(super::Ctx::new().unwrap());
+        let result = super::collect_from(ctx.clone(), &["selected".into()], items.clone(), false).await;
         assert_eq!(result.len(), 1); assert_eq!(result[0].id, "selected");
+        assert_eq!(result[0].windows[0].label, "test");
         assert_eq!(discovered.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(fetched.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+        let result = super::collect_from(ctx, &["selected".into()], items, true).await;
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].id, "selected");
+        assert_eq!(result[0].windows[0].label, "interactive");
+        assert_eq!(discovered.load(std::sync::atomic::Ordering::SeqCst), 2);
         assert_eq!(fetched.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
     use super::*;

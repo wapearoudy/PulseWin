@@ -53,6 +53,41 @@ test('balance only accounts show real money without zero percent or quota bars',
   await expect(page.getByRole('progressbar')).toHaveCount(0)
   await expect(page.getByText('0%',{exact:true})).toHaveCount(0)
 })
+
+test('tray overview shows the pinned quota and reset, with distinguishable stale, missing and balance readings', async ({page}) => {
+  const claude = page.getByRole('button', { name: '查看Claude Code用量' })
+  const codex = page.getByRole('button', { name: '查看Codex用量' })
+  const deepseek = page.getByRole('button', { name: '查看DeepSeek用量' })
+  await expect(claude).toHaveAccessibleDescription(/76% 已用 · 5 小时 · .*后重置/)
+  await expect(claude.locator('.tray-progress > span')).toHaveAttribute('style', 'width: 76%;')
+  await expect(codex).toHaveAccessibleDescription(/旧读数 · 已限额/)
+  await expect(codex.locator('.tray-progress--stale')).toBeVisible()
+  await expect(deepseek).toHaveAccessibleDescription('USD 12.50 · 余额')
+  await expect(deepseek.locator('.tray-progress')).toHaveCount(0)
+  await page.emulateMedia({ colorScheme: 'light' })
+  await page.screenshot({ path: 'test-results/pulse-win-tray-overview-light.png' })
+
+  await page.evaluate(() => {
+    const w = window as any
+    Object.assign(w.trayPrefs, { showsRemaining: true, usageBarStyle: 'segmented' })
+    w.trayEmit('preferences-changed', structuredClone(w.trayPrefs))
+  })
+  await expect(claude).toHaveAccessibleDescription(/24% 剩余/)
+  await expect(claude.locator('.tray-progress--segmented > span')).toHaveAttribute('style', 'width: 24%;')
+  await expect(codex.locator('.tray-progress > span')).toHaveAttribute('style', 'width: 0%;')
+  await page.emulateMedia({ colorScheme: 'dark' })
+  await page.screenshot({ path: 'test-results/pulse-win-tray-overview-dark.png' })
+
+  await page.evaluate(() => {
+    const w = window as any
+    w.trayPrefs.pinnedWindows = { 'claude-code': '每周' }
+    w.trayEmit('preferences-changed', structuredClone(w.trayPrefs))
+  })
+  await expect(claude).toHaveAccessibleDescription(/暂无额度读数 · 每周/)
+  await expect(claude.locator('.tray-progress')).toHaveCount(0)
+  await claude.click()
+  await expect(page.getByRole('heading', { name: 'Claude Code', exact: true })).toBeVisible()
+})
 test('remaining exhausted quota remains a full warning bar, stale readings are explicit',async({page})=>{
   await page.evaluate(()=>{const w=window as any;w.trayPrefs.showsRemaining=true;w.trayEmit('preferences-changed',w.trayPrefs)})
   await page.getByRole('tab',{name:'Codex',exact:true}).click()

@@ -1,9 +1,11 @@
-//! Antigravity's limits, read from a compatible language server or `agy`.
+//! Antigravity's limits, read from the desktop or `agy`.
 //!
 //! The legacy desktop route needs a running `language_server` that accepts
 //! its own per-launch CSRF token on loopback. Newer desktop builds use a
-//! private Host Bridge channel. They are recognized locally, and automatic
-//! mode can read their quota through the separately installed `agy` CLI.
+//! private Host Bridge channel. For those builds, Windows UI Automation reads
+//! the labeled quota values while the desktop's Models page is open. A
+//! manual account refresh can read the same visible values from the window
+//! when the accessibility provider does not expose them.
 //!
 //! The legacy desktop route needs three things:
 //!
@@ -87,6 +89,16 @@ use crate::model::{parse_reset, ProviderUsage, UsageWindow};
 #[path = "antigravity_cli.rs"]
 pub mod antigravity_cli;
 
+#[cfg(any(windows, test))]
+#[path = "antigravity_desktop_page.rs"]
+mod desktop_page;
+#[cfg(windows)]
+#[path = "antigravity_desktop_uia.rs"]
+mod desktop_uia;
+#[cfg(windows)]
+#[path = "antigravity_desktop_visual.rs"]
+mod desktop_visual;
+
 const ID: &str = "antigravity";
 const NAME: &str = "Antigravity";
 
@@ -137,7 +149,11 @@ impl Provider for Antigravity {
     }
 
     fn fetch(&self, _ctx: Arc<Ctx>) -> FetchFuture {
-        Box::pin(async move { fetch_inner().await })
+        Box::pin(fetch_inner(false))
+    }
+
+    fn fetch_interactive(&self, _ctx: Arc<Ctx>) -> FetchFuture {
+        Box::pin(fetch_inner(true))
     }
 }
 
@@ -179,10 +195,8 @@ enum Reason {
     NotRunning,
     /// Something is, and every helper it runs refused this RPC.
     NotAnswering,
-    /// The running desktop uses the newer Host Bridge.
-    DesktopNeedsCli,
-    /// Automatic mode needs the CLI because the running desktop uses Host Bridge.
-    DesktopCliMissing,
+    /// The newer desktop was detected, but its model quotas are not visible.
+    DesktopModelsPage,
     NoLimitsReported,
     /// The CLI route was pinned, and no `agy` was found to ask.
     CliMissing,
@@ -202,11 +216,8 @@ impl Reason {
             Reason::NotAnswering => {
                 "Antigravity is open but didn't answer. Restarting it usually helps."
             }
-            Reason::DesktopNeedsCli => {
-                "已识别 Antigravity 新版桌面端。请将用量来源改为「自动」或「CLI（agy）」。"
-            }
-            Reason::DesktopCliMissing => {
-                "已识别 Antigravity 新版桌面端。请安装并登录 agy CLI，然后刷新用量。"
+            Reason::DesktopModelsPage => {
+                "请在 Antigravity 的「设置 → 模型」显示完整额度，再点「刷新此账号」。"
             }
             Reason::NoLimitsReported => "No limits reported.",
             Reason::CliMissing => {
@@ -251,6 +262,8 @@ fn route(stored: &str) -> Route {
 enum Desktop {
     /// Figures, and the plan name when the status reply carried one.
     Figures(Vec<UsageWindow>, Option<String>),
+    /// A snapshot of the percentages displayed by the open Models page.
+    VisibleModels(Vec<UsageWindow>, &'static str),
     /// It answered, with no limits in it.
     NoLimits,
     /// Something of Antigravity's is running and every candidate refused.
@@ -261,23 +274,20 @@ enum Desktop {
     NotRunning,
 }
 
-async fn fetch_inner() -> ProviderUsage {
+async fn fetch_inner(allow_window_capture: bool) -> ProviderUsage {
     let stored = crate::preferences::load().antigravity_usage_source;
     match route(&stored) {
-        Route::Desktop => desktop_usage(&desktop().await),
+        Route::Desktop => desktop_usage(&desktop(allow_window_capture).await),
         Route::Cli => cli_only(antigravity_cli::ask().await),
-        Route::Automatic => automatic().await,
+        Route::Automatic => automatic(allow_window_capture).await,
     }
 }
 
-/// The default route: the app first, the CLI when the app reported no figures.
-///
-/// **The CLI is asked only when the app has nothing to say**, as in the
-/// original: a running app is the cheaper and more current answer, and asking a
-/// second program for the same account on every refresh would spend a process
-/// per round to learn what was already on screen.
-async fn automatic() -> ProviderUsage {
-    let server = desktop().await;
+/// Prefer the legacy desktop service when it answers. The CLI's structured
+/// reply takes priority over the visible Models page, which can show only
+/// part of the account's quotas and has no absolute reset timestamps.
+async fn automatic(allow_window_capture: bool) -> ProviderUsage {
+    let server = desktop(allow_window_capture).await;
     if matches!(server, Desktop::Figures(..)) {
         return desktop_usage(&server);
     }
@@ -286,25 +296,25 @@ async fn automatic() -> ProviderUsage {
 
 /// What to report when both routes were tried.
 ///
-/// Keep the legacy desktop's diagnostic when it remains an option. For a Host
-/// Bridge install, the CLI outcome gives the actionable next step.
+/// Keep the desktop diagnostic when no CLI exists. An installed CLI's failure
+/// is actionable when the desktop uses Host Bridge and cannot show a reading.
 fn weigh(server: Desktop, answer: antigravity_cli::Answer) -> ProviderUsage {
     if server == Desktop::HostBridge {
         return match answer {
             antigravity_cli::Answer::NotAsked(antigravity_cli::NotAsked::Missing) => {
-                ProviderUsage::failed(ID, NAME, Reason::DesktopCliMissing.message())
+                desktop_usage(&server)
             }
             other => cli_only(other),
         };
     }
     match answer {
         antigravity_cli::Answer::Windows(windows) => cli_usage(windows),
-        antigravity_cli::Answer::NoLimits => {
+        antigravity_cli::Answer::NoLimits if !matches!(server, Desktop::VisibleModels(..)) => {
             ProviderUsage::failed(ID, NAME, Reason::NoLimitsReported.message())
         }
-        antigravity_cli::Answer::Failed(_) | antigravity_cli::Answer::NotAsked(_) => {
-            desktop_usage(&server)
-        }
+        antigravity_cli::Answer::NoLimits
+        | antigravity_cli::Answer::Failed(_)
+        | antigravity_cli::Answer::NotAsked(_) => desktop_usage(&server),
     }
 }
 
@@ -346,17 +356,52 @@ fn desktop_usage(server: &Desktop) -> ProviderUsage {
         Desktop::Figures(windows, plan) => {
             ProviderUsage::ok(ID, NAME, windows.clone()).with_plan(plan.clone())
         }
+        Desktop::VisibleModels(windows, source) => {
+            let mut usage = ProviderUsage::ok(ID, NAME, windows.clone());
+            usage.source = Some((*source).to_owned());
+            usage
+        }
         Desktop::NoLimits => ProviderUsage::failed(ID, NAME, Reason::NoLimitsReported.message()),
         Desktop::NotAnswering => ProviderUsage::failed(ID, NAME, Reason::NotAnswering.message()),
         Desktop::NotRunning => ProviderUsage::failed(ID, NAME, Reason::NotRunning.message()),
-        Desktop::HostBridge => ProviderUsage::failed(ID, NAME, Reason::DesktopNeedsCli.message()),
+        Desktop::HostBridge => ProviderUsage::failed(ID, NAME, Reason::DesktopModelsPage.message()),
     }
+}
+
+#[cfg(windows)]
+async fn visible_models(allow_window_capture: bool) -> Option<Desktop> {
+    // Keep the permit in the worker if the awaiting refresh is cancelled or
+    // times out, so a slow UI provider cannot accumulate blocked workers.
+    static READER: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
+    let permit = READER.try_acquire().ok()?;
+    let worker = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        if let Some(rows) = desktop_uia::read_model_page() {
+            let windows = desktop_page::windows_from_models_page(&rows);
+            if !windows.is_empty() {
+                return Some(Desktop::VisibleModels(windows, "Antigravity 桌面模型页"));
+            }
+        }
+        if !allow_window_capture {
+            return None;
+        }
+        let rows = desktop_visual::read_model_page(desktop_uia::target_window()?)?;
+        let windows = desktop_page::windows_from_models_page(&rows);
+        (!windows.is_empty()).then_some(Desktop::VisibleModels(windows, "Antigravity 桌面模型页（界面识别）"))
+    });
+    tokio::time::timeout(Duration::from_secs(6), worker).await.ok()?.ok()?
 }
 
 /// The language server route: every server, every port, in the order the machine
 /// lists them.
-async fn desktop() -> Desktop {
+async fn desktop(_allow_window_capture: bool) -> Desktop {
     let (servers, uses_host_bridge) = discover().await;
+    #[cfg(windows)]
+    if uses_host_bridge {
+        if let Some(reading) = visible_models(_allow_window_capture).await {
+            return reading;
+        }
+    }
     let unavailable = if uses_host_bridge {
         Desktop::HostBridge
     } else {
@@ -599,10 +644,12 @@ fn window_from(bucket: &Value, scope: Option<String>) -> Option<(i64, UsageWindo
     // gone.** Everything downstream is in terms of what is gone.
     let used = (1.0 - remaining).clamp(0.0, 1.0);
 
+    // Antigravity uses Unix epoch when a bucket has no scheduled reset.
     let resets_at = bucket
         .get("resetTime")
         .and_then(Value::as_str)
-        .and_then(|text| parse_reset(&Value::String(text.to_string())));
+        .and_then(|text| parse_reset(&Value::String(text.to_string())))
+        .filter(|reset| reset != "1970-01-01T00:00:00Z");
 
     Some((
         seconds,
@@ -1243,6 +1290,20 @@ mod tests {
         assert!(windows[2].resets_at.is_none());
     }
 
+    #[test]
+    fn only_the_epoch_sentinel_is_omitted() {
+        let mut bucket = serde_json::json!({
+            "bucketId": "3p-weekly", "window": "weekly", "remainingFraction": 1.0,
+            "resetTime": "1970-01-01T01:00:00+01:00"
+        });
+        assert!(window_from(&bucket, None).unwrap().1.resets_at.is_none());
+        bucket["resetTime"] = serde_json::json!("1970-01-01T00:00:01Z");
+        assert_eq!(
+            window_from(&bucket, None).unwrap().1.resets_at.as_deref(),
+            Some("1970-01-01T00:00:01Z")
+        );
+    }
+
     /// **The one provider that reports what is *left*.** Everything downstream
     /// is in terms of what is gone.
     ///
@@ -1756,11 +1817,11 @@ Active Connections
     }
 
     #[test]
-    fn host_bridge_uses_cli_results_and_explains_when_cli_is_missing() {
+    fn host_bridge_explains_how_to_read_the_page_when_cli_is_missing() {
         use antigravity_cli::{Answer, Fault, NotAsked};
 
         let missing = weigh(Desktop::HostBridge, Answer::NotAsked(NotAsked::Missing));
-        assert_eq!(missing.error.as_deref(), Some(Reason::DesktopCliMissing.message()));
+        assert_eq!(missing.error.as_deref(), Some(Reason::DesktopModelsPage.message()));
         assert!(missing.windows.is_empty());
 
         let failed = weigh(Desktop::HostBridge, Answer::Failed(Fault::Unreadable));
@@ -1773,7 +1834,47 @@ Active Connections
         assert!(loaded.error.is_none());
 
         let pinned_desktop = desktop_usage(&Desktop::HostBridge);
-        assert_eq!(pinned_desktop.error.as_deref(), Some(Reason::DesktopNeedsCli.message()));
+        assert_eq!(pinned_desktop.error.as_deref(), Some(Reason::DesktopModelsPage.message()));
+    }
+
+    #[test]
+    fn visible_models_report_the_desktop_source() {
+        let windows = vec![UsageWindow::new("5h", Some(15.0))];
+        let reading = desktop_usage(&Desktop::VisibleModels(windows.clone(), "Antigravity 桌面模型页"));
+        assert_eq!(reading.source.as_deref(), Some("Antigravity 桌面模型页"));
+        assert_eq!(reading.windows, windows);
+        assert!(reading.error.is_none());
+    }
+
+    #[test]
+    fn a_visible_models_reading_backs_up_the_cli() {
+        use antigravity_cli::{Answer, Fault, NotAsked};
+
+        let source = "Antigravity 桌面模型页";
+        let visible = vec![UsageWindow::new("5h", Some(15.0))];
+        let server = Desktop::VisibleModels(visible.clone(), source);
+        let cli = vec![
+            UsageWindow::new("5h", Some(25.0))
+                .with_reset(Some("2026-10-02T22:00:00Z".into())),
+            UsageWindow::new("7d", Some(30.0)),
+        ];
+        let reading = weigh(server.clone(), Answer::Windows(cli.clone()));
+        assert_eq!(reading.source.as_deref(), Some("agy CLI"));
+        assert_eq!(reading.windows, cli);
+        assert!(reading.error.is_none());
+
+        for answer in [
+            Answer::NoLimits,
+            Answer::Failed(Fault::Unreadable),
+            Answer::Failed(Fault::Unreachable),
+            Answer::NotAsked(NotAsked::Missing),
+            Answer::NotAsked(NotAsked::Outdated),
+        ] {
+            let kept = weigh(server.clone(), answer);
+            assert_eq!(kept.source.as_deref(), Some(source));
+            assert_eq!(kept.windows, visible);
+            assert!(kept.error.is_none());
+        }
     }
 
     /// A pinned route reports its own endings: a route that quietly read the

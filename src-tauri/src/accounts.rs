@@ -75,8 +75,8 @@ pub fn local_document(provider: &str) -> Result<Value, String> {
         let id=new_id("codex");let mut p=crate::preferences::Preferences::default();
         p.accounts.push(Account{id:id.clone(),provider:"codex".into()});
         let ctx=std::sync::Arc::new(crate::providers::Ctx::new().unwrap());
-        assert!(crate::providers::collect_accounts(ctx.clone(),&[],&p).await.is_empty());
-        let result=crate::providers::collect_accounts(ctx,&[id.clone()],&p).await;
+        assert!(crate::providers::collect_accounts(ctx.clone(),&[],&p,false).await.is_empty());
+        let result=crate::providers::collect_accounts(ctx,&[id.clone()],&p,false).await;
         assert_eq!(result.len(),1);assert_eq!(result[0].id,id);assert!(result[0].configured);
         assert!(result[0].error.as_deref().unwrap().contains("独立登录"));assert!(result[0].windows.is_empty());
     }

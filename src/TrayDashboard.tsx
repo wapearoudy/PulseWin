@@ -28,6 +28,12 @@ function resetText(w:UsageWindow,now:number){
 }
 function updated(at:string,now:number){const age=now-Date.parse(at);return !Number.isFinite(age)?'更新时间未知':age<60000?'刚刚更新':`${Math.floor(age/60000)} 分钟前更新`}
 
+function quotaBarValue(window: UsageWindow | undefined, remaining: boolean): number | null {
+  const used = window?.percentUsed
+  if (used == null || !Number.isFinite(used)) return null
+  return Math.max(0, Math.min(100, remaining ? 100 - used : used))
+}
+
 export default function TrayDashboard(){
   useMoney()
   const {preferences:prefs,loaded,error:prefError}=usePreferences()
@@ -89,12 +95,9 @@ export default function TrayDashboard(){
     </nav>
     <main id="tray-content" role="tabpanel" aria-labelledby={account?`tab-${account.id}`:'tab-overview'} tabIndex={0}><div className="tray-content-inner" ref={content}>
       {(error||prefError)&&<p className="tray-error" role="alert">{error??prefError}</p>}
-      {!loaded||!snapshot?<p className="tray-muted" role="status">正在读取用量…</p>:account?<AccountDetail key={account.id} account={account} remaining={prefs.showsRemaining} warningAt={prefs.warningThreshold} now={now} readsSpend={prefs.tokenSpendEnabled||account.id==='deepseek'||account.id==='opencode-go'} usageBarStyle={prefs.usageBarStyle}/>:accounts.length?<div className="tray-overview">{accounts.map(p=>{
-        const w=headlineWindow(p,prefs.pinnedWindows[p.id]);return <button key={p.id} onClick={()=>setSelected(p.id)} aria-label={`查看${p.name}用量`}>
-          <span className="tray-provider-icon"><ProviderIcon provider={p.id}/></span><span className="tray-row-name"><strong>{p.name}</strong><small>{p.stale?'旧读数 · ':''}{w?`${w.label} · ${resetText(w,now)}`:p.error||'暂无用量数字'}</small></span>
-          <span className={quotaWarning(w,prefs.warningThreshold,Date.now())?'tray-warning':''}>{w?.percentUsed!=null?quotaFigure(w,prefs.showsRemaining):creditText(p.creditRemaining)??'—'}</span>
-        </button>
-      })}<p className="tray-muted tray-reading-label">{prefs.showsRemaining?'显示剩余额度':'显示已用额度'}</p></div>:<p className="tray-muted">尚未选择监控账号。请在设置中添加。</p>}
+      {!loaded||!snapshot?<p className="tray-muted" role="status">正在读取用量…</p>:account?<AccountDetail key={account.id} account={account} remaining={prefs.showsRemaining} warningAt={prefs.warningThreshold} now={now} readsSpend={prefs.tokenSpendEnabled||account.id==='deepseek'||account.id==='opencode-go'} usageBarStyle={prefs.usageBarStyle}/>:accounts.length?<div className="tray-overview">
+        {accounts.map(account => <OverviewRow key={account.id} account={account} pin={prefs.pinnedWindows[account.id]} remaining={prefs.showsRemaining} warningAt={prefs.warningThreshold} now={now} barStyle={prefs.usageBarStyle} onSelect={setSelected} />)}
+      </div>:<p className="tray-muted">尚未选择监控账号。请在设置中添加。</p>}
     </div></main>
     <footer className="tray-footer">
       {account&&pages[account.id.split('--account-')[0]]&&<button onClick={()=>{void action(()=>invoke('open_usage_page',{account:account.id}))}}>打开官方用量页面 <span>↗</span></button>}
@@ -104,6 +107,43 @@ export default function TrayDashboard(){
     </footer>
   </div>
 }
+
+function OverviewRow({ account, pin, remaining, warningAt, now, barStyle, onSelect }: {
+  account: ProviderUsage
+  pin?: string
+  remaining: boolean
+  warningAt: number
+  now: number
+  barStyle: 'continuous' | 'segmented'
+  onSelect: (id: string) => void
+}) {
+  const window = headlineWindow(account, pin)
+  const value = quotaBarValue(window, remaining)
+  const credit = value == null ? creditText(account.creditRemaining) : null
+  const figure = value == null ? credit ?? '—' : `${quotaFigure(window, remaining)} ${remaining ? '剩余' : '已用'}`
+  const exhausted = window?.isExhausted || (window?.percentUsed ?? 0) >= 100
+  const warning = !account.stale && !account.error && quotaWarning(window, warningAt, now)
+  const metadata = window
+    ? [exhausted ? '已限额' : warning ? '用量偏快' : null, window.label, window.scope, resetText(window, now)]
+    : [account.error || (credit ? '余额' : '暂无用量数字')]
+  const context = [account.stale ? '旧读数' : null, ...metadata].filter(Boolean).join(' · ')
+  const description = `${figure === '—' ? '暂无额度读数' : figure} · ${context}`
+
+  return <button className="tray-overview-row" onClick={() => onSelect(account.id)} aria-label={`查看${account.name}用量`} aria-description={description}>
+    <span className="tray-provider-icon"><ProviderIcon provider={account.id}/></span>
+    <span className="tray-row-body">
+      <span className="tray-row-heading">
+        <strong>{account.name}</strong>
+        <span className={`tray-row-value ${warning ? 'tray-warning' : account.stale ? 'tray-muted' : ''}`}>{figure}</span>
+      </span>
+      {value != null && <span aria-hidden="true" className={`tray-progress${barStyle === 'segmented' ? ' tray-progress--segmented' : ''}${warning ? ' tray-progress--warning' : ''}${account.stale ? ' tray-progress--stale' : ''}`}>
+        <span style={{ width: `${value}%` }}/>
+      </span>}
+      <small title={context}>{context}</small>
+    </span>
+  </button>
+}
+
 function AccountDetail({account:p,remaining,warningAt,now,readsSpend,usageBarStyle}:{account:ProviderUsage;remaining:boolean;warningAt:number;now:number;readsSpend:boolean;usageBarStyle:'continuous'|'segmented'}){
   const local=!p.id.includes('--account-')&&['claude-code','codex','kimi-code','grok','opencode-go','cursor','antigravity','command-code','copilot','deepseek'].includes(p.id)
   const history=useCardHistory(p.id,local,readsSpend),credit=creditText(p.creditRemaining)
@@ -115,11 +155,11 @@ function AccountDetail({account:p,remaining,warningAt,now,readsSpend,usageBarSty
     {p.error&&<p className="tray-error">{p.error}</p>}
     {!p.windows.length&&!credit&&<p className="tray-muted">服务商尚未提供用量数字。</p>}
     {p.windows.map((w,i)=>{
-      const used=w.percentUsed,known=used!=null&&Number.isFinite(used),spent=w.isExhausted,warning=quotaWarning(w,warningAt,Date.now())
-      const value=known?Math.max(0,Math.min(100,remaining&&!spent?100-used!:used!)):null
+      const spent=w.isExhausted,warning=quotaWarning(w,warningAt,Date.now())
+      const value=quotaBarValue(w, remaining && !spent)
       return <section className="tray-quota" key={`${w.id??w.label}-${i}`}>
         <div><strong>{w.label}</strong><small>{resetText(w,now)}</small></div>
-        {known?<div className={`tray-progress${warning?' tray-warning':''}${usageBarStyle==='segmented'?' tray-progress--segmented':''}`} role="progressbar" aria-label={w.label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={value!} aria-valuetext={spent?'已限额':`${quotaFigure(w,remaining)}${remaining?'剩余':'已用'}`}><span style={{width:`${value}%`}}/></div>:<div className="tray-progress" aria-label={`${w.label}暂无数字`}/>}
+        {value != null?<div className={`tray-progress${warning?' tray-warning':''}${usageBarStyle==='segmented'?' tray-progress--segmented':''}`} role="progressbar" aria-label={w.label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={value} aria-valuetext={spent?'已限额':`${quotaFigure(w,remaining)}${remaining?'剩余':'已用'}`}><span style={{width:`${value}%`}}/></div>:<div className="tray-progress" aria-label={`${w.label}暂无数字`}/>}
         <p className={warning?'tray-warning':'tray-muted'}>{quotaFigure(w,remaining)} {remaining?'剩余':'已用'}{spent?' · 已限额':''}</p>
         {w.detail&&<small className="tray-muted">{w.detail}</small>}
       </section>

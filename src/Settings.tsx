@@ -47,6 +47,24 @@ const settingsPanes:[string,string,ReactNode,string][]=[
   ['integrations','开发者集成',<SidebarSymbol><path d="M9 8l-4 4 4 4M15 8l4 4-4 4"/><path d="M13 4l-2 16"/></SidebarSymbol>,'开发者 命令行 json 状态栏 statusline 链接 集成'],
 ]
 
+const settingsSections = [
+  { label: '面板', ids: ['appearance', 'rings', 'behavior'] },
+  { label: '应用', ids: ['general', 'notifications', 'network', 'accounts', 'token-spend', 'extensions', 'integrations', 'about'] },
+]
+
+function accountStatus(provider: ProviderSetting, enabled: boolean, usage?: ProviderUsage) {
+  if (enabled && usage?.stale) return { tone: 'stale', label: '旧读数' }
+  if (provider.credentialError) return { tone: 'error', label: '凭据无法读取' }
+  if (!enabled) return provider.configured
+    ? { tone: 'detected', label: '已检测到连接配置' }
+    : { tone: 'idle', label: '尚未开启监控' }
+  if (usage?.configured === false) return { tone: 'error', label: '未配置连接' }
+  if (usage?.error) return { tone: 'error', label: '检查失败' }
+  if (usage?.windows.some(window => Number.isFinite(window.percentUsed) || window.isExhausted || window.quotaAmounts)
+    || usage?.metrics?.length || creditText(usage?.creditRemaining)) return { tone: 'live', label: '已读取用量' }
+  return { tone: 'idle', label: usage ? '暂无用量' : '尚未检查' }
+}
+
 export default function Settings() {
   useMoney()
   const { preferences: prefs, loaded, error: loadError } = usePreferences()
@@ -150,9 +168,20 @@ const openAbout = (key: string) => invoke('open_about_link', { key }).catch((err
   }
   const change = (patch: Partial<Preferences>) => { void update(patch).catch(() => undefined) }
   useEffect(()=>()=>{releaseSpendSession()},[])
-  const shown = useMemo(() => [...providers].sort((a,b) => prefs.providerOrder.indexOf(a.id)-prefs.providerOrder.indexOf(b.id)).filter(p => `${p.name} ${p.id}`.toLowerCase().includes(query.toLowerCase())), [providers,prefs.providerOrder,query])
+  const search = query.trim().toLowerCase()
+  const sectionLinks = settingsSections.map(({ label, ids }) => ({
+    label,
+    entries: ids.flatMap(id => settingsPanes.filter(([key, name,,terms]) => key === id && `${id} ${name} ${terms}`.toLowerCase().includes(search))),
+  }))
+  const enabledIds = new Set(prefs.enabledProviders)
+  const providerRanks = new Map(prefs.providerOrder.map((id, index) => [id, index]))
+  const providerNames = new Map(providerRows.map(row => [row.id, row.name]))
+  const shown = providers
+    .filter(p => `${p.name} ${p.id} ${p.providerId ?? ''} ${providerNames.get(p.providerId ?? p.id) ?? ''}`.toLowerCase().includes(search))
+    .sort((a, b) => (providerRanks.get(a.id) ?? providerRanks.size) - (providerRanks.get(b.id) ?? providerRanks.size))
+  const usageByAccount = new Map(snapshot?.providers.map(usage => [usage.id, usage]))
   const provider = providers.find(p => p.id === pane), enabled = prefs.enabledProviders.includes(pane)
-  const accountUsage=snapshot?.providers.find(p=>p.id===pane)
+  const accountUsage = usageByAccount.get(pane)
   const appearance = { ...defaultAccountAppearance, ...prefs.accountAppearance[pane] }
   const setAppearance = (patch:Partial<typeof appearance>) => change({accountAppearance:{...prefs.accountAppearance,[pane]:{...appearance,...patch}}})
   const choosing = loaded && (choose || (!dismissed && !prefs.enabledProviders.length))
@@ -169,18 +198,35 @@ const openAbout = (key: string) => invoke('open_about_link', { key }).catch((err
     const next=orderedEnabled[orderedEnabled.indexOf(id)+by]
     if(next)moveTo(id,next)
   }
+  function accountSection(label: string, monitored: boolean) {
+    const entries = shown.filter(account => enabledIds.has(account.id) === monitored)
+    if (!entries.length) return null
+    return <div role="group" aria-label={label}>
+      <p className="nav-section">{label}</p>
+      {entries.map(account => {
+        const status = accountStatus(account, monitored, usageByAccount.get(account.id))
+        return <button key={account.id} aria-current={pane === account.id ? 'page' : undefined} aria-description={status.label} title={`${account.name} · ${status.label}`}
+          className={pane === account.id ? 'selected' : ''} onClick={() => navigate(account.id)}>
+          <span className="settings-nav-icon" aria-hidden="true"><ProviderIcon provider={account.id}/></span>
+          <span className="account-name">{account.name}</span><span className={`account-dot account-dot--${status.tone}`} aria-hidden="true" />
+        </button>
+      })}
+    </div>
+  }
   return <div className="settings-shell">
     <aside className="settings-sidebar" aria-label="设置导航">
       <div className="settings-brand"><span className="brand-mark">◉</span><strong>Pulse</strong><span>Windows</span></div>
       <input type="search" aria-label="搜索设置与账号" placeholder="搜索设置与账号" value={query} onChange={e => setQuery(e.target.value)} />
-      <nav>{[['面板', ['appearance', 'rings', 'behavior']], ['应用', ['general', 'notifications', 'network', 'accounts', 'token-spend', 'extensions', 'integrations']]].map(([title, ids]) => {
-        const entries = settingsPanes.filter(([id, name,,terms]) => (ids as string[]).includes(id) && `${id} ${name} ${terms}`.toLowerCase().includes(query.toLowerCase())).sort((a,b) => (ids as string[]).indexOf(a[0]) - (ids as string[]).indexOf(b[0]))
-        return entries.length > 0 && <div key={String(title)}><p className="nav-section">{title}</p>{entries.map(([id,name,icon]) => <button key={id} className={pane === id ? 'selected' : ''} onClick={() => navigate(id)}><span className="settings-nav-icon" aria-hidden="true">{icon}</span><span className="settings-nav-label">{name}</span></button>)}</div>
-      })}
-        <p className="nav-section">账号</p>
-        {shown.map(p => <button key={p.id} className={pane === p.id ? 'selected' : ''} onClick={() => navigate(p.id)}><span className="settings-nav-icon" aria-hidden="true"><ProviderIcon provider={p.id}/></span><span className="account-name">{p.name}</span></button>)}
-        {!shown.length && query && <p className="muted">没有匹配的账号</p>}
-        {settingsPanes.filter(([id,name,,terms]) => id === 'about' && `${id} ${name} ${terms}`.toLowerCase().includes(query.toLowerCase())).map(([id,name,icon]) => <button key={id} className={pane === id ? 'selected' : ''} onClick={() => navigate(id)}><span className="settings-nav-icon" aria-hidden="true">{icon}</span><span className="settings-nav-label">{name}</span></button>)}
+      <nav>
+        {accountSection('监控中', true)}
+        {sectionLinks.map(({ label, entries }) => entries.length > 0 && <div key={label} role="group" aria-label={label}>
+          <p className="nav-section">{label}</p>
+          {entries.map(([id, name, icon]) => <button key={id} aria-current={pane === id ? 'page' : undefined} className={pane === id ? 'selected' : ''} onClick={() => navigate(id)}>
+            <span className="settings-nav-icon" aria-hidden="true">{icon}</span><span className="settings-nav-label">{name}</span>
+          </button>)}
+        </div>)}
+        {accountSection('可添加服务', false)}
+        {search && !shown.length && sectionLinks.every(({ entries }) => !entries.length) && <p className="muted" role="status">没有匹配的设置或账号</p>}
       </nav><div className="sidebar-footer">{prefs.enabledProviders.length} 个账号显示在面板</div>
     </aside>
     <main className="settings-content" ref={content}>
@@ -230,11 +276,14 @@ const openAbout = (key: string) => invoke('open_about_link', { key }).catch((err
           ? (provider.configured ? '已检测到 Antigravity 桌面端或 agy CLI。' : '尚未检测到 Antigravity 桌面端或 agy CLI。')
           : (provider.configured ? '已发现凭据；连接结果以下方实际检查为准。' : '尚未发现可用凭据。')}</p>
         {provider.credentialError&&<div role="alert" className="settings-alert">{provider.credentialError}</div>}
-        {enabled&&accountUsage?.creditRemaining&&<LowBalanceAlert value={prefs.alerts.lowBalance[pane]} currency={accountUsage.creditRemaining.currency} disabled={busy} onChange={v=>{const lowBalance={...prefs.alerts.lowBalance};if(v===undefined)delete lowBalance[pane];else lowBalance[pane]=v;change({alerts:{...prefs.alerts,lowBalance}})}}/>}
         <Group title="面板"><Toggle title="显示在面板" subtitle="关闭后停止此账号的用量检查。" disabled={busy} value={enabled} onChange={v => change({ enabledProviders: v ? [...prefs.enabledProviders,pane] : prefs.enabledProviders.filter(id => id !== pane) })} /></Group>
-        {enabled ? <><Group title="圆环显示"><Row title="显示的额度窗口"><select aria-label="显示的额度窗口" disabled={busy} value={accountUsage?.windows.find(w=>w.label===prefs.pinnedWindows[pane])?.id ?? prefs.pinnedWindows[pane] ?? ''} onChange={e => { const pins = { ...prefs.pinnedWindows }; if(e.target.value) pins[pane] = e.target.value; else delete pins[pane]; change({ pinnedWindows: pins }) }}><option value="">自动选择最接近上限的窗口</option>{accountUsage?.windows.map((w,i) => <option key={w.id ?? `${w.label}:${i}`} value={w.id ?? w.label}>{w.label}{w.scope ? ` · ${w.scope}` : ''}</option>)}</select></Row></Group><CardContentGroup account={provider.id} preferences={prefs} disabled={busy} onChange={parts => setAppearance({cardParts:parts})}/>
-        <RobotSettings account={provider.id} appearance={appearance} preferences={prefs} disabled={busy} onChange={setAppearance} />
-        <Group title="圆环颜色"><Row title="高亮色" subtitle="自动随用量变化；用尽时仍显示深红。"><div className="toolbar"><input type="color" aria-label="圆环高亮色" value={appearance.ringColour??'#00e68c'} disabled={busy} onChange={e=>setAppearance({ringColour:e.target.value})}/><button disabled={busy||!appearance.ringColour} onClick={()=>setAppearance({ringColour:null})}>自动</button></div></Row></Group><AccountDetails key={provider.id==='minimax' ? `minimax:${prefs.minimaxSite}` : provider.id} minimaxSite={provider.id==='minimax' ? prefs.minimaxSite : undefined} provider={provider} usage={accountUsage} settings={prefs} onError={setError} onChanged={reload} /></> : <Group title="当前用量"><p className="group-copy">未显示。启用后配置连接并检查用量。</p></Group>}
+        {enabled ? <AccountDetails key={provider.id==='minimax' ? `minimax:${prefs.minimaxSite}` : provider.id} minimaxSite={provider.id==='minimax' ? prefs.minimaxSite : undefined} provider={provider} usage={accountUsage} settings={prefs} onError={setError} onChanged={reload}>
+          {accountUsage?.creditRemaining&&<LowBalanceAlert value={prefs.alerts.lowBalance[pane]} currency={accountUsage.creditRemaining.currency} disabled={busy} onChange={v=>{const lowBalance={...prefs.alerts.lowBalance};if(v===undefined)delete lowBalance[pane];else lowBalance[pane]=v;change({alerts:{...prefs.alerts,lowBalance}})}}/>}
+          <Group title="圆环显示"><Row title="显示的额度窗口"><select aria-label="显示的额度窗口" disabled={busy} value={accountUsage?.windows.find(w=>w.label===prefs.pinnedWindows[pane])?.id ?? prefs.pinnedWindows[pane] ?? ''} onChange={e => { const pins = { ...prefs.pinnedWindows }; if(e.target.value) pins[pane] = e.target.value; else delete pins[pane]; change({ pinnedWindows: pins }) }}><option value="">自动选择最接近上限的窗口</option>{accountUsage?.windows.map((w,i) => <option key={w.id ?? `${w.label}:${i}`} value={w.id ?? w.label}>{w.label}{w.scope ? ` · ${w.scope}` : ''}</option>)}</select></Row></Group>
+          <CardContentGroup account={provider.id} preferences={prefs} disabled={busy} onChange={parts => setAppearance({cardParts:parts})}/>
+          <RobotSettings account={provider.id} appearance={appearance} preferences={prefs} disabled={busy} onChange={setAppearance} />
+          <Group title="圆环颜色"><Row title="高亮色" subtitle="自动随用量变化；用尽时仍显示深红。"><div className="toolbar"><input type="color" aria-label="圆环高亮色" value={appearance.ringColour??'#00e68c'} disabled={busy} onChange={e=>setAppearance({ringColour:e.target.value})}/><button disabled={busy||!appearance.ringColour} onClick={()=>setAppearance({ringColour:null})}>自动</button></div></Row></Group>
+        </AccountDetails> : <Group title="当前用量"><p className="group-copy">未显示。启用后配置连接并检查用量。</p></Group>}
         {provider.id==='deepseek'&&<DeepSeekConsoleGroup enabled={enabled} onChanged={reload}/>}
         {provider.id==='qoder'&&<QoderCreditsGroup enabled={enabled}/>}
     {provider.id==='opencode-go'&&<OpenCodeConsoleGroup enabled={enabled} onChanged={reload}/>}
@@ -364,23 +413,25 @@ function CardContentGroup({ account, preferences, disabled, onChange }: {
     </details>
   </Group>
 }
-function AccountDetails({ provider, usage, onError, onChanged, minimaxSite, settings }: { provider: ProviderSetting; usage?: ProviderUsage; onError:(e:string|null)=>void; onChanged:()=>void; minimaxSite?:MiniMaxSite; settings: UsageBarPreferences }) {
+function AccountDetails({ provider, usage, onError, onChanged, minimaxSite, settings, children }: { provider: ProviderSetting; usage?: ProviderUsage; onError:(e:string|null)=>void; onChanged:()=>void; minimaxSite?:MiniMaxSite; settings: UsageBarPreferences; children: ReactNode }) {
   const [key,setKey] = useState(''), [address,setAddress] = useState(''), [busy,setBusy] = useState(false), [saved,setSaved] = useState(false), [copied,setCopied] = useState(false)
   const action = async (save:boolean) => {
     setBusy(true); setSaved(false); onError(null)
     try { if(save) { await saveProviderCredential(provider.id,key||null,address||null,minimaxSite); setKey(''); setAddress(''); setSaved(true); onChanged() } else await refreshProvider(provider.id) }
     catch(e) { onError(String(e)) } finally { setBusy(false) }
   }
-  return <><Group title="连接"><Row title="访问凭据" subtitle={provider.additional?'仅用于此账号。可粘贴 OAuth Token、登录 JSON 或会话 Cookie。':provider.stored ? '已保存凭据。留空保留现有值。' : '填写 API Key、Token 或 Cookie。'}><input type="password" aria-label="访问凭据" autoComplete="off" placeholder="粘贴凭据" value={key} onChange={e => { setKey(e.target.value); setSaved(false) }} /></Row>
+  return <>
+    <Group title="当前用量">{usage?.error&&<div className="connection-error"><strong>{usage.windows.length||creditText(usage.creditRemaining)?'检查失败，显示上次有效读数':'无法获取用量'}</strong><p>{usage.error}</p></div>}{usage?.stale&&<p className="group-copy">旧读数 · {new Date(usage.fetchedAt).toLocaleString()}</p>}{usage?.windows.length ? <AccountUsageBars usage={usage} settings={settings} /> : !usage?.error&&!creditText(usage?.creditRemaining)&&<p className="group-copy">尚未完成检查。</p>}
+    {creditText(usage?.creditRemaining)&&<Row title="余额"><span className="usage-value">{creditText(usage?.creditRemaining)}</span></Row>}
+    <div className="group-actions"><small>{usage ? `最近检查：${new Date(usage.fetchedAt).toLocaleString()}` : ''}</small><button disabled={busy} onClick={() => { void action(false) }}>{busy ? '正在检查…' : '刷新此账号'}</button></div></Group>
+    <Group title="连接"><Row title="访问凭据" subtitle={provider.additional?'仅用于此账号。可粘贴 OAuth Token、登录 JSON 或会话 Cookie。':provider.stored ? '已保存凭据。留空保留现有值。' : '填写 API Key、Token 或 Cookie。'}><input type="password" aria-label="访问凭据" autoComplete="off" placeholder="粘贴凭据" value={key} onChange={e => { setKey(e.target.value); setSaved(false) }} /></Row>
     {!provider.additional && <Row title="服务器地址" subtitle="仅自建网关需要；留空保留现有地址。"><input type="url" aria-label="服务器地址" placeholder="https://…" value={address} onChange={e => { setAddress(e.target.value); setSaved(false) }} /></Row>}
-    <div className="group-actions"><span role="status">{saved ? '已保存，连接结果见下方' : ''}</span><button disabled={busy || (!key.trim() && !address.trim())} onClick={() => { void action(true) }}>{busy ? '正在检查…' : '保存并检查'}</button></div>
+    <div className="group-actions"><span role="status">{saved ? '已保存，连接结果见「当前用量」' : ''}</span><button disabled={busy || (!key.trim() && !address.trim())} onClick={() => { void action(true) }}>{busy ? '正在检查…' : '保存并检查'}</button></div>
     {provider.additional && <div className="group-actions">{provider.providerId!=='grok-bot'&&<button disabled={busy} onClick={()=>{setBusy(true);onError(null);void importAccountLogin(provider.id).then(()=>{setSaved(true);onChanged()}).catch(e=>onError(String(e))).finally(()=>setBusy(false))}}>重新导入 CLI 登录</button>}</div>}
     <details><summary>凭据读取位置</summary>{provider.hints.map(p => <code key={p}>{p}</code>)}</details></Group>
     {provider.id === 'opencode-go' && <p className="group-copy">需要当前密钥所属账号和工作区的 Go 订阅。默认读取 OpenCode CLI 登录；在这里保存的 API key 优先于 CLI。若已订阅却提示未检测到订阅，请核对 OpenCode 控制台中的账号、工作区与密钥。</p>}
     {usage?.source && <p className="group-copy" data-testid="credential-source">凭据来源：{usage.source}</p>}
-    <Group title="当前用量">{usage?.error&&<div className="connection-error"><strong>{usage.windows.length||creditText(usage.creditRemaining)?'检查失败，显示上次有效读数':'无法获取用量'}</strong><p>{usage.error}</p></div>}{usage?.stale&&<p className="group-copy">旧读数 · {new Date(usage.fetchedAt).toLocaleString()}</p>}{usage?.windows.length ? <AccountUsageBars usage={usage} settings={settings} /> : !usage?.error&&!creditText(usage?.creditRemaining)&&<p className="group-copy">尚未完成检查。</p>}
-    {creditText(usage?.creditRemaining)&&<Row title="余额"><span className="usage-value">{creditText(usage?.creditRemaining)}</span></Row>}
-    <div className="group-actions"><small>{usage ? `最近检查：${new Date(usage.fetchedAt).toLocaleString()}` : ''}</small><button disabled={busy} onClick={() => { void action(false) }}>{busy ? '正在检查…' : '刷新此账号'}</button></div></Group>
+    {children}
     <Group title="连接诊断"><Row title="最近检查" subtitle={usage?.error ?? (usage ? '最近一次检查已完成。' : '启动后尚未完成检查。')}><span>{usage?.stale ? '旧读数' : usage?.error ? '失败' : '—'}</span></Row>
       <Row title="检查时间">{usage ? new Date(usage.fetchedAt).toLocaleString() : '—'}</Row>
       <Row title="显示来源" subtitle="只包含来源、状态与时间，不包含凭据。">{usage?.source ?? '未记录'}</Row>

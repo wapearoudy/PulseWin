@@ -1,0 +1,47 @@
+{
+ "version": "0.1.23",
+ "status": "verified-candidate",
+ "authorization": "提交发版（2026-11-28）",
+ "changes": [
+  "Group settings accounts by monitoring state and show their connection status. Move the current usage and connection sections higher in account settings.",
+  "Add scoped quota bars and reset status to the system tray overview.",
+  "Keep official CLI quota readings and reset times in automatic mode when they are available. Allow an explicit account refresh from the open Antigravity Models page when using desktop readings.",
+  "Ignore the Unix epoch placeholder reported for unset Antigravity quota resets."
+ ],
+ "tests": {
+  "frontend": {
+   "passed": 299,
+   "files": 30
+  },
+  "browser": {
+   "passed": 94,
+   "note": "Windows Edge with simulated application IPC."
+  },
+  "rust": {
+   "passed": 1331,
+   "failed": 0,
+   "ignored": 2,
+   "note": "cargo test --locked --all-targets on Windows."
+  },
+  "windowsRelease": "PASS. TypeScript and Vite production build, signed x64 NSIS and MSI packages, native WebView2 assistant and IPC checks, and the read-only release CLI suite.",
+  "antigravity": {
+   "status": "PASS",
+   "desktopVersion": "2.36.0",
+   "cliVersion": "1.5.18",
+   "source": "agy CLI",
+   "modelPageOpened": false,
+   "manualRefreshCount": 0,
+   "intervalSeconds": 120,
+   "automaticReads": 2,
+   "comparedQuotaWindows": 4,
+   "candidateSha256": "3f193b46af8aa8abcc89e2ad170c52e1c459d007b4178410f52006ccda9d2dda",
+   "checkedAt": "2026-11-28T04:57:09.475Z"
+  },
+  "updater": "PASS. An isolated 0.1.21 client downloaded the actual signed 0.1.23 NSIS package and verified its bound version and signature. A separate 0.1.23 updater test passed. Tampered bytes and forged versions were rejected. No installer executed."
+ },
+ "fullParity": false,
+ "limitations": [
+  "Windows 2.36 background quota verification used the official agy CLI. The desktop Models page remains a manual fallback.",
+  "The remaining original-Pulse and real-account acceptance items stay open in release-progress.json."
+ ]
+}

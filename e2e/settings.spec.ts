@@ -230,6 +230,60 @@ test('developer integrations are reachable through Settings search',async({page}
   await expect(page.getByRole('region',{name:'读取缓存的用量'})).toBeVisible()
 })
 
+test('account navigation groups monitoring status and keeps current usage near the top', async ({ page }, testInfo) => {
+  await page.getByRole('button', { name: '暂不设置' }).click()
+  await page.evaluate(() => {
+    const w = window as any
+    Object.assign(w.testPrefs, { enabledProviders: ['codex', 'deepseek'], providerOrder: ['deepseek', 'claude-code', 'codex'] })
+    w.testEmit('preferences-changed', structuredClone(w.testPrefs))
+  })
+  const nav = page.getByRole('navigation')
+  const monitored = nav.getByRole('group', { name: '监控中' })
+  const available = nav.getByRole('group', { name: '可添加服务' })
+  const codex = monitored.getByRole('button', { name: 'Codex', exact: true })
+  const deepseek = monitored.getByRole('button', { name: 'DeepSeek', exact: true })
+  await expect(nav.getByRole('group').first()).toHaveAttribute('aria-label', '监控中')
+  await expect(monitored.getByRole('button')).toHaveText(['DeepSeek', 'Codex'])
+  await expect(available.getByRole('button', { name: 'Claude Code', exact: true })).toHaveAccessibleDescription('已检测到连接配置')
+  await expect(codex).toHaveAccessibleDescription('尚未检查')
+
+  const now = new Date().toISOString()
+  const usage = {
+    id: 'codex', name: 'Codex', configured: true, fetchedAt: now, error: null,
+    windows: [{ label: '5h', percentUsed: 72, resetsAt: null }, { label: '7d', percentUsed: 24, resetsAt: null }],
+  }
+  const stale = { ...usage, id: 'deepseek', name: 'DeepSeek', stale: true, error: 'Test fixture' }
+  await page.evaluate(({ usage, stale, now }) => (window as any).testEmit('usage-updated', { providers: [usage, stale], fetchedAt: now }), { usage, stale, now })
+  await expect(codex).toHaveAccessibleDescription('已读取用量')
+  await expect(deepseek).toHaveAccessibleDescription('旧读数')
+  await codex.focus()
+  await page.keyboard.press('Enter')
+  await expect(codex).toHaveAttribute('aria-current', 'page')
+  const currentUsage = page.getByRole('heading', { name: '当前用量', exact: true })
+  const connection = page.getByRole('heading', { name: '连接', exact: true })
+  const cardContent = page.getByRole('heading', { name: '卡片内容', exact: true })
+  await expect(page.getByRole('button', { name: '刷新此账号', exact: true })).toBeInViewport()
+  expect((await currentUsage.boundingBox())!.y).toBeLessThan((await connection.boundingBox())!.y)
+  expect((await currentUsage.boundingBox())!.y).toBeLessThan((await cardContent.boundingBox())!.y)
+  await page.setViewportSize({ width: 960, height: 800 })
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme })
+    await page.screenshot({ path: testInfo.outputPath(`provider-navigation-${colorScheme}.png`) })
+  }
+
+  await page.evaluate(({ usage, stale, now }) => (window as any).testEmit('usage-updated', { providers: [usage, { ...stale, stale: false, windows: [] }], fetchedAt: now }), { usage, stale, now })
+  await expect(deepseek).toHaveAccessibleDescription('检查失败')
+  const search = page.getByRole('searchbox', { name: '搜索设置与账号' })
+  await search.fill('  CLAUDE CODE  ')
+  await expect(available.getByRole('button', { name: 'Claude Code', exact: true })).toBeVisible()
+  await expect(monitored).toHaveCount(0)
+  await search.fill('statusline')
+  await expect(nav.getByRole('button', { name: '开发者集成', exact: true })).toBeVisible()
+  await expect(nav.getByRole('status')).toHaveCount(0)
+  await search.fill('no-matching-settings')
+  await expect(nav.getByRole('status')).toHaveText('没有匹配的设置或账号')
+})
+
 test('switching account pages starts the new page at its first settings',async({page})=>{
   await page.getByRole('button',{name:'选择已检测到的服务'}).click()
   await page.getByRole('button',{name:'完成',exact:true}).click()

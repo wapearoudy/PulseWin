@@ -1,6 +1,6 @@
 [package]
 name = "pulsewin"
-version = "0.1.22"
+version = "0.1.23"
 description = "Windows tray monitor for AI coding tool quota"
 authors = ["PulseWin contributors"]
 edition = "2021"
@@ -49,6 +49,28 @@ tauri-plugin-single-instance = "2"
 # HTTP_PROXY/HTTPS_PROXY, which most Windows users never set.
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
+windows-future = "0.3"
+windows = { version = "0.62", features = [
+    "Foundation",
+    "Globalization",
+    "Graphics_Capture",
+    "Graphics_DirectX_Direct3D11",
+    "Graphics_Imaging",
+    "Media_Ocr",
+    "Storage_Streams",
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_System_Com",
+    "Win32_System_Ole",
+    "Win32_System_Threading",
+    "Win32_System_Variant",
+    "Win32_System_WinRT_Direct3D11",
+    "Win32_System_WinRT_Graphics_Capture",
+    "Win32_UI_Accessibility",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
 [profile.release]
 panic = "abort"

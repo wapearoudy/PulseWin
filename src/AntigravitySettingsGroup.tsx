@@ -1,14 +1,13 @@
 import { type AntigravityUsageSource, groupsShown } from './preferences'
 
 /// The three routes, in the order the original offers them, with the words the
-/// picker shows. `cli` asks the `agy` command; `desktop` asks the language
-/// server Antigravity runs while it is open; `auto` tries the app first and the
-/// CLI when the app reported no figures.
+/// picker shows. `desktop` reads the open Models page on newer desktop builds
+/// and `auto` can fall back to the CLI when the desktop has no reading.
 export const SOURCE_OPTIONS: { value: AntigravityUsageSource; label: string; subtitle: string }[] = [
   {
     value: 'auto',
     label: '自动',
-    subtitle: '优先读取兼容的桌面端。新版桌面端的用量通过已登录的 agy CLI 读取。',
+    subtitle: '优先读取桌面端。新版请打开 Antigravity 的「设置 → 模型」后刷新此账号。桌面端不可用时尝试已安装的 CLI。',
   },
   {
     value: 'cli',
@@ -18,7 +17,7 @@ export const SOURCE_OPTIONS: { value: AntigravityUsageSource; label: string; sub
   {
     value: 'desktop',
     label: '桌面端',
-    subtitle: '从运行中的兼容桌面端读取。新版桌面端请选择「自动」或「CLI（agy）」。',
+    subtitle: '新版请保持 Antigravity 的「设置 → 模型」显示完整额度。点击「刷新此账号」可识别页面上的百分比。',
   },
 ]
 

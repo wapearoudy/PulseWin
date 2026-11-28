@@ -1,8 +1,8 @@
 {
- "version": "0.1.22",
- "status": "interim-published",
- "releaseHold": true,
- "reason": "The user-authorized 0.1.22 incremental release is public. The parity hold applies to the remaining original-Pulse and real-account acceptance items.",
+ "version": "0.1.23",
+ "status": "release-preparation",
+ "releaseHold": false,
+ "reason": "The user authorized publication of the verified Windows changes for 0.1.23 on 2026-11-28. Antigravity background acceptance passed with the official CLI. The remaining parity and real-account checks stay open.",
  "upstream": "1.13.0",
  "publishedVersion": "0.1.22",
  "implementedVerified": [
@@ -62,15 +62,17 @@
   "Command Code usage is priced from the models.dev rates PulseWin carries, and Command Code shows the working mark while its CLI or desktop app is mid-turn.",
   "The Token Spend daily chart is drawn from the first day of records and still appears when the range holds a single day.",
   "Devin usage that comes through Oh My Pi is folded into the Oh My Pi card instead of being counted twice.",
-  "A detailed card longer than its bubble scrolls with its title held at the top; settings groups carry a small symbol; the About pane gained Star and afdian entries plus the one-time request after a fortnight of real use."
+  "A detailed card longer than its bubble scrolls with its title held at the top; settings groups carry a small symbol; the About pane gained Star and afdian entries plus the one-time request after a fortnight of real use.",
+  "Account settings group monitored and available providers, expose connection status, and move usage and connection details up. Tray shows scoped quota bars and reset status.",
+  "Antigravity 2.36 on Windows returned the same Gemini and Claude/GPT five-hour and weekly allowances as the official agy 1.5.18 CLI at startup and on a timed refresh. The model page stayed closed."
  ],
  "verification": {
-  "rust": "1324 passed, 0 failed and 2 real-account checks ignored in cargo test --all-targets on Windows.",
+  "rust": "1331 passed, 0 failed and 2 real-account checks ignored in cargo test --locked --all-targets on Windows.",
   "frontendUnit": "299 passed in 30 files. TypeScript and Vite production build passed.",
-  "browser": "92 passed in the full Windows Edge suite with simulated application IPC.",
-  "native": "The 0.1.22 release binary passed Windows WebView2 assistant, settings, CLI and Antigravity discovery tests, including rendering the fluffy avatar and reading fixture quota through the default agy path.",
-  "localUpdateFeed": "The local and GitHub update feeds point to 0.1.22. The real updater verified the signature and bound version of the 0.1.22 package through both a local feed and the public GitHub feed.",
-  "buildBlocker": "None for 0.1.22. The x64 NSIS and MSI installers were built locally on Windows and signed with the updater key trusted by installed clients.",
+  "browser": "94 passed in the full Windows Edge suite with simulated application IPC.",
+  "native": "The 0.1.23 release binary passed native WebView2 assistant and read-only CLI tests. The live Antigravity 2.36 quota test matched the official CLI twice with no manual refresh.",
+  "localUpdateFeed": "An isolated 0.1.21 client verified the actual signed 0.1.23 package through a local test feed. The normal local feed is prepared from the same package.",
+  "buildBlocker": "None for 0.1.23. x64 NSIS and MSI packages were built and signed on Windows.",
   "publicRelease": "PASS: release v0.1.22 is public and latest. Five anonymous downloads matched their local SHA-256 hashes. An isolated 0.1.21 client verified the actual published package and preferences stayed intact. See release-0.1.22.json.",
   "externalLimitations": [
    "44 status pages verified against fixtures only; gemini-cli, command-code and hugging-face timed out from this network (curl times out too) and stay unverified",
@@ -79,10 +81,10 @@
    "Real Harness read-only integrity check failed because source logs changed during its 57.8-second scan; no stable live-source acceptance",
    "Raycast and Sketchybar status-line helpers are macOS-only and have no Windows equivalent; the developer kit exports PowerShell and POSIX status-line helpers with the same read-only commands."
   ],
-  "windows": "PASS for the locally built 0.1.22 release candidate and for the published update download. No installer was executed."
+  "windows": "PASS for the locally built 0.1.23 release candidate. The native updater verified a signed test download without executing an installer."
  },
  "pending": [
-  "Verify installation and restart on an installed client. The isolated 0.1.21 to 0.1.22 download and signature check passed.",
+  "Verify installation and restart on an installed client. The isolated 0.1.21 to 0.1.23 signed download passed.",
   "Acceptance of the 44 official status pages against real responses; outage notification needs a real outage",
   "Acceptance of hide-from-capture under real Windows capture and recording tools",
   "Exchange-rate endpoint returned 166 rates live on 2026-10-31; offline fallback and 429 behaviour remain unexercised",
@@ -96,7 +98,7 @@
   "Window starter real CLI send and Windows no-window launch acceptance",
   "User extensions acceptance with a real installed extension program",
   "Stable real Harness source integrity acceptance",
-  "Live acceptance of the 1.12.5-1.13.0 ports remains: a real `dim` CLI account, a real Xiaomi prepaid account, a machine with only Gemini.app for the agy route, a real multi-group Antigravity account, a real extension shipping a PNG icon and a real Command Code turn are needed to accept them beyond fixtures."
+  "Live acceptance of the 1.12.5-1.13.0 ports remains: a real `dim` CLI account, a real Xiaomi prepaid account, a machine with only Gemini.app for the agy route, a real extension shipping a PNG icon and a real Command Code turn are needed to accept them beyond fixtures."
  ],
  "checkpointDate": "2026-11-28",
  "reference": "Pulse v1.13.0 tag objects, alongside the unchanged old checkout",
@@ -107,5 +109,5 @@
   "Prompt-cache hover card is implemented on the Token split and DeepSeek/OpenCode console ledgers feed detailed cards; live per-model TTFT and real console-detail acceptance remain pending",
   "OpenCode encrypted independent login, workspace resolution and adaptive pager; 20,364 unique live Go IDs, zero pending ranges, restart recovery and account disable cancellation passed. Renewal and the console ledger card are implemented, live detailed-card acceptance pending."
  ],
- "interimReleaseAuthorization": "提交发布（2026-11-28）"
+ "interimReleaseAuthorization": "提交发版（2026-11-28）"
 }

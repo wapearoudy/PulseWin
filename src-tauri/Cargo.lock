@@ -3264,7 +3264,7 @@ dependencies = [
 
 [[package]]
 name = "pulsewin"
-version = "0.1.22"
+version = "0.1.23"
 dependencies = [
  "anyhow",
  "arboard",
@@ -3292,6 +3292,8 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tokio-util",
+ "windows",
+ "windows-future",
  "winreg",
  "zstd",
 ]
