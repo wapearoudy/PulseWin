@@ -1,10 +1,10 @@
 {
  "version": "0.1.24",
- "status": "release-preparation",
- "releaseHold": false,
- "reason": "The user authorized 0.1.24 after live Antigravity acceptance. The system proxy regression check and card layout tests passed. Remaining parity and real-account checks stay open.",
+ "status": "interim-published",
+ "releaseHold": true,
+ "reason": "The user-authorized 0.1.24 release is public. The parity hold applies to the remaining original-Pulse and real-account acceptance items.",
  "upstream": "1.13.0",
- "publishedVersion": "0.1.23",
+ "publishedVersion": "0.1.24",
  "implementedVerified": [
   "Light assistant surfaces, rings and detail cards",
   "Horizontal floating, bottom docking and orientation-aware detail cards",
@@ -73,9 +73,9 @@
   "frontendUnit": "299 passed in 30 files. TypeScript and Vite production build passed.",
   "browser": "95 passed in the full Windows Edge suite with simulated IPC.",
   "native": "0.1.24 passed native WebView2 and read-only CLI checks, plus two real Antigravity quota refreshes with Windows system proxy and no inherited proxy environment.",
-  "localUpdateFeed": "An isolated 0.1.21 client verified the actual signed 0.1.24 NSIS package in a local test feed.",
+  "localUpdateFeed": "The local and GitHub feeds point to 0.1.24. The native updater verified the signature and bound version of the actual package from both feeds.",
   "buildBlocker": "None for 0.1.24. x64 NSIS and MSI packages were signed on Windows.",
-  "publicRelease": "PASS. v0.1.23 is public and latest. Five anonymous downloads matched the local SHA-256 hashes. An isolated 0.1.21 client verified the actual published package and retained its preferences. See release-0.1.23.json.",
+  "publicRelease": "PASS. v0.1.24 is public and latest. Five anonymous downloads match the local SHA-256 hashes. An isolated 0.1.21 client verified the published package and retained its settings. See release-0.1.24.json.",
   "externalLimitations": [
    "44 status pages verified against fixtures only; gemini-cli, command-code and hugging-face timed out from this network (curl times out too) and stay unverified",
    "Exchange-rate endpoint, offline and 429 behaviour not exercised against the real service",
@@ -83,10 +83,10 @@
    "Real Harness read-only integrity check failed because source logs changed during its 57.8-second scan; no stable live-source acceptance",
    "Raycast and Sketchybar status-line helpers are macOS-only and have no Windows equivalent; the developer kit exports PowerShell and POSIX status-line helpers with the same read-only commands."
   ],
-  "windows": "PASS for the 0.1.24 Windows candidate. The native updater verified a signed package without executing an installer."
+  "windows": "PASS for the locally built 0.1.24 candidate and published update download. No installer was executed."
  },
  "pending": [
-  "Verify installation and restart on an installed client. The actual signed 0.1.24 installer passed the download and signature check from an isolated 0.1.21 client.",
+  "Verify installation and restart on an installed client. The isolated 0.1.21 to 0.1.24 signed download passed via both the local and public feeds.",
   "Acceptance of the 44 official status pages against real responses; outage notification needs a real outage",
   "Acceptance of hide-from-capture under real Windows capture and recording tools",
   "Exchange-rate endpoint returned 166 rates live on 2026-10-31; offline fallback and 429 behaviour remain unexercised",

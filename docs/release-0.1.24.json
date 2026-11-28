@@ -1,6 +1,6 @@
 {
  "version": "0.1.24",
- "status": "verified-candidate",
+ "status": "published",
  "authorization": "验证通过后发版（2026-11-28）",
  "changes": [
   "When PulseWin follows system proxy settings, pass the enabled Windows proxy to agy when no valid proxy was inherited. Keep explicit manual and direct modes.",
@@ -46,5 +46,54 @@
  "limitations": [
   "The real Antigravity check used the Windows system proxy already configured on the test machine. PAC or proxy auto-discovery was outside this test.",
   "The remaining original-Pulse and real-account acceptance items stay open in release-progress.json."
- ]
+ ],
+ "releaseCommit": "95d8dd75f5abc0a8ca4b0bf59012be98af6d5914",
+ "publicVerification": {
+  "releaseId": 461381067,
+  "publishedAt": "2026-11-28T07:27:08Z",
+  "passed": true,
+  "testedAt": "2026-11-28T07:28:24.657Z",
+  "repository": "wapearoudy/PulseWin",
+  "release": "https://github.com/wapearoudy/PulseWin/releases/tag/v0.1.24",
+  "version": "0.1.24",
+  "anonymousAssets": [
+   {
+    "name": "latest.json",
+    "bytes": 2511,
+    "sha256": "d23c05c2298c347dd4ec383621ed2810dbc99e4aa0b4997773eb25dd176a68d7"
+   },
+   {
+    "name": "PulseWin_0.1.24_x64-setup.exe",
+    "bytes": 3636453,
+    "sha256": "493a972c734256b45a8a94254ff22b49a164a4ba84811900d4e96ca53214766c"
+   },
+   {
+    "name": "PulseWin_0.1.24_x64-setup.exe.sig",
+    "bytes": 440,
+    "sha256": "184fbd090f03f6731016914fcf0c5f3ec08a8e6b8f7a364f22fb3bab55616484"
+   },
+   {
+    "name": "PulseWin_0.1.24_x64_en-US.msi",
+    "bytes": 5742592,
+    "sha256": "5714dab2d7cdf266d5995620314639f42eac7a9aa2183a83d005bd5dd45da899"
+   },
+   {
+    "name": "PulseWin_0.1.24_x64_en-US.msi.sig",
+    "bytes": 440,
+    "sha256": "40010ae6f6507adc45ec8da8b3771ff7cc14490a60ce61a89e9ca36b4f97459c"
+   }
+  ],
+  "nativeCheck": {
+   "phase": "current",
+   "source": "https://github.com/wapearoudy/PulseWin/releases/latest/download/latest.json",
+   "currentVersion": "0.1.24"
+  },
+  "installationExecuted": false,
+  "signedUpgradeDownload": {
+   "from": "0.1.21",
+   "to": "0.1.24",
+   "passed": true,
+   "actualPublishedPackage": true
+  }
+ }
 }
